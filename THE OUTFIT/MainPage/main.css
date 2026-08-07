@@ -1,0 +1,291 @@
+.Logo
+{
+font-family: "Instrument Serif", serif;
+font-weight: 400;
+/* el clamp es para que tome 3 valores, (valor min, recomendado, valor max) */
+font-size: clamp(1.3rem, 2.5vw, 4rem);
+color: white;
+text-decoration: none;
+
+/* con absolute queda sobrepuesto (en este caso el titulo) */
+position: absolute;
+/* mueve la esquina superior izquiera al punto del centro */
+left: 50%;
+top: 50%;
+/* mueve la mitad de su propio ancho hacia la izquierda y la mitadad de su alto hacia arriba, haciendo que quede centrado */
+transform: translate(-50%, -50%);
+transition: color 0.3s ease;
+}
+
+header nav
+{
+    background-color: transparent;
+    width: 100%;
+/* display flex permite organizar y alinear elementos en una pagina web, convierte una caja en un contenedor para ordenar a sus hijos en filas o columnas */
+/* en este caso el flex es para ponerlo en filas */
+    display: flex;
+    align-items: center;
+    /* con el space between reparte los 3 elementos que teniamos en el header y deja el de en medio "centrado" */
+    justify-content: space-between;
+    /* posiciona el elemento tomando como referencia su ubicacion original en el flujo normal del documento, (habilita el eje z para jugar con capas) */
+    position: relative;
+    height: 60px;
+}
+
+* 
+{
+  margin: 0;
+  padding: 0;
+  /* el box sizing adapta el contenido a width/height, padding y border */
+  box-sizing: border-box;
+}
+
+
+
+.nav-left
+{
+    margin-left: 15px;
+    padding: 0px;
+}
+
+.nav-right
+{
+    margin-right: 35px;
+}
+
+.carritoicon
+{
+    width: clamp(33px, 6vw, 50px);
+    height: clamp(20px, 4vw, 35px);
+    background-color: black;
+    border-radius: 13%;
+    padding: 4px 12px 4px 12px;
+    margin-left: 5px;
+
+}
+
+.hearticon
+{
+    margin-left: 5px;
+    margin-right: 5px;
+}
+
+.profileicon
+{
+    margin-left: 5px;
+}
+
+.menuicon,
+.profileicon,
+.hearticon,
+.searchicon
+{  
+    width: clamp(20px,4vw,35px);
+    height: clamp(20px,4vw,35px);
+    filter: brightness(0) invert(1);
+}
+
+/* es una condición que cuando la pantalla es igual o menor a 600px se sobreescribe lo que esta en los corchetes */
+/* si hubiera sido min-width aplicaria ciando la pantalla es 600px o mas */
+@media (max-width: 600px)
+{
+    header nav 
+    {
+        padding: 12px 16px;
+    }
+
+    .Logo 
+    {
+        /* El elemnto sigue el flujo normal del documento , uno abajo del otro o en fila (nuestro caso)*/
+        /* es decir que se comporta como un objeto normal el cual toma espacio, a comparacion del absolute que se sobrepone (como cuando le pones la opcion a las imagenes de word) */
+        position: static;
+        /* basicamente con el none, eliminamos la conmfiguracion que teniamos antes puesta el cual era el translate(-50%,-50%), porque si la dejbamos puesta el titulo no quedaria centrado */
+        transform: none;
+        font-size: 1.2rem;
+    }
+
+    .nav-right 
+    {
+        /* gap es el espaciado entre elementos hermanos, sirve en filas y columnas */
+        /* es la forma mas elegante de usar espaciado en vez de usar margin para elementos hermanos */
+        gap: 8px;
+        margin-right: 0;
+    }
+
+
+    .searchicon,
+    .profileicon
+    {
+        /* esconde los iconos */
+        display: none;
+    }
+}
+
+header
+{
+    /* sale del flujo normal, se posiciona respecto a la ventana del navegador y se queda fijo aunque hagas scrolll */
+    position: fixed;
+    top: 0;
+    /* sobrepone la capa x100 (con el valor de 1 bastaria) es como la herramienta capas de illustrator */
+    z-index: 100;
+    /* adapta el 100% del ancho */
+    width: 100%;
+
+    /* para que el cambio sea leve y no brusco */
+    transition:background-color 0.3s ease;
+}
+
+
+/*  EFECTO HEADER CUANDO SCROLLEAMOS */
+header.scrolled
+{
+    background-color: white;
+    border-bottom: 1.5px black solid; 
+}
+
+header.scrolled .menuicon,
+header.scrolled .searchicon,
+header.scrolled .hearticon,
+header.scrolled .profileicon
+{
+filter: brightness(0) invert(0);
+}
+
+header.scrolled .Logo
+{
+    color: black;
+}
+
+
+/* MENU DESPEGABLE */
+/* estado oculto */
+.menu-toggle
+{
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.menu-desplegable
+{
+    position: fixed;
+    top: 0px;
+    left: 0;
+    width: clamp(190px,26vw,500px) ;
+    /* para calcular que que el menu no tape el header pero llene hasta el fondo de la ventana */
+    height: calc(100vh);
+    background-color: white;
+
+    /* estado oculto */
+    /* lo desplaza hacia la izquierda (eje x) */
+    transform: translateX(-100%);
+    transition: transform 0.35s ease;
+    /* queda debajo del header pero encima del video */
+    z-index: 90;
+
+
+}
+
+.menu-desplegable.abierto
+{
+    transform: translateX(0);
+}
+
+.menu-desplegable ul
+{
+    list-style: none;
+    padding-left: 30px;
+}
+
+.menu-desplegable li
+{
+    margin-bottom: 20px;
+}
+
+.menu-desplegable a
+{
+
+    text-decoration: none;
+    color: black;
+    font-size: 1.5rem;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    font-size: clamp(0.1rem, 2.7vw, 2.3rem);
+
+}
+
+/* VIDEO BUCLE*/
+.videobanner
+{
+    /* relative sigue el flujo normal (ocupa espacio), se puede mover con top/left desde su posicion originall sin afectar a sus hermanos */
+    position: relative;
+    width: 100%;
+    /* vh es viewport heigh, 1vh=1% de la altura de la ventana del navegador, sin importar que este pasando con los padres */
+    height: 100vh;
+    /* con el hidden nos dice que si algo sobresale de la caja se recorta */
+    /* en este caso recorta segun lo valores que pusimos en width  y el vh del height */
+    overflow: hidden;
+}
+
+.hero-video
+{
+    width: 100%;
+    height: 100%;
+    /* hace que el video crezca lo necesario para llenar esa ventana aunque se pase de tamaño */
+    object-fit: cover;
+}
+
+
+
+
+
+
+
+.nuevosingresos
+{
+    background-color: white;
+    height: 100em;
+}
+
+.nuevosingresos h2
+{
+    margin-top: 15px;
+    text-align: center;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1.3rem, 2.7vw, 3rem);
+}
+
+
+.carruselnuevosingresos
+{
+    justify-content: space-between;
+    display: flex;
+    position: relative;
+}
+
+.carruselnuevosingresos img
+{
+    width: 650px;
+    height: 1000px;
+}
+
+.carruselnuevosingresos h3
+{
+    position: absolute;
+    padding-left: 100px;
+    top: calc(1000px - 150px);
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1.3rem, 1.5vw, 2rem);
+}
+
+.favclothes
+{
+    display: flex;
+    position: absolute;
+    width: clamp(20px,4vw,35px);
+    height: clamp(20px,4vw,35px);
+}
