@@ -452,16 +452,65 @@ font-family: "DM Sans", sans-serif;
 {
     margin-left: 5%;
     display: flex;
-    align-items: end;
-    height: 41em;
-    width: 61em;
+    height: 38em;
+    width: 62em;
     background-color: cornsilk;
+    flex-direction: column;
+    /* para que se estiren al ancho completo */
+    align-items: stretch;
+    cursor: pointer;
 }
 
+.acordeon .titulo
+{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 1.4vw, 4rem);
+    background-color: transparent;
+    border: none;
+    border-bottom: 2px black solid;
+    margin-left: 1em;
+    width: 94%;
+    cursor: pointer;
+}
 
+.acordeon img
+{
+    width: clamp(20px,2vw,20px);
+    height: clamp(10px,2vw,11px);
+    transition: transform 0.3s ease;
+}
 
+.contenido
+{
+    display: flex;
+    width: 94%;
+    align-items: center;
+    margin-left: 1.8em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1.2vw, 2rem);
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
 
+.descripcionprenda.activo .acordeon img
+{
+    transform: rotate(180deg);
+}
 
+.descripcionprenda.activo .contenido
+{
+    max-height: 3rem;
+}
+
+.contenido p
+{
+padding-bottom: 2rem;
+}
 
 footer
 {
