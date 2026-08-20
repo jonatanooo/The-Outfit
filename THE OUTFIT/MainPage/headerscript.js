@@ -54,3 +54,10 @@ document.addEventListener('click', function(event){
         overlay.classList.remove('activo');
     }
 })
+
+
+document.querySelectorAll('.titulo').forEach(boton => {
+    boton.addEventListener('click', function() {
+        boton.parentElement.classList.toggle('activo');
+    })
+})
