@@ -448,16 +448,16 @@ font-family: "DM Sans", sans-serif;
     object-fit: cover;
 }
 
+
+
+/* CUADRO DESCRIPCION PRENDA */
 .descripcionprenda
 {
     margin-left: 5%;
     display: flex;
     height: 38em;
     width: 62em;
-    background-color: cornsilk;
     flex-direction: column;
-    /* para que se estiren al ancho completo */
-    align-items: stretch;
     cursor: pointer;
 }
 
@@ -492,25 +492,41 @@ font-family: "DM Sans", sans-serif;
     margin-left: 1.8em;
     font-family: "DM Sans", sans-serif;
     font-weight: 400;
-    font-size: clamp(1rem, 1.2vw, 2rem);
+    font-size: clamp(1rem, 1vw, 2rem);
     overflow: hidden;
+    max-height: 0;
     transition: max-height 0.3s ease;
+    margin-bottom: 0.5rem;
+    margin-top: 0.5rem;
 }
 
-.descripcionprenda.activo .acordeon img
+.acordeon.activo img
 {
     transform: rotate(180deg);
 }
 
-.descripcionprenda.activo .contenido
+.acordeon.activo .contenido
 {
-    max-height: 3rem;
+    max-height: 30rem;
 }
 
-.contenido p
+.contenedordescripcion
 {
-padding-bottom: 2rem;
+    height: 100%;
+    display: flex;
+    /* como es columna, se centra con justify en eje vertical, si es fila es con align item */
+    justify-content: center;
+    flex-direction: column;
+    /* para que se estiren al ancho completo */
+    align-items: stretch;
 }
+
+.acordeon
+{
+    margin-bottom: 1em;
+}
+
+
 
 footer
 {
