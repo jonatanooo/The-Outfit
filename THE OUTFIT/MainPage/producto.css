@@ -527,6 +527,51 @@ font-family: "DM Sans", sans-serif;
 }
 
 
+.recotittle
+{
+    display: flex;
+    justify-content: center;
+}
+
+.contenedorropa
+{
+    background-color: chocolate;
+    width: 25em;
+    height: 40em;
+
+}
+
+.ropalike
+{
+    display: flex;
+    width: 25em;
+    height: 35em;
+    z-index: 40;
+}
+
+.clothes
+{
+    display: none;
+    width: 25em;
+    height: 35em;
+    object-fit: cover;
+}
+
+.like
+{
+    margin-top: 3em;
+    background-color: aqua;
+    z-index: 0;
+    width: 2.5em;
+    height: 2.5em;
+    position: absolute;
+}
+
+.favclothes1
+{
+    width: 2.5em;
+    height: 2.5em;
+}
 
 footer
 {
