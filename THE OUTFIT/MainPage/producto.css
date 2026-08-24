@@ -533,45 +533,75 @@ font-family: "DM Sans", sans-serif;
     justify-content: center;
 }
 
-.contenedorropa
+.prenda-card
 {
-    background-color: chocolate;
-    width: 25em;
-    height: 40em;
-
+    max-width: 280px;
 }
 
-.ropalike
+.prenda-imagen-wrap {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    height: 25em;
+    background-color: burlywood;
+}
+
+.prenda-imagen 
+{
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scale(1.2);
+}
+
+.btn-favorito
+{
+    position: absolute;
+    top: 0.6em;
+    right: 0.6em;
+    z-index: 2;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.favicon
+{
+    width: 3em;
+    height: 3em;
+}
+
+.prenda-info
 {
     display: flex;
-    width: 25em;
-    height: 35em;
-    z-index: 40;
+    align-items: flex-start;
+    gap: 5em;
 }
 
-.clothes
+.prenda-nombre
 {
-    display: none;
-    width: 25em;
-    height: 35em;
-    object-fit: cover;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
 }
 
-.like
+.prenda-marca
 {
-    margin-top: 3em;
-    background-color: aqua;
-    z-index: 0;
-    width: 2.5em;
-    height: 2.5em;
-    position: absolute;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
 }
 
-.favclothes1
+.prenda-precio
 {
-    width: 2.5em;
-    height: 2.5em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
+    margin: 0;
 }
+
 
 footer
 {
