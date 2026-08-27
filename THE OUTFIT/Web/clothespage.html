@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+    <link rel="stylesheet" href="producto.css">
+    <!-- IMPORTAMOS LAS FUENTES QUE QUEREMOS USAR -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+
+    <!-- defer es para descargar el archivo en paralelo mientras se sigue cargando el html, pero no lo ejecuta hasta que todo el html este listo -->
+    <script src="headerscript.js" defer></script>
+
+</head>
+<body>
+    <div class="Overlay" id="overlay"></div>
+
+    <!-- ENCABEZADO -->
+    <header>
+
+        <!-- Barra Iconos -->
+        <nav>
+            <div class="nav-left">
+                <!-- lo ponemos en el "a" para que sea clickeable -->
+                <a href="#menu"><img src="\ICONOS\Menu.png" alt="Menú" id="menubtn" class="menuicon"></a>
+            </div> 
+                <a href="/" class="Logo">THE OUTFIT</a>
+
+                <div class="nav-right">
+                    <a href="#buscar"><img src="\ICONOS\Search.png" alt="Buscar" class="searchicon"></a>
+                <a href="#perfil"><img src="\ICONOS\Person.png" alt="Perfil" class="profileicon"></a>
+                <a href="#favoritos"><img src="\ICONOS\Heart.png" alt="Favoritos" class="hearticon"></a>
+                <a href="#carrito" ><img src="\ICONOS\Shopping Cart.png" alt="Carrito" class="carritoicon"></a>
+                </div>
+        </nav>
+
+        <!-- Menu Despegable -->
+            <!-- Se le crea un id para referenciarlo en Js y la clase es para aplicarle estilos en css -->
+            <div id="menuDesplegable" class="menu-desplegable">
+                <div class="exitbuttondiv" id="cerrarMenu">
+                    <a><img src="\ICONOS\EXIT.png" alt="" class="exitbutton"></a>
+                </div>
+                <div>
+                    <ul>
+                        <li><a href="" class="part1">MUJERES</a></li>
+                        <li><a href="" class="part1" >HOMBRES</a></li>
+                        <li><a href="" class="part1">SUMMER COLLECTION</a></li>
+                        <li><hr class="divmenu"></li>
+                        <li class="part2">LOCACIÓN</li>
+                        <li><a href="" class="partinfo">#41-B LOCAL 1 CP1502, CALLE DEL MEDITERRÁNEO</a></li>
+                        <li class="part3">CONTACTANOS</li>
+                        <li><a href="" class="partinfo">+503 2261-3004</a></li>
+                    </ul>
+                    <div>
+                        <button class="logout">CERRAR SESIÓN <img src="\ICONOS\logout.png" alt="" class="logouticon"></button>
+                    </div>
+                </div>
+            </div>
+
+    </header>
+
+    <main>
+        <section class="carrusel">
+            <div class="carruselfotos">
+                <div class="fotocarru"><img src="\PrendasCarrusel\1.jpg" alt=""></div>
+                <div class="fotocarru"><img src="\PrendasCarrusel\2.jpg" alt=""></div>
+                <div class="fotocarru"><img src="\PrendasCarrusel\3.jpg" alt=""></div>
+                <div class="fotocarru"><img src="\PrendasCarrusel\4.jpg" alt=""></div>
+                <div class="fotocarru"><img src="\PrendasCarrusel\5.jpg" alt=""></div>
+                <div class="fotocarru"><img src="\PrendasCarrusel\6.jpg" alt=""></div>
+                
+            </div>
+            <!-- lo duplicamos para que se enote el efecto del scroll infinito -->
+            <div aria-hidden class="carruselfotos">
+                <div class="fotocarru"><img src="\PrendasCarrusel\1.jpg" alt=""></div>
+                <div class="fotocarru"><img src="\PrendasCarrusel\2.jpg" alt=""></div>
+                <div class="fotocarru"><img src="\PrendasCarrusel\3.jpg" alt=""></div>
+                <div class="fotocarru"><img src="\PrendasCarrusel\4.jpg" alt=""></div>
+                <div class="fotocarru"><img src="\PrendasCarrusel\5.jpg" alt=""></div>
+                <div class="fotocarru"><img src="\PrendasCarrusel\6.jpg" alt=""></div>
+                
+            </div>
+
+            <div class="panelprecios">
+
+                <div class="infosuperior">
+                    <h3>SUDADERA RAYAS VERDE Y BLANCO</h3>
+                    <span class="precio">$49.99</span>
+                    <button class="favbutton"><img src="\ICONOS\Heart.png" alt="fav" class="heart"></button>
+                </div>
+                    <p class="referencia">REF #7777</p>
+                    <hr class="divisor">
+
+                    <div class="tallas">
+                        <h4>TALLAS</h4>
+                        <div class="listatallas">
+                            <button>S</button>
+                            <button>M</button>
+                            <button>L</button>
+                            <button>XL</button>
+                            <button>XXL</button>
+                        </div>
+                    </div>
+
+                    <button class="anadircesta">AÑADIR A LA CESTA</button>
+                    
+                    <p class="disponibilidad"><img src="\ICONOS\Store.png" alt="tienda">Disponible para recoger en tienda</p>  
+            </div>
+        </section>
+
+        <section class="prendainfo">
+            <div class="galeria">
+                <img src="\PrendasCarrusel\5.jpg" alt="">
+            </div>
+
+            <div class="descripcionprenda">
+                <div class="contenedordescripcion">
+                    <div class="acordeon">
+                        <button class="titulo">DETALLES DE PRODUCTO<img src="\ICONOS\Flechaabajo.png" alt="desplegar" id="bajar"></button>
+                        <div class="contenido">
+                            <p>Esta prenda es una sudadera o camiseta gruesa de manga larga con un estilo casual y relajado. Destaca por su patrón de finas rayas horizontales blancas sobre un tono verde oscuro, acompañado de un clásico cuello redondo con acabado acanalado. Su diseño presenta un corte cuadrado (boxy fit) ligeramente corto, complementado con hombros caídos y mangas anchas que ofrecen una silueta holgada, muy cómoda y perfecta para el uso diario.</p>
+                        </div>
+                    </div>
+
+                    <div class="acordeon">
+                        <button class="titulo">CUIDADO DE MATERIALES<img src="\ICONOS\Flechaabajo.png" alt="desplegar" id="bajar"></button>
+                        <div class="contenido">
+                            <p>Para cuidar esta prenda, lávala a máquina con agua fría, siempre del revés y con colores similares. No utilices lejía ni blanqueador. Es preferible secarla al aire sobre una superficie plana para que no pierda su forma, o en secadora a un ciclo de temperatura baja. Si necesita planchado, hazlo a baja temperatura y por el reverso de la tela.</p>
+                        </div>
+                    </div>
+
+                    <div class="acordeon">
+                        <button class="titulo">NUESTRO COMPROMISO<img src="\ICONOS\Flechaabajo.png" alt="desplegar" id="bajar"></button>
+                        <div class="contenido">
+                            <p>En The Outfit, nuestro principal compromiso es ayudarte a verte y sentirte bien ofreciéndote ropa, zapatos y accesorios de excelente calidad. Nuestra misión es proporcionarte opciones de moda que sean accesibles para tu bolsillo y que, al mismo tiempo, se adapten con facilidad a tus diferentes actividades diarias. Para complementar este compromiso, también nos dedicamos a brindarte asesoría personalizada con el objetivo de acompañarte, elegir y crear junto a ti el atuendo perfecto para cualquier ocasión.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="recomendaciones">
+            <h2 class="recotittle">RECOMENDACIONES</h2>
+
+            <div class="prenda-card">
+                <div class="prenda-imagen-wrap">
+                    <button class="btn-favorito" aria-label="Agregar a favoritos">
+                        <img src="/ICONOS/Heart.png" alt="like" class="favicon">
+                    </button>
+                    <img src="/Fotos/01165152330-e1 copia.jpg" alt="prenda 1" class="prenda-imagen">
+                </div>
+            </div>
+
+            <div class="prenda-info">
+                <div>
+                    <p class="prenda-nombre">Blusa Floreada</p>
+                    <p class="prenda-marca">Zara</p>
+                </div>
+                <p class="prenda-precio">$30.99</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- PIE DE PAGINA -->
+    <footer>
+
+    <div class="contenedor">
+        <div class="izquierda">
+            <div>
+                <h2>The Outfit</h2>
+            </div>
+            <div>
+                <a href="https://www.facebook.com/TheOutfitClothes/?locale=es_LA" target="_blank"><img src="\ICONOS\facebook.png" alt="facebook" class="finalicons"></a>
+                <a href="https://www.instagram.com/the_outfitsv?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw==&igsi=ZDNlZDc0MzIxNw==" target="_blank" ><img src="\ICONOS\instagram.png" alt="instagran" class="finalicons"></a>
+                <a href="#" target="_blank"><img src="\ICONOS\tiktok.png" alt="tiktok" class="finalicons"></a>
+                <a href="https://maps.app.goo.gl/fQw39kJBKJiJ8jci8" target="_blank"><img src="\ICONOS\maps.png" alt="maps" class="finalicons"></a>
+            </div>
+        </div>
+
+        <div class="derecha">
+            <div>
+                <ul>
+                        <li class="Titulosfooter">AYUDA</li>
+                        <li><a href="" class="direccionefooter">Pagos</a></li>
+                        <li><a href="" class="direccionefooter">Devoluciones</a></li>
+                        <li><a href="" class="direccionefooter">Envíos</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <ul>
+                        <li class="Titulosfooter">SOBRE NOSOTROS</li>
+                        <li><a href="" class="direccionefooter">Historia</a></li>
+                        <li><a href="" class="direccionefooter">Ubicación</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <ul>
+                        <li class="Titulosfooter">RECOMENDACIONES</li>
+                        <li><a href="" class="direccionefooter">Temporada de Verano</a></li>
+                        <li><a href="" class="direccionefooter">Ofertas Agostinas</a></li>
+                </ul>
+            </div>
+        </div>
+
+    </div>
+
+    </footer>
+    
+</body>
+</html>
