@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Outfit</title>
+
+    <link rel="stylesheet" href="main.css">
+    <!-- IMPORTAMOS LAS FUENTES QUE QUEREMOS USAR -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+
+    <!-- defer es para descargar el archivo en paralelo mientras se sigue cargando el html, pero no lo ejecuta hasta que todo el html este listo -->
+    <script src="headerscript.js" defer></script>
+</head>
+
+
+<body>
+    
+    <div class="Overlay" id="overlay"></div>
+
+    <!-- ENCABEZADO -->
+    <header>
+
+        <!-- Barra Iconos -->
+        <nav>
+            <div class="nav-left">
+                <!-- lo ponemos en el "a" para que sea clickeable -->
+                <a href="#menu"><img src="\ICONOS\Menu.png" alt="Menú" id="menubtn" class="menuicon"></a>
+            </div> 
+                <a href="/" class="Logo">THE OUTFIT</a>
+
+                <div class="nav-right">
+                    <a href="#buscar"><img src="\ICONOS\Search.png" alt="Buscar" class="searchicon"></a>
+                <a href="#perfil"><img src="\ICONOS\Person.png" alt="Perfil" class="profileicon"></a>
+                <a href="#favoritos"><img src="\ICONOS\Heart.png" alt="Favoritos" class="hearticon"></a>
+                <a href="#carrito" ><img src="\ICONOS\Shopping Cart.png" alt="Carrito" class="carritoicon"></a>
+                </div>
+        </nav>
+
+        <!-- Menu Despegable -->
+            <!-- Se le crea un id para referenciarlo en Js y la clase es para aplicarle estilos en css -->
+            <div id="menuDesplegable" class="menu-desplegable">
+                <div class="exitbuttondiv" id="cerrarMenu">
+                    <a><img src="\ICONOS\EXIT.png" alt="" class="exitbutton"></a>
+                </div>
+                <div>
+                    <ul>
+                        <li><a href="">MUJERES</a></li>
+                        <li><a href="">HOMBRES</a></li>
+                        <li><a href="">SUMMER COLLECTION</a></li>
+                        <li><a href="">LOCACIÓN</a></li>
+                        <li><a href="">REGALOS</a></li>
+                        <li><a href="">CONTACTANOS</a></li>
+                        <li><a href="">+503 2261-3004</a></li>
+                    </ul>
+                </div>
+            </div>
+
+    </header>
+
+    <!-- CONTENIDO -->
+    <main>
+        <!-- section lo ocupamos porque es uan division tematica -->
+        <section class="videobanner">
+            <video class="hero-video" autoplay muted loop playsinline preload="auto">
+                <source src="/Videos/VideoPasarela.mov" type="video/mp4">
+            </video>
+        </section>
+
+        <section class="nuevosingresos">
+            <h2>NUEVOS INGRESOS</h2>
+            <div id="" class="carruselnuevosingresos">
+                <div>
+                    <a href="#"><img src="\Fotos\01165152330-e1 copia.jpg" alt="Blusa" class="clothes"></a>
+                    <h3>Blusa Floreada</h3>
+                    <a href="#"><img src="\ICONOS\Heart.png" alt="" class="favclothes"></a>
+                </div>
+
+                <div>
+                    <a href="#"><img src="\Fotos\02139988643-e1 copia.jpg" alt="Blusa2" class="clothes"></a>
+                    <h3>Blusa Floreada</h3>
+                    <a href="#"><img src="\ICONOS\Heart.png" alt="" class="favclothes"></a>
+                </div>
+                
+
+                <div>
+                    <a href="#"><img src="\Fotos\07085775052-e1 copia.jpg" alt="Blusa3" class="clothes"></a>
+                    <h3>Blusa Floreada</h3>
+                    <a href="#"><img src="\ICONOS\Heart.png" alt="" class="favclothes"></a>
+                </div>
+            </div>
+
+            <div id="" class="carruselnuevosingresos">
+                <div>
+                    <a href="#"><img src="\Fotos\01165152330-e1 copia.jpg" alt="Blusa" class="clothes"></a>
+                    <h3>Blusa Floreada</h3>
+                    <a href="#"><img src="\ICONOS\Heart.png" alt="" class="favclothes"></a>
+                    <h3></h3>
+                </div>
+
+                <div>
+                    <a href="#"><img src="\Fotos\02139988643-e1 copia.jpg" alt="Blusa2" class="clothes"></a>
+                    <h3>Blusa Floreada</h3>
+                    <a href="#"><img src="\ICONOS\Heart.png" alt="" class="favclothes"></a>
+                </div>
+                
+
+                <div>
+                    <a href="#"><img src="\Fotos\07085775052-e1 copia.jpg" alt="Blusa3" class="clothes"></a>
+                    <h3>Blusa Floreada</h3>
+                    <a href="#"><img src="\ICONOS\Heart.png" alt="" class="favclothes"></a>
+                </div>
+            </div>
+        </section>
+
+        <section class="promobanner">
+        <div class="bannerfotos">
+            <!-- foto 1 -->
+            <div>
+                <a href="#"><img src="\Fotos\02142004104-a5.jpg" alt="" class="banners"></a>
+                <a href=""><h2 class="bannertitulos1">VER COLECCIÓN</h2></a>
+            </div> 
+            <!-- foto 2 -->
+            <div>
+                <a href="#"><img src="\Fotos\04813802712-a2.jpg" alt="" class="banners"></a>
+                <a href=""><h2 class="bannertitulos2">SALES</h2></a>
+            </div>
+        </div>
+        
+        </section>
+
+    </main>
+
+    <!-- PIE DE PAGINA -->
+    <footer>
+
+    <div class="contenedor">
+        <div class="izquierda">
+            <div>
+                <h2>The Outfit</h2>
+            </div>
+            <div>
+                <a href="https://www.facebook.com/TheOutfitClothes/?locale=es_LA" target="_blank"><img src="\ICONOS\facebook.png" alt="facebook" class="finalicons"></a>
+                <a href="https://www.instagram.com/the_outfitsv?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw==&igsi=ZDNlZDc0MzIxNw==" target="_blank" ><img src="\ICONOS\instagram.png" alt="instagran" class="finalicons"></a>
+                <a href="#" target="_blank"><img src="\ICONOS\tiktok.png" alt="tiktok" class="finalicons"></a>
+                <a href="https://maps.app.goo.gl/fQw39kJBKJiJ8jci8" target="_blank"><img src="\ICONOS\maps.png" alt="maps" class="finalicons"></a>
+            </div>
+        </div>
+
+        <div class="derecha">
+            <div>
+                <ul>
+                        <li class="Titulosfooter">AYUDA</li>
+                        <li><a href="" class="direccionefooter">Pagos</a></li>
+                        <li><a href="" class="direccionefooter">Devoluciones</a></li>
+                        <li><a href="" class="direccionefooter">Envíos</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <ul>
+                        <li class="Titulosfooter">SOBRE NOSOTROS</li>
+                        <li><a href="" class="direccionefooter">Historia</a></li>
+                        <li><a href="" class="direccionefooter">Ubicación</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <ul>
+                        <li class="Titulosfooter">RECOMENDACIONES</li>
+                        <li><a href="" class="direccionefooter">Temporada de Verano</a></li>
+                        <li><a href="" class="direccionefooter">Ofertas Agostinas</a></li>
+                </ul>
+            </div>
+        </div>
+
+    </div>
+
+    </footer>
+
+</body>
+</html>
