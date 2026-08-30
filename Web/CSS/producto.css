@@ -1,0 +1,770 @@
+.Overlay
+{
+    /* es para que cuando el menu este desplegado se desenfoque el fondo*/
+
+    /* con none es para que no se vea */
+    display: none;
+    /* fixed es para que cuando scrollemos no se mueva */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    backdrop-filter: blur(5px);
+    /* para que sea compatible con safari, porque al parecer si le dejo la linea anterior no funciona :( */
+    -webkit-backdrop-filter: blur(5px); 
+    background: rgba(0, 0, 0, 0.2);
+    /* para que quede encima de todo menos del menu */
+    z-index: 80;
+}
+
+.Overlay.activo
+{
+    /* el elemento se muestra como un bloque normal */
+    /* es decir que cuando se pasa a 'activo' unicamente cambia la propieda de display de none a block */
+    display: block;
+}
+
+.Logo
+{
+font-family: "Instrument Serif", serif;
+font-weight: 400;
+/* el clamp es para que tome 3 valores, (valor min, recomendado, valor max) */
+font-size: clamp(1.3rem, 2.5vw, 4rem);
+color: black;
+text-decoration: none;
+
+/* con absolute queda sobrepuesto (en este caso el titulo) */
+position: absolute;
+/* mueve la esquina superior izquiera al punto del centro */
+left: 50%;
+top: 50%;
+/* mueve la mitad de su propio ancho hacia la izquierda y la mitadad de su alto hacia arriba, haciendo que quede centrado */
+transform: translate(-50%, -50%);
+transition: color 0.3s ease;
+}
+
+header nav
+{
+    background-color: white;
+    width: 100%;
+/* display flex permite organizar y alinear elementos en una pagina web, convierte una caja en un contenedor para ordenar a sus hijos en filas o columnas */
+/* en este caso el flex es para ponerlo en filas */
+    display: flex;
+    align-items: center;
+    /* con el space between reparte los 3 elementos que teniamos en el header y deja el de en medio "centrado" */
+    justify-content: space-between;
+    /* posiciona el elemento tomando como referencia su ubicacion original en el flujo normal del documento, (habilita el eje z para jugar con capas) */
+    position: relative;
+    height: 60px;
+    border-bottom: 1px black solid;
+}
+
+* 
+{
+  margin: 0;
+  padding: 0;
+  /* el box sizing adapta el contenido a width/height, padding y border */
+  box-sizing: border-box;
+}
+
+
+
+.nav-left
+{
+    margin-left: 15px;
+    padding: 0px;
+}
+
+.nav-right
+{
+    margin-right: 35px;
+}
+
+.carritoicon
+{
+    width: clamp(33px, 6vw, 50px);
+    height: clamp(20px, 4vw, 35px);
+    background-color: black;
+    border-radius: 13%;
+    padding: 4px 12px 4px 12px;
+    margin-left: 5px;
+
+}
+
+.hearticon
+{
+    margin-left: 5px;
+    margin-right: 5px;
+}
+
+.profileicon
+{
+    margin-left: 5px;
+}
+
+.menuicon,
+.profileicon,
+.hearticon,
+.searchicon
+{  
+    width: clamp(20px,4vw,35px);
+    height: clamp(20px,4vw,35px);
+    filter: brightness(0) invert(0);
+}
+
+/* es una condición que cuando la pantalla es igual o menor a 600px se sobreescribe lo que esta en los corchetes */
+/* si hubiera sido min-width aplicaria ciando la pantalla es 600px o mas */
+@media (max-width: 600px)
+{
+    header nav 
+    {
+        padding: 12px 16px;
+    }
+
+    .Logo 
+    {
+        /* El elemnto sigue el flujo normal del documento , uno abajo del otro o en fila (nuestro caso)*/
+        /* es decir que se comporta como un objeto normal el cual toma espacio, a comparacion del absolute que se sobrepone (como cuando le pones la opcion a las imagenes de word) */
+        position: static;
+        /* basicamente con el none, eliminamos la conmfiguracion que teniamos antes puesta el cual era el translate(-50%,-50%), porque si la dejbamos puesta el titulo no quedaria centrado */
+        transform: none;
+        font-size: 1.2rem;
+    }
+
+    .nav-right 
+    {
+        /* gap es el espaciado entre elementos hermanos, sirve en filas y columnas */
+        /* es la forma mas elegante de usar espaciado en vez de usar margin para elementos hermanos */
+        gap: 8px;
+        margin-right: 0;
+    }
+
+
+    .searchicon,
+    .profileicon
+    {
+        /* esconde los iconos */
+        display: none;
+    }
+}
+
+header
+{
+    /* sale del flujo normal, se posiciona respecto a la ventana del navegador y se queda fijo aunque hagas scrolll */
+    position: fixed;
+    top: 0;
+    /* sobrepone la capa x100 (con el valor de 1 bastaria) es como la herramienta capas de illustrator */
+    z-index: 100;
+    /* adapta el 100% del ancho */
+    width: 100%;
+
+    /* para que el cambio sea leve y no brusco */
+    transition:background-color 0.3s ease;
+}
+
+
+
+
+
+/* MENU DESPEGABLE */
+/* estado oculto */
+.menu-toggle
+{
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.menu-desplegable
+{
+    position: fixed;
+    top: 0px;
+    left: 0;
+    width: clamp(190px,26vw,500px) ;
+    /* para calcular que que el menu no tape el header pero llene hasta el fondo de la ventana */
+    height: calc(100vh);
+    background-color: white;
+
+    /* estado oculto */
+    /* lo desplaza hacia la izquierda (eje x) */
+    transform: translateX(-100%);
+    transition: transform 0.35s ease;
+    /* queda debajo del header pero encima del video */
+    z-index: 90;
+
+}
+
+.exitbutton
+{
+    width: clamp(20px,4vw,30px);
+    height: clamp(20px,4vw,30px);
+}
+
+.exitbuttondiv
+{
+    margin-left: 2em;
+    margin-top:1em ;
+    margin-bottom: 2.5em;
+}
+
+.menu-desplegable.abierto
+{
+    /* como esta en cero muestra el meno porque oculto esta en -100% */
+    transform: translateX(0);
+}
+
+
+.menu-desplegable ul
+{
+    list-style: none;
+    padding-left: 30px;
+}
+
+.menu-desplegable li
+{
+    
+}
+
+.part1
+{
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 25px;
+    text-decoration: none;
+    color: black;
+    font-size: 1.5rem;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    font-size: clamp(0.1rem, 2.7vw, 2.3rem);
+
+}
+
+.part2
+{
+    display: flex;
+    margin-top: 1em;
+    margin-bottom: 0.2em;
+    color: black;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    text-decoration: none;
+    font-size: clamp(0.1rem, 1.7vw, 1.7rem);
+}
+
+.partinfo
+{
+    display: flex;
+    color: black;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    text-decoration: underline;
+    font-size: clamp(0.1rem, 1.7vw, 1.7rem);
+    margin-bottom: 1.5em;
+    opacity: 70%;
+}
+
+.part3
+{
+    color: black;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    text-decoration: none;
+    font-size: clamp(0.1rem, 1.7vw, 1.7rem);
+}
+
+
+
+.divmenu
+{
+    display: flex;
+    width: 90%;
+    height: 3px;
+    background-color: black;
+}
+
+.logout 
+{
+    border: solid 1px black;
+    border-radius: 3em;
+    height: 2em;
+    margin-top: 10em;
+    margin-left: 15%;
+    display: flex;
+    width: 60%;
+    gap: 2em;
+    align-items: center;
+    justify-content: center;
+    color: black;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    text-decoration: none;
+    font-size: clamp(0.1rem, 2vw, 1.4rem);
+    background-color: transparent;
+    cursor: pointer;
+}
+
+.logouticon
+{
+    display: flex;
+    width: clamp(20px,4vw,30px);
+    height: clamp(20px,4vw,30px);
+}
+
+.carrusel
+{
+    width: 100%;
+    /* vh es viewport heigh, 1vh=1% de la altura de la ventana del navegador, sin importar que este pasando con los padres */
+    height: 100vh;
+    /* con el hidden nos dice que si algo sobresale de la caja se recorta */
+    /* en este caso recorta segun lo valores que pusimos en width  y el vh del height */
+    overflow: hidden;
+    background-color: aqua;
+    display: flex;
+    /* le pone un scrollbar en el eje x */
+    overflow-x: auto;
+    border-bottom: 1px black solid;
+}
+
+.carrusel::-webkit-scrollbar
+{
+    /* con el webkin y el display none, eliminamos la interfaz de la barra de scroll en el eje x del carrusel */
+    display: none;
+}
+
+
+.carruselfotos
+{
+display: flex;
+align-items: center;
+justify-content: center;
+/* animacion */
+animation: spin 30s infinite linear;
+}
+
+.fotocarru
+{
+    width: 45em;
+    height: 100vh;
+    background-color: blueviolet;
+    align-content: center;
+}
+
+.fotocarru img
+{
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+}
+
+/* spin es el identificador */
+@keyframes spin
+{
+    from {translate: 0;}
+    /* desplaza todas las div(fotos) al -100% es decir que las esconde */
+    to {translate: -100%;}
+}
+
+
+.panelprecios
+{
+    display: flex;
+    top: 33em;
+    height: clamp(18em, 23vw, 23em);
+    width: 35em;
+    width: clamp(28em, 35vw, 35em);
+    position: absolute;
+    right: 2%;
+    backdrop-filter: blur(10px);
+    /* para que sea compatible con safari, porque al parecer si le dejo la linea anterior no funciona :( */
+    -webkit-backdrop-filter: blur(10px); 
+    background: rgba(255, 255, 255, 0.76);
+    flex-direction: column;
+}
+
+.infosuperior
+{
+    margin-top: 3em;
+    display: flex;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    align-items: center;
+    margin-left: 0.7em;
+}
+
+.precio
+{
+font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    font-size: clamp(1rem, 1.2vw, 1.2rem);
+    padding-left: clamp(4em, 5vw, 5em);
+}
+
+.favbutton
+{
+    display: flex;
+    width: 9%;
+    justify-content: center;
+    align-items: center;
+    margin-left: 0.3em;
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+
+.heart
+{
+    width: clamp(30px,4vw,35px);
+    height: clamp(30px,4vw,35px);
+}
+
+.referencia
+{
+    margin-left: 0.7em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 500;
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    opacity: 90%;
+    margin-top: 0.4em;
+
+}
+
+.divisor
+{
+    height: 1.5px;
+    background-color: black;
+    border: none;
+    width: 90%;
+    /* al ponerle el margen en 0 se centra automaticamente y los espacios vacios los reparte en la izquierda y derecha */
+    margin: 0.4em auto 0 auto;
+}
+
+.tallas
+{
+    margin-top: 0.6em;
+    margin-left: 0.7em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 900;
+    font-size: clamp(1rem, 1.1vw, 2rem);
+}
+
+.listatallas button
+{
+    margin-top: 0.5em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.1rem, 1.2vw, 3rem);
+    border: none;
+    background-color: transparent;
+    margin-right: 1.5em;
+    cursor: pointer;
+    margin-bottom: 1.5em;
+}
+
+.anadircesta
+{
+    background-color: black;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 1.1vw, 3rem);
+    color: white;
+    cursor: pointer;
+    border: none;
+    width: 60%;
+    margin: 0 auto;
+    border-radius: 0.5em;
+    height: clamp(1.5em, 1.7vw, 1.7em);
+}
+
+.disponibilidad
+{
+    margin-top: 1.5em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 500;
+    font-size: clamp(0.8rem, 0.8vw, 1rem);
+    display: flex;
+    align-items: center;
+}
+
+.disponibilidad img
+{
+    width: clamp(15px,3vw,20px);
+    height: clamp(15px,3vw,20px);
+    margin-right: 0.4em;
+    margin-left: 8.8em;
+}
+
+.recomendaciones
+{
+    border-top: 1px black solid;
+    height: 45em;
+}
+
+
+
+.prendainfo
+{
+    display: flex;
+    height: 49.5em;
+    width: 100%;
+    align-items: center;
+    overflow: hidden;
+}
+
+.galeria
+{
+    display: flex;
+    height: 45em;
+    width: 35em;
+    border-radius: 1.5em;
+    margin-left: 7%;
+}
+
+.galeria img
+{
+    border-radius: 3em;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+
+
+/* CUADRO DESCRIPCION PRENDA */
+.descripcionprenda
+{
+    margin-left: 5%;
+    display: flex;
+    height: 38em;
+    width: 62em;
+    flex-direction: column;
+    cursor: pointer;
+}
+
+.acordeon .titulo
+{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 1.4vw, 4rem);
+    background-color: transparent;
+    border: none;
+    border-bottom: 2px black solid;
+    margin-left: 1em;
+    width: 94%;
+    cursor: pointer;
+}
+
+.acordeon img
+{
+    width: clamp(20px,2vw,20px);
+    height: clamp(10px,2vw,11px);
+    transition: transform 0.3s ease;
+}
+
+.contenido
+{
+    display: flex;
+    width: 94%;
+    align-items: center;
+    margin-left: 1.8em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.3s ease;
+    margin-bottom: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.acordeon.activo img
+{
+    transform: rotate(180deg);
+}
+
+.acordeon.activo .contenido
+{
+    max-height: 30rem;
+}
+
+.contenedordescripcion
+{
+    height: 100%;
+    display: flex;
+    /* como es columna, se centra con justify en eje vertical, si es fila es con align item */
+    justify-content: center;
+    flex-direction: column;
+    /* para que se estiren al ancho completo */
+    align-items: stretch;
+}
+
+.acordeon
+{
+    margin-bottom: 1em;
+}
+
+
+.recotittle
+{
+    display: flex;
+    justify-content: center;
+}
+
+.prenda-card
+{
+    max-width: 280px;
+}
+
+.prenda-imagen-wrap {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    height: 25em;
+    background-color: burlywood;
+}
+
+.prenda-imagen 
+{
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scale(1.2);
+}
+
+.btn-favorito
+{
+    position: absolute;
+    top: 0.6em;
+    right: 0.6em;
+    z-index: 2;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.favicon
+{
+    width: 3em;
+    height: 3em;
+}
+
+.prenda-info
+{
+    display: flex;
+    align-items: flex-start;
+    gap: 5em;
+}
+
+.prenda-nombre
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
+}
+
+.prenda-marca
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
+}
+
+.prenda-precio
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
+    margin: 0;
+}
+
+
+footer
+{
+    border-top: 1px black solid;
+    height: 18em;
+    color: white;
+}
+
+.Titulosfooter
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    color: black;
+    font-size: clamp(0.7rem, 1vw, 2rem);
+}
+
+footer h2
+{
+    font-family: "Instrument Serif", serif;
+    font-weight: 400;
+    font-size: clamp(1.3rem, 2vw, 4rem);
+    color: black;
+}
+
+.direccionefooter
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 500;
+    color: black;
+    font-size: clamp(0.5rem, 1vw, 2rem);
+    text-decoration: none;
+    opacity: 90%;
+}
+
+footer  ul
+{
+    display: grid;
+    gap: 31px;
+    list-style: none;
+}
+
+.finalicons
+{
+    margin-top: 10px;
+    width: clamp(20px,3.7vw,30px);
+    height: clamp(20px,3.7vw,30px);
+    opacity: 60%;
+    margin-right: 6px;
+}
+
+.contenedor
+{
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.izquierda
+{
+    margin-left: clamp(1em, 5vw, 5em);
+    margin-top: clamp(1em, 3em, 3em);
+    /* ponemos el display en flex */
+    display: flex;
+    /* como son 2 div los pongo en columnas porque lo quiero una abajo de otro */
+    flex-direction: column;
+    /* los centro */
+    align-items: center;
+}
+
+
+
+.derecha
+{
+    margin-right: clamp(1em, 5vw, 5em);
+    margin-top: clamp(1em, 3em, 3em);
+    display: flex;
+    justify-content: flex-end;
+    gap: clamp(20px, 5vw, 250px);
+    max-width: 100%;
+    /* si no cabe pasaria a la siguiente fila */
+    flex-wrap: wrap;
+}

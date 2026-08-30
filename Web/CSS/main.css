@@ -1,0 +1,487 @@
+.Overlay
+{
+    /* es para que cuando el menu este desplegado se desenfoque el fondo*/
+
+    /* con none es para que no se vea */
+    display: none;
+    /* fixed es para que cuando scrollemos no se mueva */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    backdrop-filter: blur(5px);
+    /* para que sea compatible con safari, porque al parecer si le dejo la linea anterior no funciona :( */
+    -webkit-backdrop-filter: blur(5px); 
+    background: rgba(0, 0, 0, 0.2);
+    /* para que quede encima de todo menos del menu */
+    z-index: 80;
+}
+
+.Overlay.activo
+{
+    /* el elemento se muestra como un bloque normal */
+    /* es decir que cuando se pasa a 'activo' unicamente cambia la propieda de display de none a block */
+    display: block;
+}
+
+.Logo
+{
+font-family: "Instrument Serif", serif;
+font-weight: 400;
+/* el clamp es para que tome 3 valores, (valor min, recomendado, valor max) */
+font-size: clamp(1.3rem, 2.5vw, 4rem);
+color: white;
+text-decoration: none;
+
+/* con absolute queda sobrepuesto (en este caso el titulo) */
+position: absolute;
+/* mueve la esquina superior izquiera al punto del centro */
+left: 50%;
+top: 50%;
+/* mueve la mitad de su propio ancho hacia la izquierda y la mitadad de su alto hacia arriba, haciendo que quede centrado */
+transform: translate(-50%, -50%);
+transition: color 0.3s ease;
+}
+
+header nav
+{
+    background-color: transparent;
+    width: 100%;
+/* display flex permite organizar y alinear elementos en una pagina web, convierte una caja en un contenedor para ordenar a sus hijos en filas o columnas */
+/* en este caso el flex es para ponerlo en filas */
+    display: flex;
+    align-items: center;
+    /* con el space between reparte los 3 elementos que teniamos en el header y deja el de en medio "centrado" */
+    justify-content: space-between;
+    /* posiciona el elemento tomando como referencia su ubicacion original en el flujo normal del documento, (habilita el eje z para jugar con capas) */
+    position: relative;
+    height: 60px;
+}
+
+* 
+{
+  margin: 0;
+  padding: 0;
+  /* el box sizing adapta el contenido a width/height, padding y border */
+  box-sizing: border-box;
+}
+
+
+
+.nav-left
+{
+    margin-left: 15px;
+    padding: 0px;
+}
+
+.nav-right
+{
+    margin-right: 35px;
+}
+
+.carritoicon
+{
+    width: clamp(33px, 6vw, 50px);
+    height: clamp(20px, 4vw, 35px);
+    background-color: black;
+    border-radius: 13%;
+    padding: 4px 12px 4px 12px;
+    margin-left: 5px;
+
+}
+
+.hearticon
+{
+    margin-left: 5px;
+    margin-right: 5px;
+}
+
+.profileicon
+{
+    margin-left: 5px;
+}
+
+.menuicon,
+.profileicon,
+.hearticon,
+.searchicon
+{  
+    width: clamp(20px,4vw,35px);
+    height: clamp(20px,4vw,35px);
+    filter: brightness(0) invert(1);
+}
+
+/* es una condición que cuando la pantalla es igual o menor a 600px se sobreescribe lo que esta en los corchetes */
+/* si hubiera sido min-width aplicaria ciando la pantalla es 600px o mas */
+@media (max-width: 600px)
+{
+    header nav 
+    {
+        padding: 12px 16px;
+    }
+
+    .Logo 
+    {
+        /* El elemnto sigue el flujo normal del documento , uno abajo del otro o en fila (nuestro caso)*/
+        /* es decir que se comporta como un objeto normal el cual toma espacio, a comparacion del absolute que se sobrepone (como cuando le pones la opcion a las imagenes de word) */
+        position: static;
+        /* basicamente con el none, eliminamos la conmfiguracion que teniamos antes puesta el cual era el translate(-50%,-50%), porque si la dejbamos puesta el titulo no quedaria centrado */
+        transform: none;
+        font-size: 1.2rem;
+    }
+
+    .nav-right 
+    {
+        /* gap es el espaciado entre elementos hermanos, sirve en filas y columnas */
+        /* es la forma mas elegante de usar espaciado en vez de usar margin para elementos hermanos */
+        gap: 8px;
+        margin-right: 0;
+    }
+
+
+    .searchicon,
+    .profileicon
+    {
+        /* esconde los iconos */
+        display: none;
+    }
+}
+
+header
+{
+    /* sale del flujo normal, se posiciona respecto a la ventana del navegador y se queda fijo aunque hagas scrolll */
+    position: fixed;
+    top: 0;
+    /* sobrepone la capa x100 (con el valor de 1 bastaria) es como la herramienta capas de illustrator */
+    z-index: 100;
+    /* adapta el 100% del ancho */
+    width: 100%;
+
+    /* para que el cambio sea leve y no brusco */
+    transition:background-color 0.3s ease;
+}
+
+
+/*  EFECTO HEADER CUANDO SCROLLEAMOS */
+header.scrolled
+{
+    background-color: white;
+    border-bottom: 1.5px black solid; 
+}
+
+header.scrolled .menuicon,
+header.scrolled .searchicon,
+header.scrolled .hearticon,
+header.scrolled .profileicon
+{
+filter: brightness(0) invert(0);
+}
+
+header.scrolled .Logo
+{
+    color: black;
+}
+
+
+/* MENU DESPEGABLE */
+/* estado oculto */
+.menu-toggle
+{
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.menu-desplegable
+{
+    position: fixed;
+    top: 0px;
+    left: 0;
+    width: clamp(190px,26vw,500px) ;
+    /* para calcular que que el menu no tape el header pero llene hasta el fondo de la ventana */
+    height: calc(100vh);
+    background-color: white;
+
+    /* estado oculto */
+    /* lo desplaza hacia la izquierda (eje x) */
+    transform: translateX(-100%);
+    transition: transform 0.35s ease;
+    /* queda debajo del header pero encima del video */
+    z-index: 90;
+
+}
+
+.exitbutton
+{
+    width: clamp(20px,4vw,30px);
+    height: clamp(20px,4vw,30px);
+}
+
+.exitbuttondiv
+{
+    margin-left: 2em;
+    margin-top:1em ;
+    margin-bottom: 2.5em;
+}
+
+.menu-desplegable.abierto
+{
+    /* como esta en cero muestra el meno porque oculto esta en -100% */
+    transform: translateX(0);
+}
+
+
+.menu-desplegable ul
+{
+    list-style: none;
+    padding-left: 30px;
+}
+
+.menu-desplegable li
+{
+    margin-bottom: 20px;
+}
+
+.menu-desplegable a
+{
+
+    text-decoration: none;
+    color: black;
+    font-size: 1.5rem;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    font-size: clamp(0.1rem, 2.7vw, 2.3rem);
+
+}
+
+/* VIDEO BUCLE*/
+.videobanner
+{
+    /* relative sigue el flujo normal (ocupa espacio), se puede mover con top/left desde su posicion originall sin afectar a sus hermanos */
+    position: relative;
+    width: 100%;
+    /* vh es viewport heigh, 1vh=1% de la altura de la ventana del navegador, sin importar que este pasando con los padres */
+    height: 100vh;
+    /* con el hidden nos dice que si algo sobresale de la caja se recorta */
+    /* en este caso recorta segun lo valores que pusimos en width  y el vh del height */
+    overflow: hidden;
+}
+
+.hero-video
+{
+    width: 100%;
+    height: 100%;
+    /* hace que el video crezca lo necesario para llenar esa ventana aunque se pase de tamaño */
+    object-fit: cover;
+}
+
+
+
+
+
+
+
+.nuevosingresos
+{
+    background-color: white;
+    /* tamaño de espacio de la zona nuevos ingresos */
+    height: clamp(55em, 93vw, 93em);
+}
+
+.nuevosingresos h2
+{
+    margin-top: 15px;
+    text-align: center;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1.3rem, 2.7vw, 3rem);
+}
+
+
+.carruselnuevosingresos
+{
+    /* gap es para el espacio entre elementos */
+    gap: clamp(0px, 10vw,160px);
+    display: flex;
+    position: relative;
+    /* para que quede centrado */
+    justify-content: center;
+}
+
+.carruselnuevosingresos .clothes
+{
+    width: clamp(280px, 30vw,450px);
+    height: clamp(400px, 43vw,650px);
+    
+}
+
+.carruselnuevosingresos h3
+{
+    position: absolute;
+    padding-left: 40px;
+    top: 570px;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1.3rem, 1.5vw, 2rem);
+    
+}
+
+.carruselnuevosingresos .favclothes
+{
+    display: flex;
+    position: absolute;
+    width: clamp(20px,4vw,35px);
+    height: clamp(20px,4vw,35px);
+    top: 140px;
+    margin-left: 380px;
+}
+
+
+/* BANNERS PROMOCIONES O TEMPORADAS */
+
+.bannerfotos .banners
+{
+width: 100%;
+height: 1300px;
+/* escala las imagenes manteniendo su proporcion, recortando lo que sobreesale para llenar toda la caja sin dejar espacios vaios ni deformar */
+/* ademas de cover existe fill, que es para rellenar todo pero deformando la imagen */
+object-fit: cover;
+/* es para no dejar espacios fantama y para que respete bien el layout de bloque */
+display: block;
+}
+
+/* el > div es para seleccionar los div que son hijos directos (primer nivel) de bannerfotos */
+.bannerfotos > div 
+{
+    /* flex es una forma abreviada de tres propiedades */
+    /* que serian la de flex-(grow,shrink,basis) */
+    /* grow le dice al div que si sobra espacio en el contenedor flex, tiene que crecer para ocuparlo
+    Si tienen 1 es para que crezcan en partes iguales, si es 2 es para que crezca el doble de las demas */
+    /* shrink es lo mismo pero al reves, si falta espacio, encogete */
+    /* basis, es para el tamaño de partida del div, antes de repartir el espacio sobrante, al ponerlo en 0%
+    es decirle que no tome en cuenta el tamaño del contenido para el caluclo inicial, es decir que arranque de 0 y que se reparta el espacio solo segun flex grow */
+
+    /* Por ende en nuestro caso es flex:1 porque en ambos div los hace exactamente igualmente 50% 50%, y si agrego una tercera imagen no hay problema porque se reparte en partes iguales */
+    flex: 1;
+    /* es para que no sobresalga la imagen del div */
+    line-height: 0;
+}
+
+.bannerfotos
+{
+    width: 100%;
+    /* display flex es para alinear las div/imagenes */
+    display: flex;
+    margin-top: 0
+}
+
+.bannertitulos1
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.3rem, 1.8vw, 2.2rem);
+    position: absolute;
+    text-decoration: underline;
+    z-index: 2;
+    margin-left: 0.5em;
+    top: 73em;
+    color: white;
+}
+
+.bannertitulos2
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.3rem, 1.8vw, 3rem);
+    position: absolute;
+    text-decoration: underline;
+    z-index: 2;
+    margin-left: 23.5em;
+    top: 73em;
+    color: rgb(179, 38, 30);
+}
+
+footer
+{
+    border-top: 1px black solid;
+    height: 18em;
+    color: white;
+}
+
+.Titulosfooter
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    color: black;
+    font-size: clamp(0.7rem, 1vw, 2rem);
+}
+
+footer h2
+{
+    font-family: "Instrument Serif", serif;
+    font-weight: 400;
+    font-size: clamp(1.3rem, 2vw, 4rem);
+    color: black;
+}
+
+.direccionefooter
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 500;
+    color: black;
+    font-size: clamp(0.5rem, 1vw, 2rem);
+    text-decoration: none;
+    opacity: 90%;
+}
+
+footer  ul
+{
+    display: grid;
+    gap: 31px;
+    list-style: none;
+}
+
+.finalicons
+{
+    margin-top: 10px;
+    width: clamp(20px,3.7vw,30px);
+    height: clamp(20px,3.7vw,30px);
+    opacity: 60%;
+    margin-right: 6px;
+}
+
+.contenedor
+{
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.izquierda
+{
+    margin-left: clamp(1em, 5vw, 5em);
+    margin-top: clamp(1em, 3em, 3em);
+    /* ponemos el display en flex */
+    display: flex;
+    /* como son 2 div los pongo en columnas porque lo quiero una abajo de otro */
+    flex-direction: column;
+    /* los centro */
+    align-items: center;
+}
+
+
+
+.derecha
+{
+    margin-right: clamp(1em, 5vw, 5em);
+    margin-top: clamp(1em, 3em, 3em);
+    display: flex;
+    justify-content: flex-end;
+    gap: clamp(20px, 5vw, 250px);
+    max-width: 100%;
+    /* si no cabe pasaria a la siguiente fila */
+    flex-wrap: wrap;
+}
