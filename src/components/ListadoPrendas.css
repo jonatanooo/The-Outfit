@@ -1,0 +1,115 @@
+.prenda-card
+{
+    max-width: 280px;
+}
+
+.prenda-imagen-wrap {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    height: 25em;
+}
+
+.prenda-imagen 
+{
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scale(1.2);
+}
+
+.btn-favorito
+{
+    position: absolute;
+    top: 0.6em;
+    right: 0.6em;
+    z-index: 2;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.favicon
+{
+    width: 3em;
+    height: 3em;
+}
+
+.prenda-info
+{
+    display: flex;
+    align-items: flex-start;
+    gap: 5em;
+}
+
+.prenda-nombre
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
+}
+
+.prenda-marca
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
+}
+
+.prenda-precio
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
+    margin: 0;
+}
+
+.seccion-listado {
+    display: grid;
+    margin-top: 3em;
+    align-items: center;
+    justify-content: center;
+}
+
+.listado-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    column-gap: 10em;
+    row-gap: 2em;
+    
+}
+
+@media (max-width: 1300px) {
+
+    .listado-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+
+    .listado-grid {
+        grid-template-columns: repeat(1, 1fr);
+    }
+}
+
+@media (max-width: 800px) {
+
+    .listado-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+
+    .listado-grid {
+        grid-template-columns: repeat(1, 1fr);
+    }
+}
+
+.card-link {
+    text-decoration: none;
+    color: black;
+}

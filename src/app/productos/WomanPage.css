@@ -1,0 +1,74 @@
+
+
+/* VIDEO BUCLE*/
+.imgbanner
+{
+    /* relative sigue el flujo normal (ocupa espacio), se puede mover con top/left desde su posicion originall sin afectar a sus hermanos */
+    position: relative;
+    width: 100%;
+    /* vh es viewport heigh, 1vh=1% de la altura de la ventana del navegador, sin importar que este pasando con los padres */
+    height: 100vh;
+    /* con el hidden nos dice que si algo sobresale de la caja se recorta */
+    /* en este caso recorta segun lo valores que pusimos en width  y el vh del height */
+    overflow: hidden;
+}
+
+.hero-img
+{
+    width: 100%;
+    height: 100%;
+    /* hace que el video crezca lo necesario para llenar esa ventana aunque se pase de tamaño */
+    object-fit: cover;
+}
+
+
+.filtro-linea1 {
+    background-color: orange;
+    display: flex;
+    flex-direction: row;
+    margin-top: 1em;
+    justify-content: space-between;
+    margin-left: 3.5%;
+    margin-right: 3.5%;
+}
+
+.items-cantidad {
+    font-family: "DM Sans", sans-serif;
+    font-weight: 300;
+    font-size: clamp(1rem, 1.8vw, 1.1rem);
+}
+
+.boton-filtro {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    cursor: pointer;
+}
+
+.img-filtro {
+    width: clamp(20px,4vw,25px);
+    height: clamp(20px,4vw,25px);
+    opacity: 70%;
+}
+
+.filtrar-titulo {
+    text-decoration: underline;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 300;
+    font-size: clamp(1rem, 1.8vw, 1.1rem);
+}
+
+.filtro-linea2 {
+    background-color: pink;
+    display: flex;
+    flex-direction: row;
+    margin-top: 1em;
+    justify-content: space-between;
+    margin-left: 3.5%;
+    margin-right: 3.5%;
+}
+
+.prenda-wrap-listado {
+    height: auto;
+    margin-bottom: 2em;
+}

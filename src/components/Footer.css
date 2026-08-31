@@ -1,0 +1,86 @@
+footer
+{
+    border-top: 1px black solid;
+    height: 18em;
+    color: white;
+}
+
+.Titulosfooter
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    color: black;
+    font-size: clamp(0.7rem, 1vw, 2rem);
+}
+
+footer h2
+{
+    font-family: "Instrument Serif", serif;
+    font-weight: 400;
+    font-size: clamp(1.3rem, 2vw, 4rem);
+    color: black;
+}
+
+.direccionefooter
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 500;
+    color: black;
+    font-size: clamp(0.5rem, 1vw, 2rem);
+    text-decoration: none;
+    opacity: 90%;
+}
+
+footer  ul
+{
+    display: grid;
+    gap: 31px;
+    list-style: none;
+}
+
+.finalicons
+{
+    margin-top: 10px;
+    width: clamp(20px,3.7vw,30px);
+    height: clamp(20px,3.7vw,30px);
+    opacity: 60%;
+    margin-right: 6px;
+    display: flex;
+}
+
+.contenedor
+{
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.izquierda
+{
+    margin-left: clamp(1em, 5vw, 5em);
+    margin-top: clamp(1em, 3em, 3em);
+    /* ponemos el display en flex */
+    display: flex;
+    /* como son 2 div los pongo en columnas porque lo quiero una abajo de otro */
+    flex-direction: column;
+    /* los centro */
+    align-items: center;
+}
+
+
+
+.derecha
+{
+    margin-right: clamp(1em, 5vw, 5em);
+    margin-top: clamp(1em, 3em, 3em);
+    display: flex;
+    justify-content: flex-end;
+    gap: clamp(20px, 5vw, 250px);
+    max-width: 100%;
+    /* si no cabe pasaria a la siguiente fila */
+    flex-wrap: wrap;
+}
+
+.social-media {
+    display: flex;
+}
