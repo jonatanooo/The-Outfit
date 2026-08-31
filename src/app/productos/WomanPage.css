@@ -22,34 +22,12 @@
 }
 
 
-.filtro-linea1 {
-    background-color: orange;
-    display: flex;
-    flex-direction: row;
-    margin-top: 1em;
-    justify-content: space-between;
-    margin-left: 3.5%;
-    margin-right: 3.5%;
-}
-
 .items-cantidad {
     font-family: "DM Sans", sans-serif;
     font-weight: 300;
     font-size: clamp(1rem, 1.8vw, 1.1rem);
 }
 
-.boton-filtro {
-    display: flex;
-    align-items: center;
-    gap: 0.5em;
-    cursor: pointer;
-}
-
-.img-filtro {
-    width: clamp(20px,4vw,25px);
-    height: clamp(20px,4vw,25px);
-    opacity: 70%;
-}
 
 .filtrar-titulo {
     text-decoration: underline;
@@ -58,15 +36,6 @@
     font-size: clamp(1rem, 1.8vw, 1.1rem);
 }
 
-.filtro-linea2 {
-    background-color: pink;
-    display: flex;
-    flex-direction: row;
-    margin-top: 1em;
-    justify-content: space-between;
-    margin-left: 3.5%;
-    margin-right: 3.5%;
-}
 
 .prenda-wrap-listado {
     height: auto;
