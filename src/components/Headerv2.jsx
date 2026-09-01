@@ -1,5 +1,5 @@
 "use client"
-import './Header.css'
+import './Headerv2.css'
 import { useState, useEffect, useRef } from 'react';
 
 function Headerv2 () {
@@ -20,7 +20,7 @@ function Headerv2 () {
     // React se encarga de reflejar eso en el HTML automaticamente por esta linea
     // <header className={scrolled ? 'scrolled' : ''}>
     // la cual es un operador condicional ternario en el cual si la condicion es scrolled dara como verdadero scrolled si es falso no dara ningun valor
-
+const [menuAbierto, setMenuAbierto] = useState(false)
     //cerrar menu al hacer click afuera
     useEffect (() => {
         // al dar click afuera se activara un evento/funcion

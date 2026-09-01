@@ -36,7 +36,7 @@ function CarruselInfinito() {
                         <span className="precio">$49.99</span>
                         <button className="favbutton"><img src="/ICONOS/Heart.png" alt="fav" className="heart" /></button>
                     </div>
-                    <p className="referencia">REF #7777</p>
+                    <p className="referencia">REF #<span>7777</span></p>
                     <hr className="divisor" />
 
                     <div className="tallas">

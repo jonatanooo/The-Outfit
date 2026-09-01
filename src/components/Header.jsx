@@ -109,7 +109,7 @@ function Header () {
                 </div>
                 <div>
                     <ul>
-                        <li><a href="" className="part1">MUJERES</a></li>
+                        <li><a href="/productos" className="part1">MUJERES</a></li>
                         <li><a href="" className="part1" >HOMBRES</a></li>
                         <li><a href="" className="part1">SUMMER COLLECTION</a></li>
                         <li><hr className="divmenu"/></li>
