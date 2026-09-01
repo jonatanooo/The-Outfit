@@ -22,22 +22,28 @@
 }
 
 
-.items-cantidad {
-    font-family: "DM Sans", sans-serif;
-    font-weight: 300;
-    font-size: clamp(1rem, 1.8vw, 1.1rem);
-}
-
-
-.filtrar-titulo {
-    text-decoration: underline;
-    font-family: "DM Sans", sans-serif;
-    font-weight: 300;
-    font-size: clamp(1rem, 1.8vw, 1.1rem);
-}
-
-
 .prenda-wrap-listado {
     height: auto;
     margin-bottom: 2em;
+}
+
+.nombre-seccion {
+    position: absolute;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 1.8vw, 1.1rem);
+    color: white;
+    top: 89%;
+    margin-left: 3em;
+}
+
+.descripcion-seccion {
+    position: absolute;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 300;
+    font-size: clamp(1rem, 1.8vw, 1rem);
+    color: white;
+    top: 92%;
+    margin-left: 3em;
+    opacity: 90%;
 }

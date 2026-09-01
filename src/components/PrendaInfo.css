@@ -1,0 +1,75 @@
+/* CUADRO DESCRIPCION PRENDA */
+.descripcionprenda
+{
+    margin-left: 5%;
+    display: flex;
+    height: 38em;
+    width: 62em;
+    flex-direction: column;
+    cursor: pointer;
+}
+
+.acordeon .titulo
+{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 1.4vw, 4rem);
+    background-color: transparent;
+    border: none;
+    border-bottom: 2px black solid;
+    margin-left: 1em;
+    width: 94%;
+    cursor: pointer;
+}
+
+.acordeon img
+{
+    width: clamp(20px,2vw,20px);
+    height: clamp(10px,2vw,11px);
+    transition: transform 0.3s ease;
+}
+
+.contenido
+{
+    display: flex;
+    width: 94%;
+    align-items: center;
+    margin-left: 1.8em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.3s ease;
+    margin-bottom: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.acordeon.activo img
+{
+    transform: rotate(180deg);
+}
+
+.acordeon.activo .contenido
+{
+    max-height: 30rem;
+}
+
+.contenedordescripcion
+{
+    height: 100%;
+    display: flex;
+    /* como es columna, se centra con justify en eje vertical, si es fila es con align item */
+    justify-content: center;
+    flex-direction: column;
+    /* para que se estiren al ancho completo */
+    align-items: stretch;
+}
+
+.acordeon
+{
+    margin-bottom: 1em;
+}

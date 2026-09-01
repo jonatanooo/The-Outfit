@@ -1,0 +1,219 @@
+.carrusel
+{
+    width: 100%;
+    /* vh es viewport heigh, 1vh=1% de la altura de la ventana del navegador, sin importar que este pasando con los padres */
+    height: 100vh;
+    /* con el hidden nos dice que si algo sobresale de la caja se recorta */
+    /* en este caso recorta segun lo valores que pusimos en width  y el vh del height */
+    overflow: hidden;
+    background-color: aqua;
+    display: flex;
+    /* le pone un scrollbar en el eje x */
+    overflow-x: auto;
+    border-bottom: 1px black solid;
+}
+
+.carrusel::-webkit-scrollbar
+{
+    /* con el webkin y el display none, eliminamos la interfaz de la barra de scroll en el eje x del carrusel */
+    display: none;
+}
+
+
+.carruselfotos
+{
+display: flex;
+align-items: center;
+justify-content: center;
+/* animacion */
+animation: spin 30s infinite linear;
+}
+
+.fotocarru
+{
+    width: 45em;
+    height: 100vh;
+    background-color: blueviolet;
+    align-content: center;
+}
+
+.fotocarru img
+{
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+}
+
+/* spin es el identificador */
+@keyframes spin
+{
+    from {translate: 0;}
+    /* desplaza todas las div(fotos) al -100% es decir que las esconde */
+    to {translate: -100%;}
+}
+
+
+.panelprecios
+{
+    display: flex;
+    top: 33em;
+    height: clamp(18em, 23vw, 23em);
+    width: 35em;
+    width: clamp(28em, 35vw, 35em);
+    position: absolute;
+    right: 2%;
+    backdrop-filter: blur(10px);
+    /* para que sea compatible con safari, porque al parecer si le dejo la linea anterior no funciona :( */
+    -webkit-backdrop-filter: blur(10px); 
+    background: rgba(255, 255, 255, 0.76);
+    flex-direction: column;
+}
+
+.infosuperior
+{
+    margin-top: 3em;
+    display: flex;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(0.8rem, 1vw, 1.1rem);
+    align-items: center;
+    margin-left: 0.7em;
+}
+
+.precio
+{
+font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    font-size: clamp(1rem, 1.2vw, 1.2rem);
+    padding-left: clamp(4em, 5vw, 5em);
+}
+
+.favbutton
+{
+    display: flex;
+    width: 9%;
+    justify-content: center;
+    align-items: center;
+    margin-left: 0.3em;
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+
+.heart
+{
+    width: clamp(30px,4vw,35px);
+    height: clamp(30px,4vw,35px);
+}
+
+.referencia
+{
+    margin-left: 0.7em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 500;
+    font-size: clamp(0.8rem, 1vw, 1rem);
+    opacity: 90%;
+    margin-top: 0.4em;
+
+}
+
+.divisor
+{
+    height: 2px;
+    background-color: black;
+    border: none;
+    width: 90%;
+    /* al ponerle el margen en 0 se centra automaticamente y los espacios vacios los reparte en la izquierda y derecha */
+    margin: 0.4em auto 0 auto;
+}
+
+.tallas
+{
+    margin-top: 0.6em;
+    margin-left: 0.7em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 1.1vw, 2rem);
+}
+
+.listatallas button
+{
+    margin-top: 0.5em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.1rem, 1.2vw, 3rem);
+    border: none;
+    background-color: transparent;
+    margin-right: 1.5em;
+    cursor: pointer;
+    margin-bottom: 1.5em;
+}
+
+.anadircesta
+{
+    background-color: black;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 1.1vw, 3rem);
+    color: white;
+    cursor: pointer;
+    border: none;
+    width: 60%;
+    margin: 0 auto;
+    border-radius: 0.5em;
+    height: clamp(1.5em, 1.7vw, 1.7em);
+}
+
+.disponibilidad
+{
+    margin-top: 1.5em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 500;
+    font-size: clamp(0.8rem, 0.8vw, 1rem);
+    display: flex;
+    align-items: center;
+}
+
+.disponibilidad img
+{
+    width: clamp(15px,3vw,20px);
+    height: clamp(15px,3vw,20px);
+    margin-right: 0.4em;
+    margin-left: 8.8em;
+}
+
+.recomendaciones
+{
+    border-top: 1px black solid;
+    height: 45em;
+}
+
+
+
+.prendainfo
+{
+    display: flex;
+    height: 49.5em;
+    width: 100%;
+    align-items: center;
+    overflow: hidden;
+}
+
+.galeria
+{
+    display: flex;
+    height: 45em;
+    width: 35em;
+    border-radius: 1.5em;
+    margin-left: 7%;
+}
+
+.galeria img
+{
+    border-radius: 3em;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+

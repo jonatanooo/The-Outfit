@@ -34,12 +34,20 @@ function FiltroMenu() {
                     onClick = {() => setFiltroAbierto (!filtroAbierto)}
                     aria-label ="Abrir menú">
                     <img src="/ICONOS/FILTRO.png" alt="filtro" id="filtrobtn" className="filtroicon"/>
-                    <span className='filtrar-titulo'>Filtrar</span>
+                    <span className='filtrar-titulo'>FILTRAR</span>
                 </button>
                 <p className='items-cantidad'><span className='items-numero'>100</span> Items filtrados por <span className='filtro-cantidad'>CATEGORIA</span></p>
         </div> 
 
-        <div ref={filtroRef} className={`menu-desplegable ${filtroAbierto ? 'abierto' : ''}`}>
+
+        <div className='filtro-linea2'>
+            <p>Aqui es un resumen de todo los filtros que estan activos</p>
+            <button>al dale click se elimina un filtro uno por uno, dependiendo de cual este activo</button>
+        </div>
+    </div>
+
+
+    <div ref={filtroRef} className={`menu-desplegable ${filtroAbierto ? 'abierto' : ''}`}>
                 {/* anteriormente en Js removiamos la clase, pero ahora con el onClick simplemento se cambia a false, desactivando el menu desplegable */}
                 <div className="exitbuttondiv" onClick={() => setFiltroAbierto(false)}>
                     <a><img src="/ICONOS/EXIT.png" alt="salir" className="exitbutton"/></a>
@@ -49,18 +57,12 @@ function FiltroMenu() {
                         <li><a href="" className="part1">MUJERES</a></li>
                     </ul>
                 </div>
-        </div>
+    </div>
 
         {filtroAbierto && (
                 // quiere decir que si le hacemos click al overlay se desactiva el menu desplegable
                 <div className="Overlay" onClick={() => setFiltroAbierto(false)}></div>
             )}
-
-        <div className='filtro-linea2'>
-            <p>Aqui es un resumen de todo los filtros que estan activos</p>
-            <button>al dale click se elimina un filtro uno por uno, dependiendo de cual este activo</button>
-        </div>
-    </div>
     </>
     )
 }
