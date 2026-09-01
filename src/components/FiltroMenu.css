@@ -46,7 +46,6 @@
     /* lo desplaza hacia la izquierda (eje x) */
     transform: translateX(-100%);
     transition: transform 0.35s ease;
-    /* queda debajo del header pero encima del video */
     z-index: 102;
 
 }
@@ -106,8 +105,8 @@
     display: flex;
     flex-direction: row;
     justify-content: space-between;
-    margin-left: 3.5%;
-    margin-right: 3.5%;
+    margin-left: 6%;
+    margin-right: 6%;
     align-items: center;
     height: 2.8em;
 }
@@ -118,15 +117,15 @@
     flex-direction: row;
 
     justify-content: space-between;
-    margin-left: 3.5%;
-    margin-right: 3.5%;
+    margin-left: 6%;
+    margin-right: 6%;
     height: 2.5em;
     align-items: center;
 }
 
 .filtroicon {
-    width: clamp(20px,4vw,25px);
-    height: clamp(20px,4vw,25px);
+    width: clamp(20px,4vw,22px);
+    height: clamp(20px,4vw,22px);
     opacity: 70%;
 }
 
@@ -139,19 +138,18 @@
     top: 60px;
     background-color: white;
     border-bottom: 1px solid black;
-}
-
-.items-cantidad {
     font-family: "DM Sans", sans-serif;
     font-weight: 300;
     font-size: clamp(1rem, 1.8vw, 1.1rem);
+}
+
+.items-cantidad {
     text-decoration: underline;
 }
 
 
 .filtrar-titulo {
     text-decoration: underline;
-    font-family: "DM Sans", sans-serif;
-    font-weight: 300;
-    font-size: clamp(1rem, 1.8vw, 1.1rem);
+    font-weight: 700;
+    font-size: clamp(1rem, 1.8vw, 1rem);
 }

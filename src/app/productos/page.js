@@ -13,6 +13,8 @@ export default function Home() {
                 {/* <!-- section lo ocupamos porque es uan division tematica --> */}
         <section className="imgbanner">
             <img src="/Fotos/banner-women.jpg" alt="" className="hero-img"/>
+            <h3 className='nombre-seccion'>MUJER</h3>
+            <p className='descripcion-seccion'>Compra ropa de mujer y accesorios y las más recientes colecciones de The Outfit.</p>
         </section>
 
         <section className="seccion-catalogo">

@@ -210,6 +210,7 @@ header.scrolled .Logo
 {
     width: clamp(20px,4vw,30px);
     height: clamp(20px,4vw,30px);
+    cursor: pointer;
 }
 
 .exitbuttondiv

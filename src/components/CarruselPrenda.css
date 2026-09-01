@@ -1,6 +1,7 @@
 .prenda-card
 {
     max-width: 280px;
+    margin-bottom: 1em;
 }
 
 .prenda-imagen-wrap {
@@ -49,13 +50,18 @@
     font-family: "DM Sans", sans-serif;
     font-weight: 400;
     font-size: clamp(1rem, 1vw, 2rem);
+    /* si algun dia da problemas cambiarlo */
+    height: 1em;
 }
 
 .prenda-marca
 {
     font-family: "DM Sans", sans-serif;
     font-weight: 400;
-    font-size: clamp(1rem, 1vw, 2rem);
+    font-size: clamp(1rem, 1vw, 1.2rem);
+    opacity: 70%;
+    /* si algun dia da problemas cambiarlo */
+    height: 1em;
 }
 
 .prenda-precio
@@ -64,6 +70,8 @@
     font-weight: 400;
     font-size: clamp(1rem, 1vw, 2rem);
     margin: 0;
+    /* si algun dia da problemas cambiarlo */
+    height: 1em;
 }
 
 .carrusel-wrap {
