@@ -153,3 +153,99 @@
     font-weight: 700;
     font-size: clamp(1rem, 1.8vw, 1rem);
 }
+
+
+
+
+
+/* CUADRO DESCRIPCION PRENDA */
+.descripcionprenda
+{
+    margin-left: 5%;
+    display: flex;
+    height: auto;
+    width: 89%;
+    flex-direction: column;
+    cursor: pointer;
+}
+
+.acordeon .titulo
+{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 1vw, 4rem);
+    background-color: transparent;
+    border: none;
+    border-bottom: 2px black solid;
+    margin-left: 1em;
+    width: 90%;
+    cursor: pointer;
+}
+
+.acordeon img
+{
+    width: clamp(20px,2vw,20px);
+    height: clamp(10px,2vw,11px);
+    transition: transform 0.3s ease;
+}
+
+.contenido
+{
+    display: flex;
+    width: 94%;
+    margin-left: 1.8em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.3s ease;
+    margin-bottom: 0.5rem;
+    margin-top: 0.5rem;
+    flex-direction: column;
+}
+
+.acordeon.activo img
+{
+    transform: rotate(180deg);
+}
+
+.acordeon.activo .contenido
+{
+    max-height: 30rem;
+}
+
+.contenedordescripcion
+{
+    height: 100%;
+    display: flex;
+    /* como es columna, se centra con justify en eje vertical, si es fila es con align item */
+    flex-direction: column;
+    /* para que se estiren al ancho completo */
+    align-items: stretch;
+}
+
+.acordeon
+{
+    margin-bottom: 1em;
+}
+
+
+
+.filtrar-categorias {
+    background-color: black;
+    cursor: pointer;
+    color: white;
+    width: 90%;
+    height: 2em;
+    border-radius: 0.5em;
+    margin-left: 5%;
+    margin-top: 1em;
+}
+
+.checkbox-opcion input{
+    margin-right: 0.7em;
+}
