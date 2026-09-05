@@ -1,4 +1,4 @@
-.Overlay
+.Overlayfiltro
 {
     /* es para que cuando el menu este desplegado se desenfoque el fondo*/
 
@@ -19,7 +19,7 @@
 
 /* MENU DESPEGABLE */
 /* estado oculto */
-.menu-toggle
+.menu-toggle-filtro
 {
     background-color: transparent;
     border: none;
@@ -32,7 +32,7 @@
     font-size: clamp(1rem, 1.8vw, 1.1rem);
 }
 
-.menu-desplegable
+.menu-desplegable-filtro
 {
     position: fixed;
     top: 0px;
@@ -47,6 +47,7 @@
     transform: translateX(-100%);
     transition: transform 0.35s ease;
     z-index: 102;
+    overflow-y: scroll;
 
 }
 
@@ -56,50 +57,18 @@
     height: clamp(20px,4vw,30px);
 }
 
-.exitbuttondiv
+.exitbuttondivfiltro
 {
     margin-left: 2em;
     margin-top:1em ;
     margin-bottom: 3.5em;
 }
 
-.menu-desplegable.abierto
+.menu-desplegable-filtro.abierto
 {
     /* como esta en cero muestra el meno porque oculto esta en -100% */
     transform: translateX(0);
 }
-
-
-.menu-desplegable ul
-{
-    list-style: none;
-    padding-left: 30px;
-}
-
-
-.part1
-{
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 25px;
-    text-decoration: none;
-    color: black;
-    font-size: 1.5rem;
-    font-family: "DM Sans", sans-serif;
-    font-weight: 600;
-    font-size: clamp(0.1rem, 2.7vw, 2rem);
-
-}
-
-
-.divmenu
-{
-    display: flex;
-    width: 90%;
-    height: 3px;
-    background-color: black;
-}
-
 
 .filtro-linea1 {
     display: flex;
@@ -152,4 +121,106 @@
     text-decoration: underline;
     font-weight: 700;
     font-size: clamp(1rem, 1.8vw, 1rem);
+}
+
+
+
+
+
+/* CUADRO DESCRIPCION PRENDA */
+.descripcionprenda
+{
+    margin-left: 5%;
+    display: flex;
+    height: auto;
+    width: 89%;
+    flex-direction: column;
+    cursor: pointer;
+}
+
+.acordeon .titulo
+{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1rem, 1vw, 4rem);
+    background-color: transparent;
+    border: none;
+    border-bottom: 2px black solid;
+    margin-left: 1em;
+    width: 90%;
+    cursor: pointer;
+}
+
+.acordeon img
+{
+    width: clamp(20px,2vw,20px);
+    height: clamp(10px,2vw,11px);
+    transition: transform 0.3s ease;
+}
+
+.contenido
+{
+    display: flex;
+    width: 94%;
+    margin-left: 1.8em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(1rem, 1vw, 2rem);
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.3s ease;
+    margin-bottom: 0.5rem;
+    margin-top: 0.5rem;
+    flex-direction: column;
+}
+
+.acordeon.activo img
+{
+    transform: rotate(180deg);
+}
+
+.acordeon.activo .contenido
+{
+    max-height: 30rem;
+}
+
+.contenedordescripcion
+{
+    height: 100%;
+    display: flex;
+    /* como es columna, se centra con justify en eje vertical, si es fila es con align item */
+    flex-direction: column;
+    /* para que se estiren al ancho completo */
+    align-items: stretch;
+}
+
+.acordeon
+{
+    margin-bottom: 1em;
+}
+
+
+
+.filtrar-categorias {
+    background-color: black;
+    cursor: pointer;
+    color: white;
+    width: 90%;
+    height: 2em;
+    border-radius: 0.5em;
+    margin-left: 5%;
+    margin-top: 1em;
+}
+
+.checkbox-opcion input{
+    margin-right: 0.7em;
+}
+
+.checkbox-opcion input[type="checkbox"],
+.checkbox-opcion input[type="radio"] {
+    cursor: pointer;
+    accent-color: black;
 }

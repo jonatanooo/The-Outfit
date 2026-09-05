@@ -22,6 +22,57 @@ function FiltroMenu() {
         return () => document.removeEventListener('click',ClickFuera)
     }, [])
 
+
+    const [abiertoIds, setAbiertoIds] = useState([])
+
+    const secciones = [
+    {id: 1, titulo: "Categorias", tipo: "multiple", opciones: ["Zapatos","Camisas","Pantalones","Chaquetas","Faldas"]},
+    {id: 2, titulo: "Colores", tipo: "multiple", opciones: ["Negro", "Blanco", "Verde", "Azul"] },
+    {id: 3, titulo: "Materiales", tipo: "multiple", opciones: ["Algodón", "Poliéster", "Lino"]},
+    {id: 4, titulo: "Tallas", tipo: "multiple", opciones: ["S", "M", "L", "XL", "XXL"]},
+    {id: 5, titulo: "Ordenar Por", tipo: "unica", opciones: ["Precio: menor a mayor", "Precio: mayor a menor", "Más nuevo"]},
+]
+
+    const toggleAcordeon =(id) => {
+        setAbiertoIds((prev) =>
+            prev.includes(id)
+                ? prev.filter((item) => item !== id)
+                : [...prev, id]
+        )
+    }
+
+const [filtrosSeleccionados, setFiltrosSeleccionados] = useState({})
+
+const toggleFiltro = (seccionTitulo, opcion) => {
+    setFiltrosSeleccionados((prev) => {
+        //sacamos el array actual de esa seccion (o vacio si no existe aun)
+        const actuales = prev[seccionTitulo] || []
+
+        const yaEstaba = actuales.includes(opcion)
+
+        const nuevosValores = yaEstaba
+        ? actuales.filter((item) => item !== opcion) //lo quitamos
+        : [...actuales, opcion] //lo agregamos
+
+        return {
+            ...prev,
+            [seccionTitulo]: nuevosValores
+        }
+    })
+}
+
+const seleccionarUnica = (seccionTitulo, opcion) => {
+    setFiltrosSeleccionados((prev) => ({
+        ...prev,
+        [seccionTitulo]: [opcion]
+    }))
+}
+
+const aplicarFiltros =() => {
+    console.log("Filtros a aplicar:", filtrosSeleccionados)
+    setFiltroAbierto(false)
+}
+
     return (
     // fragmento
     <>
@@ -29,7 +80,7 @@ function FiltroMenu() {
         <div className='filtro-linea1'>
                 <button
                     ref = {filtroBtnRef}
-                    className ="menu-toggle"
+                    className ="menu-toggle-filtro"
                     // el onClick remplaza el addEventListener('click') y !menuAbierto es el toggle, si estaba true pasa a false y viceversa
                     onClick = {() => setFiltroAbierto (!filtroAbierto)}
                     aria-label ="Abrir menú">
@@ -47,21 +98,48 @@ function FiltroMenu() {
     </div>
 
 
-    <div ref={filtroRef} className={`menu-desplegable ${filtroAbierto ? 'abierto' : ''}`}>
+    <div ref={filtroRef} className={`menu-desplegable-filtro ${filtroAbierto ? 'abierto' : ''}`}>
                 {/* anteriormente en Js removiamos la clase, pero ahora con el onClick simplemento se cambia a false, desactivando el menu desplegable */}
-                <div className="exitbuttondiv" onClick={() => setFiltroAbierto(false)}>
+                <div className="exitbuttondivfiltro" onClick={() => setFiltroAbierto(false)}>
                     <a><img src="/ICONOS/EXIT.png" alt="salir" className="exitbutton"/></a>
                 </div>
-                <div>
-                    <ul>
-                        <li><a href="" className="part1">MUJERES</a></li>
-                    </ul>
+                <div className="descripcionprenda">
+                <div className="contenedordescripcion">
+                    {secciones.map((seccion) => (
+                        <div className={`acordeon  ${abiertoIds.includes(seccion.id) ? 'activo' : ''}`} key={seccion.id}>
+                            <button className='titulo'
+                            onClick={() => toggleAcordeon(seccion.id)}>
+                                {seccion.titulo}
+                                <img src="/ICONOS/Flechaabajo.png" alt="desplegar" id="bajar" />
+                            </button>
+                            <div className='contenido'>
+                                {seccion.opciones.map((opcion) => (
+                                    <label key={opcion} className='checkbox-opcion'>
+                                        <input 
+                                        type={seccion.tipo === "unica" ? "radio" : "checkbox"}
+                                        name={seccion.tipo === "unica" ? seccion.titulo : undefined}
+                                        checked={filtrosSeleccionados[seccion.titulo]?.includes(opcion) || false}
+                                        onChange={() => 
+                                        seccion.tipo === "unica"
+                                        ? seleccionarUnica(seccion.titulo, opcion)
+                                        : toggleFiltro(seccion.titulo, opcion)}
+                                        />
+                                        {opcion}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    
+                    <button className='filtrar-categorias' onClick={aplicarFiltros}>FILTRAR</button>
                 </div>
     </div>
+    </div>
+
 
         {filtroAbierto && (
                 // quiere decir que si le hacemos click al overlay se desactiva el menu desplegable
-                <div className="Overlay" onClick={() => setFiltroAbierto(false)}></div>
+                <div className="Overlayfiltro" onClick={() => setFiltroAbierto(false)}></div>
             )}
     </>
     )
