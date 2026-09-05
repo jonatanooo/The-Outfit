@@ -1,5 +1,4 @@
 "use client"
-import { label } from 'motion/react-client';
 import './FiltroMenu.css'
 import { useState, useEffect, useRef } from 'react';
 
@@ -24,16 +23,23 @@ function FiltroMenu() {
     }, [])
 
 
-    const [abiertoId, setAbiertoId] = useState(null)
+    const [abiertoIds, setAbiertoIds] = useState([])
 
     const secciones = [
-        {id: 1, titulo: "Categorias", opciones: ["Zapatos","Camisas","Pantalones","Chaquetas","Faldas"]},
-        {id: 2, titulo: "Colores", opciones: ["Negro", "Blanco", "Verde", "Azul"] },
-        {id: 3, titulo: "Materiales", opciones: ["Algodón", "Poliéster", "Lino"]},
-        {id: 4, titulo: "Tallas", opciones: ["S", "M", "L", "XL", "XXL"]},
-        {id: 5, titulo: "Ordenar Por", opciones: ["Precio: menor a mayor", "Precio: mayor a menor", "Más nuevo"]},
-        
-    ]
+    {id: 1, titulo: "Categorias", tipo: "multiple", opciones: ["Zapatos","Camisas","Pantalones","Chaquetas","Faldas"]},
+    {id: 2, titulo: "Colores", tipo: "multiple", opciones: ["Negro", "Blanco", "Verde", "Azul"] },
+    {id: 3, titulo: "Materiales", tipo: "multiple", opciones: ["Algodón", "Poliéster", "Lino"]},
+    {id: 4, titulo: "Tallas", tipo: "multiple", opciones: ["S", "M", "L", "XL", "XXL"]},
+    {id: 5, titulo: "Ordenar Por", tipo: "unica", opciones: ["Precio: menor a mayor", "Precio: mayor a menor", "Más nuevo"]},
+]
+
+    const toggleAcordeon =(id) => {
+        setAbiertoIds((prev) =>
+            prev.includes(id)
+                ? prev.filter((item) => item !== id)
+                : [...prev, id]
+        )
+    }
 
 const [filtrosSeleccionados, setFiltrosSeleccionados] = useState({})
 
@@ -55,6 +61,13 @@ const toggleFiltro = (seccionTitulo, opcion) => {
     })
 }
 
+const seleccionarUnica = (seccionTitulo, opcion) => {
+    setFiltrosSeleccionados((prev) => ({
+        ...prev,
+        [seccionTitulo]: [opcion]
+    }))
+}
+
 const aplicarFiltros =() => {
     console.log("Filtros a aplicar:", filtrosSeleccionados)
     setFiltroAbierto(false)
@@ -67,7 +80,7 @@ const aplicarFiltros =() => {
         <div className='filtro-linea1'>
                 <button
                     ref = {filtroBtnRef}
-                    className ="menu-toggle"
+                    className ="menu-toggle-filtro"
                     // el onClick remplaza el addEventListener('click') y !menuAbierto es el toggle, si estaba true pasa a false y viceversa
                     onClick = {() => setFiltroAbierto (!filtroAbierto)}
                     aria-label ="Abrir menú">
@@ -85,26 +98,32 @@ const aplicarFiltros =() => {
     </div>
 
 
-    <div ref={filtroRef} className={`menu-desplegable ${filtroAbierto ? 'abierto' : ''}`}>
+    <div ref={filtroRef} className={`menu-desplegable-filtro ${filtroAbierto ? 'abierto' : ''}`}>
                 {/* anteriormente en Js removiamos la clase, pero ahora con el onClick simplemento se cambia a false, desactivando el menu desplegable */}
-                <div className="exitbuttondiv" onClick={() => setFiltroAbierto(false)}>
+                <div className="exitbuttondivfiltro" onClick={() => setFiltroAbierto(false)}>
                     <a><img src="/ICONOS/EXIT.png" alt="salir" className="exitbutton"/></a>
                 </div>
                 <div className="descripcionprenda">
                 <div className="contenedordescripcion">
                     {secciones.map((seccion) => (
-                        <div className={`acordeon  ${abiertoId === seccion.id? 'activo' : ''}`} key={seccion.id}>
+                        <div className={`acordeon  ${abiertoIds.includes(seccion.id) ? 'activo' : ''}`} key={seccion.id}>
                             <button className='titulo'
-                            onClick={() => setAbiertoId(abiertoId === seccion.id ? null : seccion.id)}>
+                            onClick={() => toggleAcordeon(seccion.id)}>
                                 {seccion.titulo}
                                 <img src="/ICONOS/Flechaabajo.png" alt="desplegar" id="bajar" />
                             </button>
                             <div className='contenido'>
                                 {seccion.opciones.map((opcion) => (
                                     <label key={opcion} className='checkbox-opcion'>
-                                        <input type="checkbox" 
+                                        <input 
+                                        type={seccion.tipo === "unica" ? "radio" : "checkbox"}
+                                        name={seccion.tipo === "unica" ? seccion.titulo : undefined}
                                         checked={filtrosSeleccionados[seccion.titulo]?.includes(opcion) || false}
-                                        onChange={() => toggleFiltro(seccion.titulo, opcion)}/>
+                                        onChange={() => 
+                                        seccion.tipo === "unica"
+                                        ? seleccionarUnica(seccion.titulo, opcion)
+                                        : toggleFiltro(seccion.titulo, opcion)}
+                                        />
                                         {opcion}
                                     </label>
                                 ))}
@@ -120,7 +139,7 @@ const aplicarFiltros =() => {
 
         {filtroAbierto && (
                 // quiere decir que si le hacemos click al overlay se desactiva el menu desplegable
-                <div className="Overlay" onClick={() => setFiltroAbierto(false)}></div>
+                <div className="Overlayfiltro" onClick={() => setFiltroAbierto(false)}></div>
             )}
     </>
     )
