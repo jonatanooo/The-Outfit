@@ -1,10 +1,12 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import './SidebarAdmin.css';
 
 function SidebarAdmin() {
     // expandido reemplaza el estado visual del sidebar (ancho grande vs angosto)
     const [expandido, setExpandido] = useState(true);
+    const pathname = usePathname();
      const sidebarRef = useRef(null);
     const toggleBtnRef = useRef(null);
      useEffect(() => {
@@ -24,11 +26,11 @@ function SidebarAdmin() {
         return () => document.removeEventListener('click', manejarClickFuera);
     }, []);
     const menuItems = [
-    { icon: '/ICONOS/inventario.png', label: 'Inventario', href: '' },
-    { icon: '/ICONOS/transacciones.png', label: 'Transacciones', href: '' },
-    { icon: '/ICONOS/empleados.png', label: 'Empleados', href: '' },
-    { icon: '/ICONOS/reportes.png', label: 'Reportes', href: '' },
-    { icon: '/ICONOS/configuracion.png', label: 'Configuración', href: '' }
+    { icon: '/ICONOS/inventario.png', label: 'Inventario', href: '/Inventario' },
+    { icon: '/ICONOS/transacciones.png', label: 'Transacciones', href: '/transacciones' },
+    { icon: '/ICONOS/empleados.png', label: 'Empleados', href: '#' },
+    { icon: '/ICONOS/reportes.png', label: 'Reportes', href: '#' },
+    { icon: '/ICONOS/configuracion.png', label: 'Configuración', href: '#' }
 ];
 
 
@@ -51,13 +53,21 @@ function SidebarAdmin() {
 
             {/* el menuItems.map() recorre cada item del arreglo y genera un enlace <a> para cada uno, usando sus propios datos (icono, label, href) */}
             <nav>
-                {menuItems.map((item) => (
-                        <a key={item.label} href={item.href} className="menu-item">
+                {menuItems.map((item) => {
+                    // marca como activo el enlace cuya ruta coincide con la URL actual
+                    const activo = item.href !== '#' && pathname?.toLowerCase().startsWith(item.href.toLowerCase());
+                    return (
+                        <a
+                            key={item.label}
+                            href={item.href}
+                            className={`menu-item ${activo ? 'activo' : ''}`}
+                        >
                          <img src={item.icon} alt={item.label} className="menu-icon" />
                          {expandido && <span className="menu-label">{item.label}</span>}
                          {/* el && solo muestra el texto si expandido es true y el span con el texto desaparece cuando el sidebar está recogido */}
                         </a>
-                    ))}
+                    );
+                })}
             </nav>
         </aside>
     );

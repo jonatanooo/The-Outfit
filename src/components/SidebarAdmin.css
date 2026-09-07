@@ -90,3 +90,8 @@
 .menu-item:hover {
     background-color: #FFC87C;
 }
+
+.menu-item.activo {
+    background-color: #FFC87C;
+    font-weight: 600;
+}
