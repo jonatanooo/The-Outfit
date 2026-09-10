@@ -7,6 +7,8 @@ import './AdminInventario.css';
 
 function AdminInventario() {
     // ---------- ESTADOS DE LA TABLA PRINCIPAL ----------
+    const [filtroActivo, setFiltroActivo] = useState('todos'); // activos' | 'inactivos' | 'bajo' | 'sinstock'//
+    const [idEstadoInactivo, setIdEstadoInactivo] = useState(null);
     const [busqueda, setBusqueda] = useState('');
     const [variantes, setVariantes] = useState([]);
     const [cargando, setCargando] = useState(true);
@@ -54,10 +56,48 @@ function AdminInventario() {
     const [motivoStock, setMotivoStock] = useState('Compra a proveedor');
     const [guardandoStock, setGuardandoStock] = useState(false);
 
+    
+
+    
+
     // ---------- CARGA INICIAL DE PRODUCTOS ----------
     useEffect(() => {
         cargarVariantes();
     }, []);
+
+        useEffect(() => {
+        async function cargarEstadoInactivo() {
+            const { data, error } = await supabase
+                .from('Estado_Producto')
+                .select('ID_Estado_Producto')
+                .eq('Estado', 'Inactivo')
+                .limit(1)
+                .single();
+
+            if (!error && data) {
+                setIdEstadoInactivo(data.ID_Estado_Producto);
+            } else {
+                console.log('⚠️ No existe un estado "Inactivo" todavía en Estado_Producto');
+            }
+        }
+    cargarEstadoInactivo();
+    }, []);
+
+         const totalProductos = variantes.length;
+
+            const stockBajo = variantes.filter((v) => {
+                const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
+                return stock > 0 && stock < 5;
+            }).length;
+
+            const sinStock = variantes.filter((v) => {
+                const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
+                return stock === 0;
+            }).length;
+
+    const productosInactivos = variantes.filter((v) => v.ID_EstadoProducto === idEstadoInactivo).length;
+    const productosActivos = totalProductos - productosInactivos;
+
 
 
     // ---------------- ABRIR MODALES ----------------//
@@ -109,11 +149,37 @@ function AdminInventario() {
     }
 
 
+    /*---------- TEXTOS Y COLORES PARA LOS FILTROS ----------*/
+            const textosFiltro = {
+            bajo: 'Stock bajo',
+            sinstock: 'Sin stock',
+            activos: 'Productos activos',
+            inactivos: 'Productos inactivos',
+        };
+
+        const coloresFiltro = {
+            activos: 'green',
+            inactivos: 'orange',
+            bajo: 'purple',
+            sinstock: 'red',
+        };
+
+
 //-----------OPERACIONES EN LA BASE DE DATOS (CRUD)----------//
 
 // ---------- GUARDAR EDICION DE VARIANTE ----------//
     async function guardarEdicion() {
     if (!varianteEditando) return;
+
+     if (Number(precioEditar) < 0) {
+        alert('El precio no puede ser negativo');
+        return;
+    }
+
+    if (Number(stockEditar) < 0) {
+        alert('El stock no puede ser negativo');
+        return;
+    }
     setGuardandoEdicion(true);
 
     const idProducto = varianteEditando.Productos?.ID_Producto;
@@ -520,6 +586,16 @@ function AdminInventario() {
             return;
         }
 
+        if (Number(precioProducto) < 0) {
+            alert('El precio no puede ser negativo');
+            return;
+        }
+
+        if (Number(stockProducto) < 0) {
+            alert('El stock no puede ser negativo');
+            return;
+        }
+
         // 1. Insertar Producto
         const { data: productoData, error: errorProducto } = await supabase
             .from('Productos')
@@ -585,28 +661,18 @@ function AdminInventario() {
     }
 
     // ---------- FILTRO DE BUSQUEDA ----------
-    const filtrados = variantes.filter((v) =>
-        v.Productos?.Nombre_Producto.toLowerCase().includes(busqueda.toLowerCase())
-    );
+        const filtrados = variantes.filter((v) => {
+        const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
+        const coincideBusqueda = v.Productos?.Nombre_Producto.toLowerCase().includes(busqueda.toLowerCase());
 
-    // Conteo para las tarjetas superiores
-        // Activos: ID_EstadoProducto = 1 (o null/default)
-        const totalActivos = variantes.filter((v) => (v.ID_EstadoProducto ?? 1) === 1).length;
+        let coincideFiltro = true;
+        if (filtroActivo === 'bajo') coincideFiltro = stock > 0 && stock < 5;
+        if (filtroActivo === 'sinstock') coincideFiltro = stock === 0;
+        if (filtroActivo === 'activos') coincideFiltro = v.ID_EstadoProducto !== idEstadoInactivo; // ver nota abajo
+        if (filtroActivo === 'inactivos') coincideFiltro = v.ID_EstadoProducto === idEstadoInactivo;
 
-        // Inactivos: ID_EstadoProducto = 2 
-        const totalInactivos = variantes.filter((v) => v.ID_EstadoProducto === 2 || v.ID_EstadoProducto === 2).length;
-
-        // Stock bajo: productos con stock entre 1 y 19 unidades por el momento
-        const totalStockBajo = variantes.filter((v) => {
-            const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
-            return stock > 0 && stock < 20;
-        }).length;
-
-        // Sin stock: productos con stock igual a 0
-        const totalSinStock = variantes.filter((v) => {
-            const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
-            return stock === 0;
-        }).length;
+        return coincideBusqueda && coincideFiltro;
+    });
 
 
 
@@ -634,23 +700,51 @@ function AdminInventario() {
                 </div>
                         {/* tarjetas de estadisticas de productos activos, inactivos, stock bajo y sin stock */}
                     <div className="stats-row">
-                        <div className="stat-card">
-                            <span className="stat-titulo">Productos activos</span>
-                            <span className="stat-valor" style={{ color: '#2e7d32' }}>{totalActivos}</span>
+                            <div
+                                className={`stat-card ${filtroActivo === 'activos' ? 'stat-card-activa' : ''}`}
+                                onClick={() => setFiltroActivo(filtroActivo === 'activos' ? 'todos' : 'activos')}
+                            >
+                                <p className="stat-titulo">Productos activos</p>
+                                <p className="stat-valor" style={{ color: 'green' }}>{productosActivos}</p>
+                            </div>
+
+                            <div
+                                className={`stat-card ${filtroActivo === 'inactivos' ? 'stat-card-activa' : ''}`}
+                                onClick={() => setFiltroActivo(filtroActivo === 'inactivos' ? 'todos' : 'inactivos')}
+                            >
+                                <p className="stat-titulo">Productos inactivos</p>
+                                <p className="stat-valor" style={{ color: 'orange' }}>{productosInactivos}</p>
+                            </div>
+
+                            <div
+                                className={`stat-card ${filtroActivo === 'bajo' ? 'stat-card-activa' : ''}`}
+                                onClick={() => setFiltroActivo(filtroActivo === 'bajo' ? 'todos' : 'bajo')}
+                            >
+                                <p className="stat-titulo">Stock bajo</p>
+                                <p className="stat-valor" style={{ color: 'purple' }}>{stockBajo}</p>
+                            </div>
+
+                            <div
+                                className={`stat-card ${filtroActivo === 'sinstock' ? 'stat-card-activa' : ''}`}
+                                onClick={() => setFiltroActivo(filtroActivo === 'sinstock' ? 'todos' : 'sinstock')}
+                            >
+                                <p className="stat-titulo">Sin stock</p>
+                                <p className="stat-valor" style={{ color: 'red' }}>{sinStock}</p>
+                            </div>
                         </div>
-                        <div className="stat-card">
-                            <span className="stat-titulo">Productos inactivos</span>
-                            <span className="stat-valor" style={{ color: '#e65100' }}>{totalInactivos}</span>
-                        </div>
-                        <div className="stat-card">
-                            <span className="stat-titulo">Stock bajo</span>
-                            <span className="stat-valor" style={{ color: '#f9a825' }}>{totalStockBajo}</span>
-                        </div>
-                        <div className="stat-card">
-                            <span className="stat-titulo">Sin stock</span>
-                            <span className="stat-valor" style={{ color: '#d32f2f' }}>{totalSinStock}</span>
-                        </div>
-                    </div>
+
+                        
+
+                    {filtroActivo !== 'todos' && (
+                         <div
+                                className="filtro-indicador"
+                                style={{ borderColor: coloresFiltro[filtroActivo], color: coloresFiltro[filtroActivo] }}
+                            >
+                                <p className="Filtro-titulo">Mostrando:</p>
+                                {textosFiltro[filtroActivo]}
+                                <button onClick={() => setFiltroActivo('todos')}>Quitar filtro ❌</button>
+                            </div>
+                        )}
 
                     {/* Barra de búsqueda para filtrar productos por nombre */}
                 <input
@@ -706,10 +800,20 @@ function AdminInventario() {
 {/*---------------- Botones para altear stock, editar y activar/desactivar producto ----------------*/}
             <td>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <button type="button" title="Entrada de stock" onClick={() => abrirModalStock(v)}>
+                    <button 
+                        type="button" 
+                        title="Entrada de stock" 
+                        onClick={() => abrirModalStock(v)}
+                        style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '1.1rem' }}
+                    >
                         📦
                     </button>
-                    <button type="button" title="Editar producto" onClick={() => abrirModalEditar(v)}>
+                    <button 
+                        type="button" 
+                        title="Editar producto" 
+                        onClick={() => abrirModalEditar(v)}
+                        style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '1.1rem' }}
+                    >
                         ✏️
                     </button>
                     <button 
@@ -733,8 +837,8 @@ function AdminInventario() {
 
             {/* ---------- MODAL: AGREGAR PRODUCTO ---------- */}
             {modalAbierto === 'agregar' && (
-                <div className="modal-overlay" onClick={() => setModalAbierto(null)}>
-                    <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-overlay">
+                    <div className="modal-box">
                         <div className="modal-header">
                             <h2>Agregar producto</h2>
                             <button onClick={() => setModalAbierto(null)}>✕</button>
@@ -827,6 +931,7 @@ function AdminInventario() {
                                 <label>Precio</label>
                                 <input
                                     type="number"
+                                    min="0"
                                     step="0.01"
                                     placeholder="0.00"
                                     value={precioProducto}
@@ -883,7 +988,7 @@ function AdminInventario() {
                                     type="file"
                                     accept="image/*"
                                     multiple
-                                    onChange={manejarSeleccionFotosEditar}
+                                    onChange={manejarSeleccionFotos}
                                     style={{ display: 'none' }}
                                 />
                             </label>
@@ -906,8 +1011,8 @@ function AdminInventario() {
 
             {/* ---------- MODAL: EDITAR PRODUCTO ---------- */}
         {modalAbierto === 'editar' && (
-            <div className="modal-overlay" onClick={() => setModalAbierto(null)}>
-        <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-overlay">
+        <div className="modal-box">
             <div className="modal-header">
                 <h2>Editar producto</h2>
                 <button onClick={() => setModalAbierto(null)}>✕</button>
@@ -926,6 +1031,7 @@ function AdminInventario() {
                     <input
                         type="number"
                         step="0.01"
+                        min="0"
                         value={precioEditar}
                         onChange={(e) => setPrecioEditar(e.target.value)}
                     />
@@ -1005,8 +1111,8 @@ function AdminInventario() {
 
               {/*------------ MODAL: ENTRADA DE STOCK -------------- */}
              {modalAbierto === 'stock' && varianteStock && (
-    <div className="modal-overlay" onClick={() => setModalAbierto(null)}>
-        <div className="modal-box" style={{ maxWidth: '420px' }} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+        <div className="modal-box" style={{ maxWidth: '420px' }} >
             <div className="modal-header">
                 <h2>Ajustar stock</h2>
                 <button onClick={() => setModalAbierto(null)}>✕</button>
