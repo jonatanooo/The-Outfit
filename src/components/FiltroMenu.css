@@ -110,6 +110,7 @@
     font-family: "DM Sans", sans-serif;
     font-weight: 300;
     font-size: clamp(1rem, 1.8vw, 1.1rem);
+    height: 5.5em;
 }
 
 .items-cantidad {
@@ -223,4 +224,36 @@
 .checkbox-opcion input[type="radio"] {
     cursor: pointer;
     accent-color: black;
+}
+
+.etiquetas-filtro {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.etiqueta-filtro {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 0.8em;
+    padding: 4px 10px;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(0.6rem, 1vw, 1rem);
+}
+
+.etiqueta-quitar {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.75rem;
+    line-height: 1;
+    color: #666;
+}
+
+.etiqueta-quitar:hover {
+    color: #000;
 }
