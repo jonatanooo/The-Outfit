@@ -203,7 +203,7 @@ function AdminInventario() {
         }
         // 2. Actualiza el precio actual
         await supabase
-            .from('Variante Producto')
+            .from('Variante_Producto')
             .update({ Precio_Actual: parseFloat(precioEditar) })
             .eq('ID_Variante', idVariante);
         
@@ -354,7 +354,7 @@ function AdminInventario() {
 
             // 1. Actualiza el estado de la variante
             const { error: errorVariante } = await supabase
-                .from('Variante Producto')
+                .from('Variante_Producto')
                 .update({ ID_EstadoProducto: nuevoEstado })
                 .eq('ID_Variante', variante.ID_Variante);
 
@@ -377,7 +377,7 @@ function AdminInventario() {
          async function cargarVariantes() {
              setCargando(true);
               const { data, error } = await supabase
-            .from('Variante Producto')
+            .from('Variante_Producto')
             .select(`
                ID_Variante,
             ID_Producto,
@@ -627,7 +627,7 @@ function AdminInventario() {
 
         // 3. Insertar Variante
         const { data: varianteData, error: errorVariante } = await supabase
-            .from('Variante Producto')
+            .from('Variante_Producto')
             .insert({
                 ID_Producto: productoData.ID_Producto,
                 ID_Talla: tallaData.ID_Talla,
