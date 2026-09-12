@@ -1,13 +1,9 @@
-"use client"
-import { div } from "motion/react-client";
+
 import "./CarruselInfinito.css";
 
-// creamos la costante prendas donde vamos a cargar las diferentes prendas
+function CarruselInfinito({producto}) {
 
-
-function CarruselInfinito() {
-
-    const fotos = [1, 2, 3, 4, 5, 6]
+    const imagenes = producto?.imagenes ?? [];
 
     return(
         <>
@@ -15,38 +11,36 @@ function CarruselInfinito() {
             <section className="carrusel">
                 <div className="carruselfotos">
                     {/* map es quien se encarga de agarrar cada valor de la constante y se lo pasa a la funcion numero */}
-                    {fotos.map((numero) => (
-                        <div  className="fotocarru"  key={numero}>
-                            <img src={`/PrendasCarrusel/${numero}.jpg`} alt="" />
+                    {imagenes.map((url, index) => (
+                        <div  className="fotocarru"  key={index}>
+                            <img src={url} alt = {producto.nombre}/>
                         </div>  
                     ))}
                 </div>
 {/* se repite para que se cree el efecto infinito */}
                 <div aria-hidden className="carruselfotos">
-                    {fotos.map((numero) => (
-                        <div  className="fotocarru" key={numero}>
-                            <img src={`/PrendasCarrusel/${numero}.jpg`} alt="" />
+                    {imagenes.map((url, index) => (
+                        <div className="fotocarru" key={`dup-${index}`}>
+                            <img src={url} alt={producto.nombre} />
                         </div>  
                     ))}
                 </div>
 
                 <div className="panelprecios">
                     <div className="infosuperior">
-                        <h3>SUDADERA RAYAS VERDE Y BLANCO</h3>
-                        <span className="precio">$49.99</span>
+                        <h3>{producto.nombre}</h3>
+                        <span className="precio">${producto.precio}</span>
                         <button className="favbutton"><img src="/ICONOS/Heart.png" alt="fav" className="heart" /></button>
                     </div>
-                    <p className="referencia">REF #<span>7777</span></p>
+                    <p className="referencia">REF #{producto.id}</p>
                     <hr className="divisor" />
 
                     <div className="tallas">
                         <h4>TALLAS</h4>
                         <div className="listatallas">
-                            <button>S</button>
-                            <button>M</button>
-                            <button>L</button>
-                            <button>XL</button>
-                            <button>XXL</button>
+                            {producto.tallas.map((talla) => (
+                                <button key={talla}>{talla}</button>
+                            ))}
                         </div>
                     </div>
 
