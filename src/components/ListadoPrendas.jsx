@@ -97,10 +97,10 @@ function ListadoPrendas({filtros, onResultados}) {
               <button className="btn-favorito" aria-label="Agregar a favoritos">
                 <img src="/ICONOS/Heart.png" alt="like" className="favicon" />
               </button>
-              <a href=""><motion.img  whileHover={{scale: 1.2}} src={prenda.imagen} alt={prenda.nombre} className="prenda-imagen" /></a>
+              <a href={`/producto/${prenda.id}`}><motion.img  whileHover={{scale: 1.2}} src={prenda.imagen} alt={prenda.nombre} className="prenda-imagen" /></a>
             </div>
 
-            <a href="" className="card-link"> 
+            <a href={`/producto/${prenda.id}`} className="card-link"> 
                 <div className="prenda-info">
                     <div>
                         <p className="prenda-nombre">{prenda.nombre}</p>
