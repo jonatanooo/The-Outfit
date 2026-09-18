@@ -1,6 +1,8 @@
 "use client"
 import './Header.css'
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 
 function Header () {
     // comentario Jona
@@ -8,6 +10,7 @@ function Header () {
     // menuAbierto reemplaza la clase .abierto del menu
     const [scrolled, setScrolled] = useState(false)
     const [menuAbierto, setMenuAbierto] = useState(false)
+    const router = useRouter();
     const categorias = [
         {id: 'mujer', 
             label: 'MUJERES ', 
@@ -98,6 +101,11 @@ function Header () {
     return () => document.removeEventListener('click', manejarClickFuera)
     }, [] )
 
+    // 🔓 FUNCIÓN PARA CERRAR SESIÓN
+    const handleCerrarSesion = async () => {
+        await supabase.auth.signOut();
+        router.push('/login');
+    };
 
     return (
         // la cual es un operador condicional ternario en el cual si la condicion es scrolled dara como verdadero scrolled si es falso no dara ningun valor
@@ -147,7 +155,9 @@ function Header () {
                 <div className="exitbuttondiv" onClick={() => setMenuAbierto(false)}>
                     <a><img src="/ICONOS/EXIT.png" alt="salir" className="exitbutton"/></a>
                 </div>
-                <div>
+                
+                {/* 🔓 CONTENEDOR BOTÓN AL FONDO */}
+                <div className="menu-contenido">
                     <ul>
                         {/* de la constante categoria creo un map con una variable inventada 'categoria', en el cual con ella pondria los atributos como id etc */}
                         {categorias.map((categoria) => (
@@ -167,8 +177,12 @@ function Header () {
                         <li className="part3">CONTACTANOS</li>
                         <li><a href="" className="partinfo">+503 2261-3004</a></li>
                     </ul>
-                    <div>
-                        <button className="logout">CERRAR SESIÓN <img src="/ICONOS/logout.png" alt="" className="logouticon"/></button>
+                    
+                    {/* 🔓 BOTÓN CERRAR SESION */}
+                    <div className="logout-container">
+                        <button className="logout" onClick={handleCerrarSesion}>
+                            CERRAR SESIÓN <img src="/ICONOS/logout.png" alt="" className="logouticon"/>
+                        </button>
                     </div>
                 </div>
             </div>
