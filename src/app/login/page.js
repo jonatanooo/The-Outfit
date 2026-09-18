@@ -101,9 +101,20 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    alert('🔜 Inicio de sesión con Google: próximamente');
-  };
+  const handleGoogleLogin = async () => {
+  try {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    });
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error al iniciar con Google:', error.message);
+    alert('Error al iniciar sesión con Google. Intenta de nuevo.');
+  }
+};
 
   return (
     <div className="w-full flex flex-col bg-white">
