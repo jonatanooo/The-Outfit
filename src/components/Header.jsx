@@ -2,10 +2,12 @@
 import './Header.css'
 import { useState, useEffect, useRef } from 'react';
 
+// NUEVAS IMPORTACIONES PARA REDUX:
+import { useSelector, useDispatch } from 'react-redux';
+import { toggleCart } from '../store/slices/cartSlice'; // Ajusta la ruta a tu store si es necesario
+import { toggleFavoritesOpen } from '../store/slices/favoritesSlice';
 function Header () {
-    // comentario Jona
-    // Los 2 useState son las banderas que remplazan las clases CSS que antes agregaba/quitaba en JS con classList.scrolled reemplaza la clase .scrolled del header, 
-    // menuAbierto reemplaza la clase .abierto del menu
+    
     const [scrolled, setScrolled] = useState(false)
     const [menuAbierto, setMenuAbierto] = useState(false)
     const categorias = [
@@ -44,63 +46,41 @@ function Header () {
             href:'',
         }
     ]
-    // empieza en null porque cuando abrimos el menu, ninguna categoria esta activalueg
     const[categoriaActiva, setCategoriaActiva] = useState(null)
 
-    // antes en el JS usaba "document.getElementById("menuDespegable")" y  "document.getElementById("menubtn")"
-    // useRef es el equivalente en React, te da una caja que apunta al elemento real una vez que se renderiza sin necesidad de buscarlo por ID
     const menuRef = useRef(null)
     const menuBtnRef = useRef(null)
     const menuSubcategoriaRef = useRef(null)
 
-    // se conectan al html asi
-    // <div ref={menuRef} className="menu-desplegable">
-    // <button ref={menuBtnRef} className="menu-toggle"></button>
+    // INICIALIZAMOS REDUX:
+    const dispatch = useDispatch();
+    const cartItems = useSelector((state) => state.cart.items);
+    const favoriteItems = useSelector((state) => state.favorites.items);
+    // Calculamos el total de prendas (sumando las cantidades de cada una)
+    const totalItems = cartItems.reduce((total, item) => total + item.cantidad, 0);
 
-    // efecto de scroll
     useEffect(() => {
-        // creamos una funcion la cual contiene una constante llamada manejarScroll, el cual va a ser una funcion que active el estado setScrolled cuando bajemos mas de 50px
         const manejarScroll = () => {
             setScrolled(window.scrollY>50)
         }
-        // ponemos un listener, es decir que se active cuando se haga scroll
         window.addEventListener('scroll', manejarScroll)
-        // el return es la limpieza, le dice a React que si el componente desaparece de la pantalla, deja de escuchar el scrolll
         return () => window.removeEventListener('scroll', manejarScroll)
-        // el [] significa que se ejecute una sola vez, cuando el componente aparece por primera vez, es decir que solo corriera una vez al cargar la pag
     }, [])
 
-    // React se encarga de reflejar eso en el HTML automaticamente por esta linea
-    // <header className={scrolled ? 'scrolled' : ''}>
-    // la cual es un operador condicional ternario en el cual si la condicion es scrolled dara como verdadero scrolled si es falso no dara ningun valor
-
-    //cerrar menu al hacer click afuera
     useEffect (() => {
-        // al dar click afuera se activara un evento/funcion
     const manejarClickFuera = (event) => {
-        // event.target es el elemento del HTML donde ocurrio el click, ejemplo si hago click en THE OUTFIT seria h1
-        // contains responde la pregunta "¿el elemento donde di click  (event.target) esta dentro de otro elemento (menuDesplegable), ya sea directamente o dentro de alguno de sus hijos?"
-        // contains() devuelve true si el click fue dentro del menu, y devuelve false si fue fuera
-
-        // el ?. (optional chaining) es una proteccion extra, si menuRef.current todavia es null, evita que truene con error, simplemente no hace nada en vez de crashear
         const clickDentroMenuSubcategoria = menuSubcategoriaRef.current?.contains(event.target)
         const clickDentroDelMenu = menuRef.current?.contains(event.target)
         const clickEnBotonMenu = menuBtnRef.current?.contains(event.target)
         if(!clickDentroDelMenu && !clickEnBotonMenu && !clickDentroMenuSubcategoria) {
-            // con la condicion de que si no hacemos click en el boton de menu o dentro del menu (es decir hacemos click afuera).
-            // setMenuAbierto dara false, es decir que se cerrara el menu
             setMenuAbierto(false)
         }
     } 
-    // el evento que activara esto es el click, y cargara la funcion manejarClickFuera
     document.addEventListener('click', manejarClickFuera)
-    // despues de eso hara limpieza y removera el evento listener click y la funcion
     return () => document.removeEventListener('click', manejarClickFuera)
     }, [] )
 
-
     return (
-        // la cual es un operador condicional ternario en el cual si la condicion es scrolled dara como verdadero scrolled si es falso no dara ningun valor
         <header className={scrolled ? 'scrolled' : ''}>
 
         {/* <!-- Barra Iconos --> */}
@@ -109,7 +89,6 @@ function Header () {
                 <button
                     ref = {menuBtnRef}
                     className ="menu-toggle"
-                    // el onClick remplaza el addEventListener('click') y !menuAbierto es el toggle, si estaba true pasa a false y viceversa
                     onClick = {() => setMenuAbierto (!menuAbierto)}
                     aria-label ="Abrir menú"
                 >
@@ -128,38 +107,97 @@ function Header () {
                     <img src="/ICONOS/Person.png" alt="Perfil" className="profileicon"/>
                 </a>
 
-                <a href="#favoritos">
+               
+{/* BOTÓN DE FAVORITOS CON GLOBITO DE NOTIFICACIÓN */}
+                <a 
+                    href="#favoritos" 
+                    style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={(e) => {
+                        e.preventDefault(); 
+                        dispatch(toggleFavoritesOpen()); // Abre el Drawer de Favoritos
+                    }}
+                >
                     <img src="/ICONOS/Heart.png" alt="Favoritos" className="hearticon"/>
+                    
+                    {/* El globito solo aparece si hay 1 o más favoritos */}
+                    {favoriteItems.length > 0 && (
+                        <span 
+                            style={{
+                                position: 'absolute',
+                                top: '-6px',
+                                right: '-8px',
+                                backgroundColor: '#E50000', 
+                                color: 'white',
+                                fontSize: '11px',
+                                fontWeight: 'bold',
+                                borderRadius: '50%',
+                                width: '18px',
+                                height: '18px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 10
+                            }}
+                        >
+                            {favoriteItems.length}
+                        </span>
+                    )}
                 </a>
-
-                <a href="#carrito" className='contenedor-carrito'>
+                {/* BOTÓN DEL CARRITO CON GLOBITO DE NOTIFICACIÓN */}
+                <a 
+                    href="#carrito" 
+                    className='contenedor-carrito'
+                    style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={(e) => {
+                        e.preventDefault(); // Evita que recargue la página
+                        dispatch(toggleCart()); // Abre tu Drawer lateral
+                    }}
+                >
                     <img src="/ICONOS/Shopping Cart.png" alt="Carrito" className="carritoicon"/>
+                    
+                    {/* El globito solo aparece si hay 1 o más productos */}
+                    {totalItems > 0 && (
+                        <span 
+                            style={{
+                                position: 'absolute',
+                                top: '-6px',
+                                right: '-8px',
+                                backgroundColor: '#E50000', // Rojo llamativo para la notificación
+                                color: 'white',
+                                fontSize: '11px',
+                                fontWeight: 'bold',
+                                borderRadius: '50%',
+                                width: '18px',
+                                height: '18px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 10
+                            }}
+                        >
+                            {totalItems}
+                        </span>
+                    )}
                 </a>
 
                 </div>
         </nav>
 
         {/* <!-- Menu Despegable -->*/}
-        {/* lo referenciamos con menuRef */}
-        {/* en el operador condicional ternario, la condicion es menuAbierto, si se cumple (true) nos dara abierto, activando el evento, si no se cumple no devuelve nada */}
             <div ref={menuRef} className={`menu-desplegable ${menuAbierto ? 'abierto' : ''}`}>
-                {/* anteriormente en Js removiamos la clase, pero ahora con el onClick simplemento se cambia a false, desactivando el menu desplegable */}
                 <div className="exitbuttondiv" onClick={() => setMenuAbierto(false)}>
                     <a><img src="/ICONOS/EXIT.png" alt="salir" className="exitbutton"/></a>
                 </div>
                 <div>
                     <ul>
-                        {/* de la constante categoria creo un map con una variable inventada 'categoria', en el cual con ella pondria los atributos como id etc */}
                         {categorias.map((categoria) => (
                             <li key={categoria.id}>
                                 <a href={categoria.href} className ="part1"
-                                    // el onClick remplaza el addEventListener('click') y !menuAbierto es el toggle, si estaba true pasa a false y viceversa
                                     onClick = {(event) => {{event.preventDefault(); setMenuAbierto(false)} 
                                     setCategoriaActiva(categoria.id)}}
                                     aria-label ="Abrir menú" >{categoria.label}</a>
                             </li>
                         ))}
-
 
                         <li><hr className="divmenu"/></li>
                         <li className="part2">LOCACIÓN</li>
@@ -173,22 +211,12 @@ function Header () {
                 </div>
             </div>
 
-            {/* el overlay antes siempre existia en el HTML (con estado oculto con display:none) y se le agregaba o quitaba la clase .activo */}
-            {/* aqui el menuAbierto && significa que solo renderiza este div si menuAbierto es true, si es false, este div no va a existir en el DOM*/}
-
-            {/* con el && es la forma abreviada del condicional ternario, forma abreviada de: */}
-            {/* {menuAbierto ? <div className="Overlay activo">...</div> : null} */}
-            {/* pusimos las 2 condiciones */}
             {(menuAbierto || categoriaActiva) &&  (
-                // quiere decir que si le hacemos click al overlay se desactiva el menu desplegable
                 <div className="Overlay" onClick={() => {setMenuAbierto(false); setCategoriaActiva(null)}}></div>
             )}
 
-                {/* en el operador ternario no comparamos nada, solo con preguntar si categoriaActiva tiene un valor verdadero (no es null). Si es cualquier string vacio lo toma como true  */}
             <div ref= {menuSubcategoriaRef} className={`menu-subca ${categoriaActiva ? 'abierto' : ''}`}>
-                 {/* anteriormente en Js removiamos la clase, pero ahora con el onClick simplemento se cambia a false, desactivando el menu desplegable */}
                 <div className="buttonsdiv">
-                    {/* en el onClick para que se cumplan 2 eventos hay que ponerlos asi () => {algo; algo2} */}
                         <div className="exitbuttondiv" onClick={() => {setCategoriaActiva(null)}}>
                             <a><img src="/ICONOS/EXIT.png" alt="salir" className="exitbutton"/></a>
                         </div>
@@ -200,7 +228,6 @@ function Header () {
                 <div>
                     <ul>
                         {categorias.find((categoria) => categoria.id === categoriaActiva)
-                        // el ?. le dice a JS que si lo que esta antes de este punto es undefined o null, no siga intentano acceder a la propiedas, simplemente para ahi y devuelve undefined"
                         ?.subcategorias?.map((subcategoria) => (
                             <li key={subcategoria.label}>
                                 <a href={subcategoria.href} className="partsubca">
