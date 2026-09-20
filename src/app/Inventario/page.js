@@ -15,14 +15,13 @@ function AdminInventario() {
 
     // ---------- ESTADOS DEL MODAL -- null | 'agregar' | 'editar' | 'stock' ----------
     const [modalAbierto, setModalAbierto] = useState(null); 
-    const [tipoMovimiento, setTipoMovimiento] = useState('entrada');
+    
 
     // ---------- ESTADOS DEL FORMULARIO "AGREGAR PRODUCTO" ----------
     const [nombreProducto, setNombreProducto] = useState('');
     const [descripcionProducto, setDescripcionProducto] = useState('');
     const [precioProducto, setPrecioProducto] = useState('');
-    const [tallaProducto, setTallaProducto] = useState('');
-    const [stockProducto, setStockProducto] = useState('');
+    const [guardandoProducto, setGuardandoProducto] = useState(false);
 
     // ---------- ESTADOS DE CATEGORIA / SUBCATEGORIA ----------
     const [categorias, setCategorias] = useState([]);
@@ -41,6 +40,9 @@ function AdminInventario() {
     //---------- ESTADOS DE MODAL DE EDICION ----------//
     const [varianteEditando, setVarianteEditando] = useState(null);
     const [nombreEditar, setNombreEditar] = useState('');
+    const [marcaEditar, setMarcaEditar] = useState('');
+    const [creandoMarcaEditar, setCreandoMarcaEditar] = useState(false);
+    const [nombreNuevaMarcaEditar, setNombreNuevaMarcaEditar] = useState('');
     const [precioEditar, setPrecioEditar] = useState('');
     const [tallaEditar, setTallaEditar] = useState('');
     const [stockEditar, setStockEditar] = useState('');
@@ -51,14 +53,86 @@ function AdminInventario() {
     const [guardandoEdicion, setGuardandoEdicion] = useState(false);
 
     //------ ESTADOS DE MODAL DE INGRESO DE STOCK ----------//
+    
     const [varianteStock, setVarianteStock] = useState(null);
     const [cantidadIngresar, setCantidadIngresar] = useState('');
     const [motivoStock, setMotivoStock] = useState('Compra a proveedor');
     const [guardandoStock, setGuardandoStock] = useState(false);
+    const [tallaStock, setTallaStock] = useState('');
+    const [tallasDisponibles, setTallasDisponibles] = useState([]);
+    const [tipoTallaSeleccionada, setTipoTallaSeleccionada] = useState('');
+    const [coloresDisponibles, setColoresDisponibles] = useState([]);
+    const [colorSeleccionado, setColorSeleccionado] = useState('');
+    const [tipoMovimiento, setTipoMovimiento] = useState('entrada'); // 'entrada' | 'salida'
+    const [marcas, setMarcas] = useState([]);
+    const [marcaSeleccionada, setMarcaSeleccionada] = useState('');
+    const [creandoMarca, setCreandoMarca] = useState(false);
+    const [nombreNuevaMarca, setNombreNuevaMarca] = useState('');
 
-    
 
+            useEffect(() => {
+            if (modalAbierto === 'agregar') {
+                cargarCategorias();
+                cargarMarcas();
+            }
+        }, [modalAbierto]);
+
+        async function cargarMarcas() {
+            const { data, error } = await supabase
+                .from('Marca')
+                .select('ID_Marca, Nombre_Marca');
+
+            if (!error) setMarcas(data);
+        }
+
+                async function crearMarca() {
+            const idUser = await obtenerIdUsuario();
+            const { data, error } = await supabase
+                .from('Marca')
+                .insert({ ID_User: idUser, Nombre_Marca: nombreNuevaMarca })
+                .select()
+                .single();
+
+            if (!error) {
+                setMarcas((prev) => [...prev, data]);
+                setMarcaSeleccionada(data.ID_Marca);
+                setNombreNuevaMarca('');
+                setCreandoMarca(false);
+            } else {
+                console.log('❌ Error creando marca:', error.message);
+            }
+        }
     
+    //------------------- CARGA DE TALLAS DISPONIBLES AL ABRIR EL MODAL DE STOCK ----------------//
+        useEffect(() => {
+            if (modalAbierto === 'stock') {
+                cargarTallasDisponibles();
+            }
+        }, [modalAbierto]);
+
+        async function cargarTallasDisponibles() {
+            const { data, error } = await supabase
+                .from('Tipos_Talla')
+                .select('ID_TipoTalla, Nombre_TipoTalla');
+
+            if (!error) setTallasDisponibles(data);
+        }
+    
+//-------------------- CARGA DE COLORES DISPONIBLES AL ABRIR EL MODAL DE STOCK ----------------//
+        useEffect(() => {
+            if (modalAbierto === 'stock') {
+                cargarTallasDisponibles();
+                cargarColoresDisponibles();
+            }
+        }, [modalAbierto]);
+
+        async function cargarColoresDisponibles() {
+            const { data, error } = await supabase
+                .from('Colores')
+                .select('ID_Color, Nombre_Color');
+
+            if (!error) setColoresDisponibles(data);
+        }
 
     // ---------- CARGA INICIAL DE PRODUCTOS ----------
     useEffect(() => {
@@ -98,6 +172,20 @@ function AdminInventario() {
     const productosInactivos = variantes.filter((v) => v.ID_EstadoProducto === idEstadoInactivo).length;
     const productosActivos = totalProductos - productosInactivos;
 
+     // ---------- Filtro combinado (busqueda + tarjeta activa) ----------
+    const filtrados = variantes.filter((v) => {
+        const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
+        const coincideBusqueda = v.Productos?.Nombre_Producto.toLowerCase().includes(busqueda.toLowerCase());
+
+        let coincideFiltro = true;
+        if (filtroActivo === 'bajo') coincideFiltro = stock > 0 && stock < 5;
+        if (filtroActivo === 'sinstock') coincideFiltro = stock === 0;
+        if (filtroActivo === 'activos') coincideFiltro = v.ID_EstadoProducto !== idEstadoInactivo;
+        if (filtroActivo === 'inactivos') coincideFiltro = v.ID_EstadoProducto === idEstadoInactivo;
+
+        return coincideBusqueda && coincideFiltro;
+    });
+
 
 
     // ---------------- ABRIR MODALES ----------------//
@@ -106,6 +194,8 @@ function AdminInventario() {
     setNombreEditar(v.Productos?.Nombre_Producto || '');
     setPrecioEditar(v.Precio_Actual || '');
     setTallaEditar(v.Talla?.Tipos_Talla?.Nombre_TipoTalla || '');
+    setMarcaEditar(v.Marca?.ID_Marca || '');
+    cargarMarcas();
     setStockEditar(v.Inventario?.[0]?.Cantidad_Disponible ?? 0);
     
     // Carga las fotos que ya existen en la base de datos
@@ -119,11 +209,13 @@ function AdminInventario() {
 
     // Abre el modal para registrar entrada rápida de stock
     function abrirModalStock(v) {
-     setVarianteStock(v);
-     setCantidadIngresar('');
-     setTipoMovimiento('entrada'); 
-     setMotivoStock('Compra a proveedor');
-     setModalAbierto('stock');
+        setVarianteStock(v);
+        setCantidadIngresar('');
+        setTipoTallaSeleccionada(v.Talla?.Tipos_Talla?.ID_TipoTalla || '');
+        setColorSeleccionado(v.Colores?.ID_Color || '');
+        setModalAbierto('stock');
+        setMotivoStock('Compra a proveedor');
+     
     }
 
     // Manejo de nuevas fotos dentro del modal de edición
@@ -201,11 +293,19 @@ function AdminInventario() {
                 .update({ Nombre_Producto: nombreEditar })
                 .eq('ID_Producto', idProducto);
         }
-        // 2. Actualiza el precio actual
-        await supabase
-            .from('Variante_Producto')
-            .update({ Precio_Actual: parseFloat(precioEditar) })
-            .eq('ID_Variante', idVariante);
+        // 2. Actualiza el precio actual (Variante_Producto)
+            await supabase
+                .from('Variante_Producto')
+                .update({ Precio_Actual: parseFloat(precioEditar) })
+                .eq('ID_Variante', idVariante);
+
+         // 2.1 Actualiza la marca (Productos)
+            if (idProducto) {
+                await supabase
+                    .from('Productos')
+                    .update({ ID_Marca: marcaEditar || null })
+                    .eq('ID_Producto', idProducto);
+            }
         
         // 3. Actualiza el nombre de la talla
         if (idTipoTalla) {
@@ -295,82 +395,69 @@ function AdminInventario() {
  // -------------- GUARDAR ENTRADA DE STOCK --------------//
 
             // Registra una entrada de mercancía sumándola al stock actual
-            async function guardarEntradaStock() {
-                    const cantidad = parseInt(cantidadIngresar, 10);
-            if (!cantidad || cantidad <= 0) {
-                alert('Ingresa una cantidad válida mayor a 0');
-                return;
-            }
-
-            const idInventario = varianteStock?.Inventario?.[0]?.ID_Inventario;
-            if (!idInventario) {
-                alert('No se encontró el registro de inventario.');
-                return;
-            }
-
+            
+        async function guardarEntradaStock() {
+            const idInventario = varianteStock.Inventario?.[0]?.ID_Inventario;
             const stockActual = varianteStock.Inventario?.[0]?.Cantidad_Disponible ?? 0;
+            const cant = parseInt(cantidadIngresar, 10) || 0;
+            const nuevoStock = tipoMovimiento === 'entrada' ? stockActual + cant : stockActual - cant;
 
-            // Calcular según si es entrada o salida
-            const nuevoStock = tipoMovimiento === 'entrada' 
-                ? stockActual + cantidad 
-                : stockActual - cantidad;
-
-            // Validación para no permitir inventario negativo
-            if (nuevoStock < 0) {
-                alert(`No puedes retirar más de ${stockActual} unidades disponibles.`);
+            if (!idInventario) {
+                console.log('❌ No se encontró el registro de inventario');
                 return;
             }
 
-            setGuardandoStock(true);
+            // 1. Resolver la talla (si cambio)
+            let idTallaFinal = varianteStock.Talla?.ID_Talla;
+            const idTipoTallaActual = varianteStock.Talla?.Tipos_Talla?.ID_TipoTalla;
 
-            const { error } = await supabase
-                .from('Inventario')
-                .update({
-                    Cantidad_Disponible: nuevoStock,
-                    Fecha_Actualizacion: new Date().toISOString()
-                })
-                .eq('ID_Inventario', idInventario);
+            if (tipoTallaSeleccionada && Number(tipoTallaSeleccionada) !== idTipoTallaActual) {
+                const { data: tallaExistente } = await supabase
+                    .from('Talla')
+                    .select('ID_Talla')
+                    .eq('ID_TipoTalla', tipoTallaSeleccionada)
+                    .limit(1)
+                    .maybeSingle();
 
-            setGuardandoStock(false);
+                idTallaFinal = tallaExistente?.ID_Talla;
 
-            if (error) {
-                alert('Error al actualizar inventario: ' + error.message);
-            } else {
-                setModalAbierto(null);
-                cargarVariantes();
+                if (!idTallaFinal) {
+                    const { data: nuevaTalla, error: errorTalla } = await supabase
+                        .from('Talla')
+                        .insert({ ID_TipoTalla: tipoTallaSeleccionada })
+                        .select()
+                        .single();
+
+                    if (errorTalla) {
+                        console.log('❌ Error creando talla:', errorTalla.message);
+                        return;
+                    }
+                    idTallaFinal = nuevaTalla.ID_Talla;
+                }
             }
-}
-     // ---------- GUARDAR ENTRADA DE ESTADO DEL PRODUCTO ------------//
 
-        // Alterna el estado activo / inactivo de un producto
-        async function alternarEstadoProducto(variante) {
-            // Si el estado actual es 1 (activo), lo pasamos a 2 (inactivo), o viceversa
-            const estadoActual = variante.ID_EstadoProducto ?? 1;
-            const nuevoEstado = estadoActual === 1 ? 2 : 1;
-            const accion = nuevoEstado === 2 ? 'desactivar' : 'activar';
-
-            const confirmar = confirm(`¿Estás seguro de que deseas ${accion} este producto?`);
-            if (!confirmar) return;
-
-            // 1. Actualiza el estado de la variante
+            // 2. Actualizar Talla y Color juntos en la Variante
             const { error: errorVariante } = await supabase
                 .from('Variante_Producto')
-                .update({ ID_EstadoProducto: nuevoEstado })
-                .eq('ID_Variante', variante.ID_Variante);
-
-            // Actualiza el estado en el producto principal
-            if (variante.ID_Producto) {
-                await supabase
-                    .from('Productos')
-                    .update({ ID_EstadoProducto: nuevoEstado })
-                    .eq('ID_Producto', variante.ID_Producto);
-            }
+                .update({
+                    ID_Talla: idTallaFinal || null,
+                    ID_Color: colorSeleccionado || null,
+                })
+                .eq('ID_Variante', varianteStock.ID_Variante);
 
             if (errorVariante) {
-                alert('Error al cambiar el estado: ' + errorVariante.message);
-            } else {
-                cargarVariantes(); // Refresca la tabla automáticamente
+                console.log('❌ Error actualizando variante:', errorVariante.message);
+                return;
             }
+
+            // 3. Actualizar el stock
+            await supabase
+                .from('Inventario')
+                .update({ Cantidad_Disponible: nuevoStock, Fecha_Actualizacion: new Date().toISOString() })
+                .eq('ID_Inventario', idInventario);
+
+            setModalAbierto(null);
+            cargarVariantes();
         }
 
         // Consulta la lista principal de variantes y sus relaciones
@@ -379,19 +466,20 @@ function AdminInventario() {
               const { data, error } = await supabase
             .from('Variante_Producto')
             .select(`
-               ID_Variante,
-            ID_Producto,
-            Precio_Actual,
-            ID_EstadoProducto,
-            Productos ( 
-                ID_Producto, 
-                Nombre_Producto, 
-                Descripcion,
+              ID_Variante,
+                ID_Producto,
+                Precio_Actual,
                 ID_EstadoProducto,
-                Fotos_Productos ( ID_Foto, URL_Foto, Orden )
-            ),
-            Talla ( ID_Talla, Tipos_Talla ( ID_TipoTalla, Nombre_TipoTalla ) ),
-            Inventario ( ID_Inventario, Cantidad_Disponible )
+                Productos ( 
+                    ID_Producto, 
+                    Nombre_Producto, 
+                    Descripcion,
+                    Marca ( ID_Marca, Nombre_Marca ),
+                    Fotos_Productos ( ID_Foto, URL_Foto, Orden )
+                ),
+                Talla ( ID_Talla, Tipos_Talla ( ID_TipoTalla, Nombre_TipoTalla ) ),
+                Inventario ( ID_Inventario, Cantidad_Disponible ),
+                Colores ( ID_Color, Nombre_Color )
             `);
 
         if (error) {
@@ -568,41 +656,39 @@ function AdminInventario() {
         setNombreProducto('');
         setDescripcionProducto('');
         setPrecioProducto('');
-        setTallaProducto('');
-        setStockProducto('');
         setCategoriaSeleccionada('');
         setSubcategoriaSeleccionada('');
         setFotosSeleccionadas([]);
         setPreviews([]);
+        setMarcaSeleccionada('');
     }
 
     // ---------- GUARDAR EL PRODUCTO COMPLETO ----------
         // Guarda el producto completo (Producto, Talla, Variante, Inventario y Fotos)
     async function guardarProductoNuevo() {
-        const idCategoriaFinal = subcategoriaSeleccionada || categoriaSeleccionada;
+    const idCategoriaFinal = subcategoriaSeleccionada || categoriaSeleccionada;
 
-        if (!nombreProducto || !idCategoriaFinal) {
-            alert('Nombre y categoría son obligatorios');
-            return;
-        }
+    if (!nombreProducto || !idCategoriaFinal) {
+        alert('Nombre y categoría son obligatorios');
+        return;
+    }
 
-        if (Number(precioProducto) < 0) {
-            alert('El precio no puede ser negativo');
-            return;
-        }
+    if (Number(precioProducto) < 0) {
+        alert('El precio no puede ser negativo');
+        return;
+    }
 
-        if (Number(stockProducto) < 0) {
-            alert('El stock no puede ser negativo');
-            return;
-        }
+    setGuardandoProducto(true);
 
-        // 1. Insertar Producto
+    try {
+        // 1. Crear el producto
         const { data: productoData, error: errorProducto } = await supabase
             .from('Productos')
             .insert({
                 Nombre_Producto: nombreProducto,
                 Descripcion: descripcionProducto,
                 ID_Categoria: idCategoriaFinal,
+                ID_Marca: marcaSeleccionada || null,
             })
             .select()
             .single();
@@ -612,25 +698,12 @@ function AdminInventario() {
             return;
         }
 
-        // 2. Insertar Talla
-        const { data: tipoTallaData } = await supabase
-            .from('Tipos_Talla')
-            .insert({ Nombre_TipoTalla: tallaProducto })
-            .select()
-            .single();
-
-        const { data: tallaData } = await supabase
-            .from('Talla')
-            .insert({ ID_TipoTalla: tipoTallaData.ID_TipoTalla })
-            .select()
-            .single();
-
-        // 3. Insertar Variante
+        // 2. Crear la variante
         const { data: varianteData, error: errorVariante } = await supabase
             .from('Variante_Producto')
             .insert({
                 ID_Producto: productoData.ID_Producto,
-                ID_Talla: tallaData.ID_Talla,
+                ID_Talla: null,
                 Precio_Actual: precioProducto,
             })
             .select()
@@ -641,48 +714,28 @@ function AdminInventario() {
             return;
         }
 
-        // 4. Inicializar Inventario
+        // 3. Inicializar Inventario
         await supabase.from('Inventario').insert({
             ID_Variante: varianteData.ID_Variante,
-            Cantidad_Disponible: stockProducto,
+            Cantidad_Disponible: 0,
             Cantidad_Reservada: 0,
         });
 
-        // 5. Subir imágenes si existen
-            if (fotosSeleccionadas.length > 0) {
-                await subirFotos(productoData.ID_Producto, fotosSeleccionadas);
-            }
+        // 4. Subir fotos si existen
+        if (fotosSeleccionadas.length > 0) {
+            await subirFotos(productoData.ID_Producto, fotosSeleccionadas);
+        }
 
-            
-        // 6. Cerrar modal y recargar datos
-            setModalAbierto(null);
-            limpiarFormulario();
-            cargarVariantes();
+        // 5. Cerrar modal y recargar
+        setModalAbierto(null);
+        limpiarFormulario();
+        cargarVariantes();
+    } catch (err) {
+        console.error('Error general en guardarProductoNuevo:', err);
+        alert('Error al guardar el producto');
+    } finally {
+        setGuardandoProducto(false);
     }
-
-    // ---------- FILTRO DE BUSQUEDA ----------
-        const filtrados = variantes.filter((v) => {
-        const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
-        const coincideBusqueda = v.Productos?.Nombre_Producto.toLowerCase().includes(busqueda.toLowerCase());
-
-        let coincideFiltro = true;
-        if (filtroActivo === 'bajo') coincideFiltro = stock > 0 && stock < 5;
-        if (filtroActivo === 'sinstock') coincideFiltro = stock === 0;
-        if (filtroActivo === 'activos') coincideFiltro = v.ID_EstadoProducto !== idEstadoInactivo; // ver nota abajo
-        if (filtroActivo === 'inactivos') coincideFiltro = v.ID_EstadoProducto === idEstadoInactivo;
-
-        return coincideBusqueda && coincideFiltro;
-    });
-
-
-
-        //solo es para que se mire la camisa al no tener foto en el producto
-    function IconoCamisa() {
-    return (
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M8 2L4 6v3h3v11h10V9h3V6l-4-4-3 2h-2l-3-2z" />
-        </svg>
-    );
 }
 
     return (
@@ -723,6 +776,8 @@ function AdminInventario() {
                                 <p className="stat-titulo">Stock bajo</p>
                                 <p className="stat-valor" style={{ color: 'purple' }}>{stockBajo}</p>
                             </div>
+                            
+                          
 
                             <div
                                 className={`stat-card ${filtroActivo === 'sinstock' ? 'stat-card-activa' : ''}`}
@@ -765,7 +820,8 @@ function AdminInventario() {
                                     th>Precio</th>
                                     <th>Stock</th>
                                     <th>Talla</th>
-                                    <th>Acciones</th>
+                                    <th>Color</th>
+                                    <th>Marca</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -796,6 +852,8 @@ function AdminInventario() {
                 {stock}
             </td>
             <td>{v.Talla?.Tipos_Talla?.Nombre_TipoTalla}</td>
+            <td>{v.Colores?.Nombre_Color || '-'}</td>
+            <td>{v.Productos?.Marca?.Nombre_Marca || '-'}</td>
             
 {/*---------------- Botones para altear stock, editar y activar/desactivar producto ----------------*/}
             <td>
@@ -922,8 +980,40 @@ function AdminInventario() {
                                         <button type="button" onClick={crearSubcategoria}>Crear</button>
                                         <button type="button" onClick={() => setCreandoSubcategoria(false)}>Cancelar</button>
                                     </div>
+
+                                    
                                 )}
+                                <label>Marca</label>
+                                    {!creandoMarca ? (
+                                        <div className="select-con-boton">
+                                            <select
+                                                value={marcaSeleccionada}
+                                                onChange={(e) => setMarcaSeleccionada(e.target.value)}
+                                            >
+                                                <option value="">Sin marca</option>
+                                                {marcas.map((m) => (
+                                                    <option key={m.ID_Marca} value={m.ID_Marca}>
+                                                        {m.Nombre_Marca}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <button type="button" onClick={() => setCreandoMarca(true)}>+ Nueva</button>
+                                        </div>
+                                    ) : (
+                                        <div className="select-con-boton">
+                                            <input
+                                                type="text"
+                                                placeholder="Nombre de la marca"
+                                                value={nombreNuevaMarca}
+                                                onChange={(e) => setNombreNuevaMarca(e.target.value)}
+                                            />
+                                            <button type="button" onClick={crearMarca}>Crear</button>
+                                            <button type="button" onClick={() => setCreandoMarca(false)}>Cancelar</button>
+                                        </div>
+                                    )}
                             </>
+                            
+                            
                         )}
 
                         <div className="modal-row">
@@ -938,24 +1028,7 @@ function AdminInventario() {
                                     onChange={(e) => setPrecioProducto(e.target.value)}
                                 />
                             </div>
-                            <div>
-                                <label>Talla</label>
-                                <input
-                                    type="text"
-                                    placeholder="ej:M"
-                                    value={tallaProducto}
-                                    onChange={(e) => setTallaProducto(e.target.value)}
-                                />
-                            </div>
-                            <div>
-                                <label>Stock</label>
-                                <input
-                                    type="number"
-                                    placeholder="0"
-                                    value={stockProducto}
-                                    onChange={(e) => setStockProducto(e.target.value)}
-                                />
-                            </div>
+                            
                         </div>
 
                         <label>Fotos del producto</label>
@@ -1002,8 +1075,12 @@ function AdminInventario() {
 
                         </div>
 
-                        <button className="btn-guardar" onClick={guardarProductoNuevo}>
-                            Guardar cambios
+                        <button 
+                            className="btn-guardar" 
+                            onClick={guardarProductoNuevo}
+                            disabled={guardandoProducto}
+                        >
+                            {guardandoProducto ? 'Guardando...' : 'Guardar cambios'}
                         </button>
                     </div>
                 </div>
@@ -1053,6 +1130,51 @@ function AdminInventario() {
                     />
                 </div>
             </div>
+
+                        <label>Marca</label>
+            {!creandoMarcaEditar ? (
+                <div className="select-con-boton">
+                    <select
+                        value={marcaEditar}
+                        onChange={(e) => setMarcaEditar(e.target.value)}
+                    >
+                        <option value="">Sin marca</option>
+                        {marcas.map((m) => (
+                            <option key={m.ID_Marca} value={m.ID_Marca}>
+                                {m.Nombre_Marca}
+                            </option>
+                        ))}
+                    </select>
+                    <button type="button" onClick={() => setCreandoMarcaEditar(true)}>+ Nueva</button>
+                </div>
+            ) : (
+                <div className="select-con-boton">
+                    <input
+                        type="text"
+                        placeholder="Nombre de la marca"
+                        value={nombreNuevaMarcaEditar}
+                        onChange={(e) => setNombreNuevaMarcaEditar(e.target.value)}
+                    />
+                    <button type="button" onClick={async () => {
+                        const idUser = await obtenerIdUsuario();
+                        const { data, error } = await supabase
+                            .from('Marca')
+                            .insert({ ID_User: idUser, Nombre_Marca: nombreNuevaMarcaEditar })
+                            .select()
+                            .single();
+
+                        if (!error) {
+                            setMarcas((prev) => [...prev, data]);
+                            setMarcaEditar(data.ID_Marca);
+                            setNombreNuevaMarcaEditar('');
+                            setCreandoMarcaEditar(false);
+                        } else {
+                            console.log('❌ Error creando marca:', error.message);
+                        }
+                    }}>Crear</button>
+                    <button type="button" onClick={() => setCreandoMarcaEditar(false)}>Cancelar</button>
+                </div>
+            )}
 
             <label>Fotos del producto</label>
             <div className="fotos-row">
@@ -1123,47 +1245,45 @@ function AdminInventario() {
             </p>
 
             <label>Stock Actual</label>
-            <p style={{ fontWeight: '600', marginBottom: '10px' }}>
+            <p style={{ fontWeight: '600', marginBottom: '10px',color: '#0f0808' }}>
                 {varianteStock?.Inventario?.[0]?.Cantidad_Disponible ?? 0} Unidades
             </p>
 
+           
+
             {/* Selector: Entrada o Salida */}
-            <label>Tipo de movimiento</label>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
+          <label>Tipo de movimiento</label>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 <button
                     type="button"
-                    onClick={() => {
-                        setTipoMovimiento('entrada');
-                        setMotivoStock('Compra a proveedor');
-                    }}
+                    onClick={() => setTipoMovimiento('entrada')}
                     style={{
                         flex: 1,
-                        padding: '8px',
-                        cursor: 'pointer',
+                        padding: '10px',
                         borderRadius: '6px',
-                        border: '1px solid #ccc',
-                        backgroundColor: tipoMovimiento === 'entrada' ? '#2e7d32' : '#f0f0f0',
-                        color: tipoMovimiento === 'entrada' ? '#fff' : '#333',
-                        fontWeight: '600'
+                        border: 'none',
+                        cursor: 'pointer',
+                        outline: tipoMovimiento === 'entrada' ? '2px solid #0e0d0d' : 'none',
+                        fontWeight: '600',
+                        backgroundColor: tipoMovimiento === 'entrada' ? '#2e7d32' : '#eee',
+                        color: tipoMovimiento === 'entrada' ? 'white' : '#333',
                     }}
                 >
                     + Ingresar
                 </button>
                 <button
                     type="button"
-                    onClick={() => {
-                        setTipoMovimiento('salida');
-                        setMotivoStock('Venta en tienda física');
-                    }}
+                    onClick={() => setTipoMovimiento('salida')}
                     style={{
                         flex: 1,
-                        padding: '8px',
+                        padding: '10px',
+                        borderRadius: '10px',
+                        border: 'none',
                         cursor: 'pointer',
-                        borderRadius: '6px',
-                        border: '1px solid #ccc',
-                        backgroundColor: tipoMovimiento === 'salida' ? '#d32f2f' : '#f0f0f0',
-                        color: tipoMovimiento === 'salida' ? '#fff' : '#333',
-                        fontWeight: '600'
+                        fontWeight: '600',
+                        outline: tipoMovimiento === 'salida' ? '2px solid #0e0d0d' : 'none',
+                        backgroundColor: tipoMovimiento === 'salida' ? '#a32121' : '#eee',
+                        color: tipoMovimiento === 'salida' ? 'white' : '#333',
                     }}
                 >
                     - Quitar / Retirar
@@ -1178,6 +1298,32 @@ function AdminInventario() {
                 value={cantidadIngresar}
                 onChange={(e) => setCantidadIngresar(e.target.value)}
             />
+             <label>Talla</label>
+                <select
+                    value={tipoTallaSeleccionada}
+                    onChange={(e) => setTipoTallaSeleccionada(e.target.value)}
+                >
+                    <option value="" disabled hidden>Selecciona una talla</option>
+                    {tallasDisponibles.map((t) => (
+                        <option key={t.ID_TipoTalla} value={t.ID_TipoTalla}>
+                            {t.Nombre_TipoTalla}
+                        </option>
+                    ))}
+                </select>
+                
+                {/* Selector de color, si hay colores disponibles para la variante */}
+                <label>Color</label>
+                <select
+                    value={colorSeleccionado}
+                    onChange={(e) => setColorSeleccionado(e.target.value)}
+                >
+                    <option value="">Selecciona un color</option>
+                    {coloresDisponibles.map((c) => (
+                        <option key={c.ID_Color} value={c.ID_Color}>
+                            {c.Nombre_Color}
+                        </option>
+                    ))}
+                </select>
 
             {/* Opciones según el tipo de movimiento */}
             <label>Motivo</label>
