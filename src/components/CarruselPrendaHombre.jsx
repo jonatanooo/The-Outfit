@@ -58,7 +58,7 @@ async function getPrendasRecientes(idCategoriaPadre, limite = 9) {
   });
 }
 
-function CarruselPrendas({ idCategoriaPadre = 56 }) {
+function CarruselPrendasHombres({ idCategoriaPadre = 57 }) {
   const [prendas, setPrendas] = useState([]);
   const [indice, setIndice] = useState(0);
   const [cargando, setCargando] = useState(true);
@@ -171,4 +171,4 @@ function CarruselPrendas({ idCategoriaPadre = 56 }) {
   );
 }
 
-export default CarruselPrendas;
+export default CarruselPrendasHombres;

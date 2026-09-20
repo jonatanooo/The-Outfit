@@ -1,5 +1,6 @@
 import './Mainpage.css'
 import CarruselPrendas from '../components/CarruselPrenda.jsx';
+import CarruselPrendasHombres from '../components/CarruselPrendaHombre.jsx';
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 
@@ -18,7 +19,7 @@ export default function Home() {
         <section className="nuevosingresos">
             <h2>NUEVOS INGRESOS</h2>
             <CarruselPrendas  />
-            <CarruselPrendas  />
+            <CarruselPrendasHombres  />
         </section>
 
         <section className="promobanner">

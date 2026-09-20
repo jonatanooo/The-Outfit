@@ -15,7 +15,7 @@ function Header () {
             label: 'MUJERES ', 
             href:'',
             subcategorias: [
-                {label: 'Ver Todo', href: ''},
+                {label: 'Ver Todo', href: '/productos'},
                 {label: 'Blusas', href: ''},
                 {label: 'Vestidos', href: ''},
                 {label: 'Pantalones', href: ''},
@@ -30,7 +30,7 @@ function Header () {
             label: 'HOMBRES',
             href:'',
             subcategorias: [
-                {label: 'Ver Todo', href: ''},
+                {label: 'Ver Todo', href: '/productohombre'},
                 {label: 'Camisas', href: ''},
                 {label: 'Camisetas', href: ''},
                 {label: 'Pantalones', href: ''},

@@ -84,7 +84,7 @@ animation: spin 30s infinite linear;
 font-family: "DM Sans", sans-serif;
     font-weight: 600;
     font-size: clamp(1rem, 1.2vw, 1.2rem);
-    padding-left: clamp(4em, 5vw, 5em);
+    padding-left: 45%
 }
 
 .favbutton
@@ -133,7 +133,7 @@ font-family: "DM Sans", sans-serif;
     margin-left: 0.7em;
     font-family: "DM Sans", sans-serif;
     font-weight: 700;
-    font-size: clamp(1rem, 1.1vw, 2rem);
+    font-size: clamp(1rem, 1.1vw, 1.6rem);
 }
 
 .listatallas button
@@ -216,3 +216,8 @@ font-family: "DM Sans", sans-serif;
     object-fit: cover;
 }
 
+.infosuperior h3 {
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(0.8rem, 1.1vw, 1.4rem);
+}
