@@ -1,4 +1,5 @@
 "use client"
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
@@ -31,7 +32,6 @@ export default function CarritoPage() {
     <>
       <Header siempreSolido />
       <main className="carrito-main">
-        <p className="carrito-breadcrumb">Carrito</p>
 
         <div className="carrito-box">
           <h1 className="carrito-titulo">CARRITO</h1>
@@ -44,7 +44,7 @@ export default function CarritoPage() {
             <>
               <div className="carrito-grid">
                 {items.map((item) => (
-                  <div className="carrito-card" key={item.idVariante}>
+                  <Link href={`/prenda-pag/${item.idProducto}`} className="carrito-card" key={item.idVariante} style={{ textDecoration: 'none', color: 'inherit' }}>
                     <div className="carrito-imagen-wrap">
                       {item.imagen ? (
                         <img src={item.imagen} alt={item.nombre} className="carrito-imagen" />
@@ -56,15 +56,20 @@ export default function CarritoPage() {
                     <div className="carrito-info">
                       <div>
                         <p className="carrito-nombre">{item.nombre}</p>
+                          {item.marca && <p className="carrito-marca">{item.marca}</p>}
                         <p className="carrito-precio">${item.precio.toFixed(2)}</p>
                         <p className="carrito-detalle">
-                          TALLA {item.talla || 'ÚNICA'} · #{item.idVariante}
+                          TALLA {item.talla || 'ÚNICA'} | #{item.idVariante}
                         </p>
                       </div>
                       <button
                         type="button"
                         className="carrito-heart"
-                        onClick={() => alternarFavorito(item.idProducto)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          alternarFavorito(item.idProducto);
+                        }}
                         aria-label={esFavorito(item.idProducto) ? 'Quitar de favoritos' : 'Agregar a favoritos'}
                       >
                         <img
@@ -75,11 +80,11 @@ export default function CarritoPage() {
                     </div>
 
                     <div className="carrito-stepper">
-                      <button type="button" onClick={() => restar(item)} aria-label="Quitar una unidad">−</button>
+                      <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); restar(item); }} aria-label="Quitar una unidad">—</button>
                       <span>{item.cantidad}</span>
-                      <button type="button" onClick={() => sumar(item)} aria-label="Agregar una unidad">+</button>
+                      <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); sumar(item); }} aria-label="Agregar una unidad">+</button>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
 

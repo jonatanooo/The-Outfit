@@ -6,10 +6,12 @@ import Footer from '@/components/Footer'
 import CarruselInfinito from '@/components/CarruselInfinito'
 import PrendaIfo from '@/components/PrendaInfo'
 import CarruselPrendas from '@/components/CarruselPrenda'
+import { useProducto } from '@/lib/productos'
 
 export default function PaginaPrenda() {
     const { id } = useParams()
     const idProducto = Number(id)
+    const { producto } = useProducto(idProducto)
 
     return(
         <>
@@ -19,7 +21,7 @@ export default function PaginaPrenda() {
             <PrendaIfo idProducto={idProducto} />
             <h2 className="recotittle">RECOMENDACIONES</h2>
             <div className='carru-prenda'>
-                <CarruselPrendas />
+                <CarruselPrendas idGenero={producto?.idGenero} />
             </div>
         </main>
         <Footer />

@@ -362,19 +362,19 @@ header.scrolled .carritoicon {
 {
     border: solid 1px black;
     border-radius: 3em;
-    height: 2em;
+    height: 2.2em;
     margin-top: auto;
     margin-left: 9%;
     display: flex;
-    width: 60%;
-    gap: -1em;
+    width: 65%;
+    gap: 0.6em;
     align-items: center;
     justify-content: center;
     color: black;
     font-family: "DM Sans", sans-serif;
     font-weight: 600;
     text-decoration: none;
-    font-size: clamp(0.1rem, 2vw, 1.4rem);
+    font-size: 0.85rem;
     background-color: transparent;
     cursor: pointer;
     white-space: nowrap;
@@ -382,9 +382,9 @@ header.scrolled .carritoicon {
 
 .logouticon
 {
-    display: flex;
-    width: clamp(20px,2vw,30px);
-    height: clamp(20px,1px,1.5px);
+    width: 1.2em;
+    height: 1.2em;
+    object-fit: contain;
 }
 
 .partsubca {

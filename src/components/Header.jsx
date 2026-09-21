@@ -14,42 +14,61 @@ function Header ({ siempreSolido = false }) {
     const [scrolled, setScrolled] = useState(false)
     const [menuAbierto, setMenuAbierto] = useState(false)
     const router = useRouter();
-    const categorias = [
-        {id: 'mujer',
-            label: 'MUJERES ',
-            href:'',
-            subcategorias: [
-                {label: 'Ver Todo', href: '/productos'},
-                {label: 'Blusas', href: ''},
-                {label: 'Vestidos', href: ''},
-                {label: 'Pantalones', href: ''},
-                {label: 'Carteras', href: ''},
-                {label: 'Zapatos', href: ''},
-                {label: 'Accesorios', href: ''},
-                {label: 'Chaquetas', href: ''}
-            ]    
-        },
-        {
-            id: 'hombre',
-            label: 'HOMBRES',
-            href:'',
-            subcategorias: [
-                {label: 'Ver Todo', href: '/productos-hombre'},
-                {label: 'Camisas', href: ''},
-                {label: 'Camisetas', href: ''},
-                {label: 'Pantalones', href: ''},
-                {label: 'Sueteres', href: ''},
-                {label: 'Zapatos', href: ''},
-                {label: 'Accesorios', href: ''},
-                {label: 'Chaquetas', href: ''}
-            ]
-        },
-        {
-            id: 'summer',
-            label: 'SUMMER COLLECTION',
-            href:'',
+    const [categorias, setCategorias] = useState([
+        {id: 'mujer', label: 'MUJERES ', href: '', subcategorias: [{label: 'Ver Todo', href: '/productos'}]},
+        {id: 'hombre', label: 'HOMBRES', href: '', subcategorias: [{label: 'Ver Todo', href: '/productos-hombre'}]},
+        {id: 'summer', label: 'SUMMER COLLECTION', href: ''}
+    ]);
+
+    useEffect(() => {
+        async function cargarCategoriasMenu() {
+            const { data, error } = await supabase
+                .from("Categorias_Producto")
+                .select("ID_CategoriaPadre, Nombre_Categoria")
+                .in("ID_CategoriaPadre", [56, 57]);
+
+            if (error || !data) {
+                console.error("Error cargando categorias del header:", error);
+                return;
+            }
+
+            const subMujer = data.filter(c => c.ID_CategoriaPadre === 56).map(c => ({
+                label: c.Nombre_Categoria,
+                href: `/productos?categoria=${encodeURIComponent(c.Nombre_Categoria)}`
+            }));
+            const subHombre = data.filter(c => c.ID_CategoriaPadre === 57).map(c => ({
+                label: c.Nombre_Categoria,
+                href: `/productos-hombre?categoria=${encodeURIComponent(c.Nombre_Categoria)}`
+            }));
+
+            setCategorias([
+                {
+                    id: 'mujer',
+                    label: 'MUJERES ',
+                    href: '',
+                    subcategorias: [
+                        { label: 'Ver Todo', href: '/productos' },
+                        ...subMujer
+                    ]
+                },
+                {
+                    id: 'hombre',
+                    label: 'HOMBRES',
+                    href: '',
+                    subcategorias: [
+                        { label: 'Ver Todo', href: '/productos-hombre' },
+                        ...subHombre
+                    ]
+                },
+                {
+                    id: 'summer',
+                    label: 'SUMMER COLLECTION',
+                    href: ''
+                }
+            ]);
         }
-    ]
+        cargarCategoriasMenu();
+    }, []);
     // empieza en null porque cuando abrimos el menu, ninguna categoria esta activalueg
     const[categoriaActiva, setCategoriaActiva] = useState(null)
     const [usuario, setUsuario] = useState(null)

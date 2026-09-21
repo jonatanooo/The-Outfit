@@ -13,6 +13,7 @@ const SELECT_PRODUCTO = `
   Descripcion,
   ID_EstadoProducto,
   ID_Categoria,
+  Marca ( Nombre_Marca ),
   Categorias_Producto ( ID_CategoriaPadre ),
   Fotos_Productos ( URL_Foto, Orden ),
   Variante_Producto ( ID_Variante, Precio_Actual, ID_EstadoProducto )
@@ -35,10 +36,11 @@ export function normalizarProducto(p) {
   return {
     id: p.ID_Producto,
     nombre: p.Nombre_Producto,
+    marca: p.Marca?.Nombre_Marca || '',
     descripcion: p.Descripcion || '',
     // La imagen principal es la 4ta foto cargada (índice 3); si el producto
     // tiene menos de 4 fotos, se usa la primera como respaldo.
-    imagen: fotos[3]?.URL_Foto ?? fotos[0]?.URL_Foto ?? null,
+    imagen: fotos[4]?.URL_Foto ?? fotos[0]?.URL_Foto ?? null,
     fotos: fotos.map((f) => f.URL_Foto),
     precio: precios.length > 0 ? Math.min(...precios) : 0,
     idGenero,

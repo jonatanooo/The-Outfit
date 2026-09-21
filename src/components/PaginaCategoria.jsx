@@ -1,13 +1,31 @@
 "use client"
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useSearchParams } from "next/navigation";
 import FiltroMenu from "./FiltroMenu";
 import ListadoPrendas from "./ListadoPrendas";
 
-export default function PaginaCategoria({ idCategoriaPadre }) {
+function PaginaCategoriaContenido({ idCategoriaPadre }) {
+  const searchParams = useSearchParams();
+  const categoriaQuery = searchParams.get('categoria');
+
   const [subcategorias, setSubcategorias] = useState([]);
   const [filtrosMenu, setFiltrosMenu] = useState({});
   const [cantidadResultados, setCantidadResultados] = useState(0);
+
+  // Sincronizar siempre cuando cambia el parametro en la URL
+  useEffect(() => {
+    setFiltrosMenu((prev) => {
+      if (categoriaQuery) {
+        // Reemplaza la categoría actual con la que viene en la URL
+        return { ...prev, Categorias: [categoriaQuery] };
+      } else {
+        // Si no hay categoría en la URL, limpiamos el filtro
+        const { Categorias, ...resto } = prev;
+        return resto;
+      }
+    });
+  }, [categoriaQuery]);
 
   useEffect(() => {
     async function cargarSubcategorias() {
@@ -42,5 +60,13 @@ export default function PaginaCategoria({ idCategoriaPadre }) {
         <ListadoPrendas filtros={filtrosCombinados} onResultados={setCantidadResultados} />
       </div>
     </>
+  );
+}
+
+export default function PaginaCategoria({ idCategoriaPadre }) {
+  return (
+    <Suspense fallback={<div>Cargando catálogo...</div>}>
+      <PaginaCategoriaContenido idCategoriaPadre={idCategoriaPadre} />
+    </Suspense>
   );
 }

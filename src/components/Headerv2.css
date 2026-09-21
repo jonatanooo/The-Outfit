@@ -1,4 +1,4 @@
-.Overlay
+.header-v2 .Overlay
 {
     /* es para que cuando el menu este desplegado se desenfoque el fondo*/
 
@@ -16,7 +16,7 @@
     z-index: 80;
 }
 
-.Logo
+.header-v2 .Logo
 {
 font-family: "Instrument Serif", serif;
 font-weight: 400;
@@ -35,7 +35,7 @@ transform: translate(-50%, -50%);
 transition: color 0.3s ease;
 }
 
-header nav
+.header-v2 nav
 {
     background-color: transparent;
     width: 100%;
@@ -60,19 +60,19 @@ header nav
 
 
 
-.nav-left
+.header-v2 .nav-left
 {
     margin-left: 15px;
     padding: 0px;
 }
 
-.nav-right
+.header-v2 .nav-right
 {
     display: flex;
     margin-right: 35px;
 }
 
-.carritoicon
+.header-v2 .carritoicon
 {
     width: clamp(33px, 6vw, 50px);
     height: clamp(20px, 4vw, 35px);
@@ -80,7 +80,7 @@ header nav
     filter: brightness(0) invert(0);
 }
 
-.contenedor-carrito {
+.header-v2 .contenedor-carrito {
     width: clamp(33px, 6vw, 50px);
     height: clamp(20px, 4vw, 35px);
     border-radius: 13%;
@@ -89,21 +89,21 @@ header nav
 }
 
 
-.hearticon
+.header-v2 .hearticon
 {
     margin-left: 5px;
     margin-right: 5px;
 }
 
-.profileicon
+.header-v2 .profileicon
 {
     margin-left: 5px;
 }
 
-.menuicon,
-.profileicon,
-.hearticon,
-.searchicon
+.header-v2 .menuicon,
+.header-v2 .profileicon,
+.header-v2 .hearticon,
+.header-v2 .searchicon
 {  
     width: clamp(20px,4vw,35px);
     height: clamp(20px,4vw,35px);
@@ -119,7 +119,7 @@ header nav
         padding: 12px 16px;
     }
 
-    .Logo 
+    .header-v2 .Logo 
     {
         /* El elemnto sigue el flujo normal del documento , uno abajo del otro o en fila (nuestro caso)*/
         /* es decir que se comporta como un objeto normal el cual toma espacio, a comparacion del absolute que se sobrepone (como cuando le pones la opcion a las imagenes de word) */
@@ -129,7 +129,7 @@ header nav
         font-size: 1.2rem;
     }
 
-    .nav-right 
+    .header-v2 .nav-right 
     {
         /* gap es el espaciado entre elementos hermanos, sirve en filas y columnas */
         /* es la forma mas elegante de usar espaciado en vez de usar margin para elementos hermanos */
@@ -138,15 +138,15 @@ header nav
     }
 
 
-    .searchicon,
-    .profileicon
+    .header-v2 .searchicon,
+    .header-v2 .profileicon
     {
         /* esconde los iconos */
         display: none;
     }
 }
 
-header
+.header-v2
 {
     /* sale del flujo normal, se posiciona respecto a la ventana del navegador y se queda fijo aunque hagas scrolll */
     position: fixed;
@@ -163,38 +163,38 @@ header
 
 
 /*  EFECTO HEADER CUANDO SCROLLEAMOS */
-header.scrolled
+.header-v2.scrolled
 {
     background-color: black;
     border-bottom: 1.5px black solid; 
 }
 
-header.scrolled .menuicon,
-header.scrolled .searchicon,
-header.scrolled .hearticon,
-header.scrolled .profileicon
+.header-v2.scrolled .menuicon,
+.header-v2.scrolled .searchicon,
+.header-v2.scrolled .hearticon,
+.header-v2.scrolled .profileicon
 {
 filter: brightness(0) invert(1);
 }
 
-header.scrolled .Logo
+.header-v2.scrolled .Logo
 {
     color: white;
 }
 
-header.scrolled .contenedor-carrito {
+.header-v2.scrolled .contenedor-carrito {
     background-color: white;
 }
 
-header.scrolled .carritoicon {
+.header-v2.scrolled .carritoicon {
     filter: brightness(0) invert(0);
 }
 
 
 /* MENU DESPEGABLE */
 /* estado oculto */
-.menu-toggle,
-.search-toggle
+.header-v2 .menu-toggle,
+.header-v2 .search-toggle
 {
     background: none;
     border: none;
@@ -319,7 +319,7 @@ header.scrolled .carritoicon {
     font-size: clamp(0.1rem, 1.7vw, 1.6rem);
 }
 
-.partinfo
+.header-v2 .partinfo
 {
     display: flex;
     color: black;
@@ -350,7 +350,7 @@ header.scrolled .carritoicon {
     background-color: black;
 }
 
-.logout 
+.header-v2 .logout 
 {
     border: solid 1px black;
     border-radius: 3em;
@@ -371,14 +371,14 @@ header.scrolled .carritoicon {
     cursor: pointer;
 }
 
-.logouticon
+.header-v2 .logouticon
 {
     display: flex;
     width: clamp(20px,4vw,30px);
     height: clamp(20px,4vw,30px);
 }
 
-.partsubca {
+.header-v2 .partsubca {
     display: flex;
     flex-direction: column;
     margin-bottom: 25px;
