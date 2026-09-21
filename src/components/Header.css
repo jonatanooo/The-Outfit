@@ -18,29 +18,28 @@
 
 .Logo
 {
-font-family: "Instrument Serif", serif;
-font-weight: 400;
-/* el clamp es para que tome 3 valores, (valor min, recomendado, valor max) */
-font-size: clamp(1.3rem, 2.5vw, 4rem);
-color: white;
-text-decoration: none;
-
-/* con absolute queda sobrepuesto (en este caso el titulo) */
-position: absolute;
-/* mueve la esquina superior izquiera al punto del centro */
-left: 50%;
-top: 50%;
-/* mueve la mitad de su propio ancho hacia la izquierda y la mitadad de su alto hacia arriba, haciendo que quede centrado */
-transform: translate(-50%, -50%);
-transition: color 0.3s ease;
+    font-family: "Instrument Serif", serif;
+    font-weight: 400;
+    /* el clamp es para que tome 3 valores, (valor min, recomendado, valor max) */
+    font-size: clamp(1.3rem, 2.5vw, 4rem);
+    color: white;
+    text-decoration: none;
+    /* con absolute queda sobrepuesto (en este caso el titulo) */
+    position: absolute;
+    /* mueve la esquina superior izquiera al punto del centro */
+    left: 50%;
+    top: 50%;
+    /* mueve la mitad de su propio ancho hacia la izquierda y la mitadad de su alto hacia arriba, haciendo que quede centrado */
+    transform: translate(-50%, -50%);
+    transition: color 0.3s ease;
 }
 
 header nav
 {
     background-color: transparent;
     width: 100%;
-/* display flex permite organizar y alinear elementos en una pagina web, convierte una caja en un contenedor para ordenar a sus hijos en filas o columnas */
-/* en este caso el flex es para ponerlo en filas */
+    /* display flex permite organizar y alinear elementos en una pagina web, convierte una caja en un contenedor para ordenar a sus hijos en filas o columnas */
+    /* en este caso el flex es para ponerlo en filas */
     display: flex;
     align-items: center;
     /* con el space between reparte los 3 elementos que teniamos en el header y deja el de en medio "centrado" */
@@ -57,8 +56,6 @@ header nav
   /* el box sizing adapta el contenido a width/height, padding y border */
   box-sizing: border-box;
 }
-
-
 
 .nav-left
 {
@@ -137,7 +134,6 @@ header nav
         margin-right: 0;
     }
 
-
     .searchicon,
     .profileicon
     {
@@ -155,11 +151,9 @@ header
     z-index: 100;
     /* adapta el 100% del ancho */
     width: 100%;
-
     /* para que el cambio sea leve y no brusco */
     transition:background-color 0.3s ease;
 }
-
 
 /*  EFECTO HEADER CUANDO SCROLLEAMOS */
 header.scrolled
@@ -173,7 +167,7 @@ header.scrolled .searchicon,
 header.scrolled .hearticon,
 header.scrolled .profileicon
 {
-filter: brightness(0) invert(0);
+    filter: brightness(0) invert(0);
 }
 
 header.scrolled .Logo
@@ -192,7 +186,8 @@ header.scrolled .carritoicon {
 
 /* MENU DESPEGABLE */
 /* estado oculto */
-.menu-toggle
+.menu-toggle,
+.search-toggle
 {
     background: none;
     border: none;
@@ -201,16 +196,16 @@ header.scrolled .carritoicon {
     align-items: center;
 }
 
+
 .menu-desplegable
 {
     position: fixed;
     top: 0px;
     left: 0;
-    width: clamp(190px,26vw,475px) ;
+    width: clamp(190px,26vw,475px);
     /* para calcular que que el menu no tape el header pero llene hasta el fondo de la ventana */
     height: calc(100vh);
     background-color: white;
-
     /* estado oculto */
     /* lo desplaza hacia la izquierda (eje x) */
     transform: translateX(-100%);
@@ -218,6 +213,10 @@ header.scrolled .carritoicon {
     /* queda debajo del header pero encima del video */
     z-index: 90;
 
+    /* 🔓 AGREGADAS PARA SCROLL Y FLEX */
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
 }
 
 .menu-subca.abierto
@@ -229,11 +228,10 @@ header.scrolled .carritoicon {
     position: fixed;
     top: 0px;
     left: 0;
-    width: clamp(190px,26vw,475px) ;
+    width: clamp(190px,26vw,475px);
     /* para calcular que que el menu no tape el header pero llene hasta el fondo de la ventana */
     height: calc(100vh);
     background-color: white;
-
     /* estado oculto */
     /* lo desplaza hacia la izquierda (eje x) */
     transform: translateX(-100%);
@@ -248,6 +246,7 @@ header.scrolled .carritoicon {
     height: clamp(20px,4vw,30px);
     cursor: pointer;
 }
+
 .backbutton {
     width: clamp(20px,4vw,22px);
     height: clamp(20px,4vw,30px);
@@ -275,21 +274,17 @@ header.scrolled .carritoicon {
     justify-content: space-between;
 }
 
-
-
 .menu-desplegable.abierto
 {
     /* como esta en cero muestra el meno porque oculto esta en -100% */
     transform: translateX(0);
 }
 
-
 .menu-desplegable ul
 {
     list-style: none;
     padding-left: 30px;
 }
-
 
 .part1
 {
@@ -302,7 +297,6 @@ header.scrolled .carritoicon {
     font-family: "DM Sans", sans-serif;
     font-weight: 600;
     font-size: clamp(0.1rem, 2.7vw, 2rem);
-
 }
 
 .part2
@@ -338,8 +332,6 @@ header.scrolled .carritoicon {
     font-size: clamp(0.1rem, 1.7vw, 1.6rem);
 }
 
-
-
 .divmenu
 {
     display: flex;
@@ -348,16 +340,17 @@ header.scrolled .carritoicon {
     background-color: black;
 }
 
+/* 🔓 BOTÓN LOGOUT  */
 .logout 
 {
     border: solid 1px black;
     border-radius: 3em;
     height: 2em;
-    margin-top: 10em;
-    margin-left: 15%;
+    margin-top: auto;
+    margin-left: 9%;
     display: flex;
     width: 60%;
-    gap: 2em;
+    gap: -1em;
     align-items: center;
     justify-content: center;
     color: black;
@@ -367,13 +360,14 @@ header.scrolled .carritoicon {
     font-size: clamp(0.1rem, 2vw, 1.4rem);
     background-color: transparent;
     cursor: pointer;
+    white-space: nowrap;
 }
 
 .logouticon
 {
     display: flex;
-    width: clamp(20px,4vw,30px);
-    height: clamp(20px,4vw,30px);
+    width: clamp(20px,2vw,30px);
+    height: clamp(20px,1px,1.5px);
 }
 
 .partsubca {
@@ -388,4 +382,18 @@ header.scrolled .carritoicon {
     font-size: clamp(0.1rem, 2.7vw, 1.8rem);
     margin-left: 8%;
     width: 90%;
+}
+
+/* 🔓 CONTENEDOR INTERNO  */
+.menu-contenido {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+/* 🔓 CONTENEDOR  */
+.logout-container {
+    margin-top: auto;
+    padding: 20px 0;
 }

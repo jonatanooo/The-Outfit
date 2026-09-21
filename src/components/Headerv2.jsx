@@ -1,6 +1,7 @@
 "use client"
 import './Headerv2.css'
 import { useState, useEffect, useRef } from 'react';
+import Buscador from './Buscador';
 
 function Headerv2 () {
     // comentario Jona
@@ -120,9 +121,14 @@ function Headerv2 () {
 
                 <div className="nav-right">
 
-                    <a href="#buscar">
+                    <button
+                        type="button"
+                        className="search-toggle"
+                        onClick={() => setBuscadorAbierto(true)}
+                        aria-label="Buscar"
+                    >
                         <img src="/ICONOS/Search.png" alt="Buscar" className="searchicon"/>
-                    </a>
+                    </button>
 
                 <a href="#perfil">
                     <img src="/ICONOS/Person.png" alt="Perfil" className="profileicon"/>

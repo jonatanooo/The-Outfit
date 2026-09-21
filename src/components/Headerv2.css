@@ -193,7 +193,8 @@ header.scrolled .carritoicon {
 
 /* MENU DESPEGABLE */
 /* estado oculto */
-.menu-toggle
+.menu-toggle,
+.search-toggle
 {
     background: none;
     border: none;

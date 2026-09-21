@@ -1,6 +1,10 @@
 "use client"
 import './Header.css'
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
+import PerfilPanel from './PerfilPanel';
+import Buscador from './Buscador';
 
 function Header () {
     // comentario Jona
@@ -8,6 +12,7 @@ function Header () {
     // menuAbierto reemplaza la clase .abierto del menu
     const [scrolled, setScrolled] = useState(false)
     const [menuAbierto, setMenuAbierto] = useState(false)
+    const router = useRouter();
     const categorias = [
         {id: 'mujer', 
             label: 'MUJERES ', 
@@ -46,6 +51,11 @@ function Header () {
     ]
     // empieza en null porque cuando abrimos el menu, ninguna categoria esta activalueg
     const[categoriaActiva, setCategoriaActiva] = useState(null)
+    const [usuario, setUsuario] = useState(null)
+    const [perfilAbierto, setPerfilAbierto] = useState(false)
+    const [buscadorAbierto, setBuscadorAbierto] = useState(false)
+    const perfilPanelRef = useRef(null)
+    const sesionActiva = !!usuario
 
     // antes en el JS usaba "document.getElementById("menuDespegable")" y  "document.getElementById("menubtn")"
     // useRef es el equivalente en React, te da una caja que apunta al elemento real una vez que se renderiza sin necesidad de buscarlo por ID
@@ -98,6 +108,29 @@ function Header () {
     return () => document.removeEventListener('click', manejarClickFuera)
     }, [] )
 
+    // guarda el usuario logueado (o null) para mostrar el botón de perfil/cerrar sesión
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => setUsuario(user))
+        const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+            setUsuario(session?.user ?? null)
+        })
+        return () => listener.subscription.unsubscribe()
+    }, [])
+
+    const handleClickPerfil = () => {
+        if (sesionActiva) {
+            perfilPanelRef.current?.refrescar()
+            setPerfilAbierto(true)
+        } else {
+            router.push('/login')
+        }
+    }
+
+    // 🔓 FUNCIÓN PARA CERRAR SESIÓN
+    const handleCerrarSesion = async () => {
+        await supabase.auth.signOut();
+        router.push('/login');
+    };
 
     return (
         // la cual es un operador condicional ternario en el cual si la condicion es scrolled dara como verdadero scrolled si es falso no dara ningun valor
@@ -120,13 +153,23 @@ function Header () {
 
                 <div className="nav-right">
 
-                    <a href="#buscar">
+                    <button
+                        type="button"
+                        className="search-toggle"
+                        onClick={() => setBuscadorAbierto(true)}
+                        aria-label="Buscar"
+                    >
                         <img src="/ICONOS/Search.png" alt="Buscar" className="searchicon"/>
-                    </a>
+                    </button>
 
-                <a href="#perfil">
+                <button
+                    type="button"
+                    onClick={handleClickPerfil}
+                    aria-label="Perfil"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                >
                     <img src="/ICONOS/Person.png" alt="Perfil" className="profileicon"/>
-                </a>
+                </button>
 
                 <a href="#favoritos">
                     <img src="/ICONOS/Heart.png" alt="Favoritos" className="hearticon"/>
@@ -147,7 +190,9 @@ function Header () {
                 <div className="exitbuttondiv" onClick={() => setMenuAbierto(false)}>
                     <a><img src="/ICONOS/EXIT.png" alt="salir" className="exitbutton"/></a>
                 </div>
-                <div>
+                
+                {/* 🔓 CONTENEDOR BOTÓN AL FONDO */}
+                <div className="menu-contenido">
                     <ul>
                         {/* de la constante categoria creo un map con una variable inventada 'categoria', en el cual con ella pondria los atributos como id etc */}
                         {categorias.map((categoria) => (
@@ -167,8 +212,18 @@ function Header () {
                         <li className="part3">CONTACTANOS</li>
                         <li><a href="" className="partinfo">+503 2261-3004</a></li>
                     </ul>
-                    <div>
-                        <button className="logout">CERRAR SESIÓN <img src="/ICONOS/logout.png" alt="" className="logouticon"/></button>
+                    
+                    {/* 🔓 BOTÓN CERRAR SESION / INICIAR SESION */}
+                    <div className="logout-container">
+                        {sesionActiva ? (
+                            <button className="logout" onClick={handleCerrarSesion}>
+                                CERRAR SESIÓN <img src="/ICONOS/logout.png" alt="" className="logouticon"/>
+                            </button>
+                        ) : (
+                            <a className="logout" href="/login">
+                                INICIAR SESIÓN
+                            </a>
+                        )}
                     </div>
                 </div>
             </div>
@@ -179,10 +234,20 @@ function Header () {
             {/* con el && es la forma abreviada del condicional ternario, forma abreviada de: */}
             {/* {menuAbierto ? <div className="Overlay activo">...</div> : null} */}
             {/* pusimos las 2 condiciones */}
-            {(menuAbierto || categoriaActiva) &&  (
+            {(menuAbierto || categoriaActiva || perfilAbierto) &&  (
                 // quiere decir que si le hacemos click al overlay se desactiva el menu desplegable
-                <div className="Overlay" onClick={() => {setMenuAbierto(false); setCategoriaActiva(null)}}></div>
+                <div className="Overlay" onClick={() => {setMenuAbierto(false); setCategoriaActiva(null); setPerfilAbierto(false)}}></div>
             )}
+
+            {buscadorAbierto && <Buscador onClose={() => setBuscadorAbierto(false)} />}
+
+            <PerfilPanel
+                ref={perfilPanelRef}
+                abierto={perfilAbierto}
+                usuario={usuario}
+                onClose={() => setPerfilAbierto(false)}
+                onSesionCerrada={() => setUsuario(null)}
+            />
 
                 {/* en el operador ternario no comparamos nada, solo con preguntar si categoriaActiva tiene un valor verdadero (no es null). Si es cualquier string vacio lo toma como true  */}
             <div ref= {menuSubcategoriaRef} className={`menu-subca ${categoriaActiva ? 'abierto' : ''}`}>
