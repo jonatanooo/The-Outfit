@@ -36,7 +36,7 @@ function PrendaIfo ({ idProducto }) {
                             </div>
                         </div>
                     ))}
-                    
+
                 </div>
             </div>
             </section>

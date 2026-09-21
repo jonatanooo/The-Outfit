@@ -2,27 +2,18 @@
 {
     /* es para que cuando el menu este desplegado se desenfoque el fondo*/
 
-    /* con none es para que no se vea */
-    display: none;
     /* fixed es para que cuando scrollemos no se mueva */
     position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    backdrop-filter: blur(5px);
     /* para que sea compatible con safari, porque al parecer si le dejo la linea anterior no funciona :( */
     -webkit-backdrop-filter: blur(5px); 
+    backdrop-filter: blur(5px);
     background: rgba(0, 0, 0, 0.2);
     /* para que quede encima de todo menos del menu */
     z-index: 80;
-}
-
-.Overlay.activo
-{
-    /* el elemento se muestra como un bloque normal */
-    /* es decir que cuando se pasa a 'activo' unicamente cambia la propieda de display de none a block */
-    display: block;
 }
 
 .Logo
@@ -31,7 +22,7 @@ font-family: "Instrument Serif", serif;
 font-weight: 400;
 /* el clamp es para que tome 3 valores, (valor min, recomendado, valor max) */
 font-size: clamp(1.3rem, 2.5vw, 4rem);
-color: black;
+color: white;
 text-decoration: none;
 
 /* con absolute queda sobrepuesto (en este caso el titulo) */
@@ -46,7 +37,7 @@ transition: color 0.3s ease;
 
 header nav
 {
-    background-color: white;
+    background-color: transparent;
     width: 100%;
 /* display flex permite organizar y alinear elementos en una pagina web, convierte una caja en un contenedor para ordenar a sus hijos en filas o columnas */
 /* en este caso el flex es para ponerlo en filas */
@@ -57,7 +48,6 @@ header nav
     /* posiciona el elemento tomando como referencia su ubicacion original en el flujo normal del documento, (habilita el eje z para jugar con capas) */
     position: relative;
     height: 60px;
-    border-bottom: 1px black solid;
 }
 
 * 
@@ -78,6 +68,7 @@ header nav
 
 .nav-right
 {
+    display: flex;
     margin-right: 35px;
 }
 
@@ -85,12 +76,18 @@ header nav
 {
     width: clamp(33px, 6vw, 50px);
     height: clamp(20px, 4vw, 35px);
-    background-color: black;
-    border-radius: 13%;
     padding: 4px 12px 4px 12px;
-    margin-left: 5px;
-
+    filter: brightness(0) invert(0);
 }
+
+.contenedor-carrito {
+    width: clamp(33px, 6vw, 50px);
+    height: clamp(20px, 4vw, 35px);
+    border-radius: 13%;
+    margin-left: 5px;
+    background-color: white;
+}
+
 
 .hearticon
 {
@@ -110,7 +107,7 @@ header nav
 {  
     width: clamp(20px,4vw,35px);
     height: clamp(20px,4vw,35px);
-    filter: brightness(0) invert(0);
+    filter: brightness(0) invert(1);
 }
 
 /* es una condición que cuando la pantalla es igual o menor a 600px se sobreescribe lo que esta en los corchetes */
@@ -161,10 +158,37 @@ header
 
     /* para que el cambio sea leve y no brusco */
     transition:background-color 0.3s ease;
+    background-color: black;
 }
 
 
+/*  EFECTO HEADER CUANDO SCROLLEAMOS */
+header.scrolled
+{
+    background-color: black;
+    border-bottom: 1.5px black solid; 
+}
 
+header.scrolled .menuicon,
+header.scrolled .searchicon,
+header.scrolled .hearticon,
+header.scrolled .profileicon
+{
+filter: brightness(0) invert(1);
+}
+
+header.scrolled .Logo
+{
+    color: white;
+}
+
+header.scrolled .contenedor-carrito {
+    background-color: white;
+}
+
+header.scrolled .carritoicon {
+    filter: brightness(0) invert(0);
+}
 
 
 /* MENU DESPEGABLE */
@@ -184,7 +208,7 @@ header
     position: fixed;
     top: 0px;
     left: 0;
-    width: clamp(190px,26vw,500px) ;
+    width: clamp(190px,26vw,475px) ;
     /* para calcular que que el menu no tape el header pero llene hasta el fondo de la ventana */
     height: calc(100vh);
     background-color: white;
@@ -198,18 +222,62 @@ header
 
 }
 
+.menu-subca.abierto
+{
+    transform: translateX(0);
+}
+
+.menu-subca {
+    position: fixed;
+    top: 0px;
+    left: 0;
+    width: clamp(190px,26vw,475px) ;
+    /* para calcular que que el menu no tape el header pero llene hasta el fondo de la ventana */
+    height: calc(100vh);
+    background-color: white;
+
+    /* estado oculto */
+    /* lo desplaza hacia la izquierda (eje x) */
+    transform: translateX(-100%);
+    transition: transform 0.35s ease;
+    /* queda debajo del header pero encima del video */
+    z-index: 90;
+}
+
 .exitbutton
 {
     width: clamp(20px,4vw,30px);
     height: clamp(20px,4vw,30px);
+    cursor: pointer;
+}
+.backbutton {
+    width: clamp(20px,4vw,22px);
+    height: clamp(20px,4vw,30px);
+    cursor: pointer;
+}
+
+.backbuttondiv{
+    margin-top:1em ;
+    margin-bottom: 3.5em;
+    width: clamp(20px,4vw,30px);
+    margin-right: 10%;
 }
 
 .exitbuttondiv
 {
     margin-left: 2em;
     margin-top:1em ;
-    margin-bottom: 2.5em;
+    margin-bottom: 3.5em;
+    width: clamp(20px,4vw,30px);
 }
+
+.buttonsdiv {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+}
+
+
 
 .menu-desplegable.abierto
 {
@@ -224,6 +292,7 @@ header
     padding-left: 30px;
 }
 
+
 .part1
 {
     display: flex;
@@ -234,7 +303,7 @@ header
     font-size: 1.5rem;
     font-family: "DM Sans", sans-serif;
     font-weight: 600;
-    font-size: clamp(0.1rem, 2.7vw, 2.3rem);
+    font-size: clamp(0.1rem, 2.7vw, 2rem);
 
 }
 
@@ -247,7 +316,7 @@ header
     font-family: "DM Sans", sans-serif;
     font-weight: 600;
     text-decoration: none;
-    font-size: clamp(0.1rem, 1.7vw, 1.7rem);
+    font-size: clamp(0.1rem, 1.7vw, 1.6rem);
 }
 
 .partinfo
@@ -257,7 +326,7 @@ header
     font-family: "DM Sans", sans-serif;
     font-weight: 600;
     text-decoration: underline;
-    font-size: clamp(0.1rem, 1.7vw, 1.7rem);
+    font-size: clamp(0.1rem, 1.7vw, 1.5rem);
     margin-bottom: 1.5em;
     opacity: 70%;
 }
@@ -268,7 +337,7 @@ header
     font-family: "DM Sans", sans-serif;
     font-weight: 600;
     text-decoration: none;
-    font-size: clamp(0.1rem, 1.7vw, 1.7rem);
+    font-size: clamp(0.1rem, 1.7vw, 1.6rem);
 }
 
 
@@ -307,4 +376,18 @@ header
     display: flex;
     width: clamp(20px,4vw,30px);
     height: clamp(20px,4vw,30px);
+}
+
+.partsubca {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 25px;
+    text-decoration: none;
+    color: black;
+    font-size: 1.5rem;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    font-size: clamp(0.1rem, 2.7vw, 1.8rem);
+    margin-left: 8%;
+    width: 90%;
 }

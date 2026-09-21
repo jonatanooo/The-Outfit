@@ -62,7 +62,7 @@ function AdminTransacciones() {
                     Precio_Unitario,
                     Subtotal,
                     ID_Variante,
-                    "Variante Producto" (
+                    "Variante_Producto" (
                         ID_Variante,
                         Productos ( Nombre_Producto, Fotos_Productos ( URL_Foto, Orden ) ),
                         Talla ( Tipos_Talla ( Nombre_TipoTalla ) )
