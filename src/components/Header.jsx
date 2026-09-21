@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import PerfilPanel from './PerfilPanel';
 import Buscador from './Buscador';
 
-function Header () {
+function Header ({ siempreSolido = false }) {
     // comentario Jona
     // Los 2 useState son las banderas que remplazan las clases CSS que antes agregaba/quitaba en JS con classList.scrolled reemplaza la clase .scrolled del header, 
     // menuAbierto reemplaza la clase .abierto del menu
@@ -134,7 +134,7 @@ function Header () {
 
     return (
         // la cual es un operador condicional ternario en el cual si la condicion es scrolled dara como verdadero scrolled si es falso no dara ningun valor
-        <header className={scrolled ? 'scrolled' : ''}>
+        <header className={(scrolled || siempreSolido) ? 'scrolled' : ''}>
 
         {/* <!-- Barra Iconos --> */}
         <nav>
@@ -171,7 +171,7 @@ function Header () {
                     <img src="/ICONOS/Person.png" alt="Perfil" className="profileicon"/>
                 </button>
 
-                <a href="#favoritos">
+                <a href="/favoritos">
                     <img src="/ICONOS/Heart.png" alt="Favoritos" className="hearticon"/>
                 </a>
 

@@ -6,7 +6,6 @@
     /* con el hidden nos dice que si algo sobresale de la caja se recorta */
     /* en este caso recorta segun lo valores que pusimos en width  y el vh del height */
     overflow: hidden;
-    background-color: aqua;
     display: flex;
     /* le pone un scrollbar en el eje x */
     overflow-x: auto;
@@ -33,7 +32,6 @@ animation: spin 30s infinite linear;
 {
     width: 45em;
     height: 100vh;
-    background-color: blueviolet;
     align-content: center;
 }
 
@@ -137,6 +135,13 @@ font-family: "DM Sans", sans-serif;
     font-size: clamp(1rem, 1.1vw, 2rem);
 }
 
+.listatallas
+{
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
 .listatallas button
 {
     margin-top: 0.5em;
@@ -148,6 +153,31 @@ font-family: "DM Sans", sans-serif;
     margin-right: 1.5em;
     cursor: pointer;
     margin-bottom: 1.5em;
+}
+
+/* talla con stock: resaltada y clickeable */
+.talla-btn.talla-disponible
+{
+    opacity: 1;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
+/* talla sin stock: opaca y no interactuable */
+.talla-btn.talla-agotada
+{
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.tallas-mensaje
+{
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: clamp(0.9rem, 1vw, 1.1rem);
+    opacity: 0.7;
+    margin-top: 0.5em;
 }
 
 .anadircesta

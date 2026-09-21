@@ -12,3 +12,10 @@
 .carru-prenda {
     margin-bottom: 1em;
 }
+
+.cargando-prenda {
+    display: flex;
+    justify-content: center;
+    padding: 4em 0;
+    font-family: "DM Sans", sans-serif;
+}

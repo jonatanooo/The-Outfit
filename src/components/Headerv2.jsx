@@ -80,7 +80,7 @@ const [menuAbierto, setMenuAbierto] = useState(false)
                     <img src="/ICONOS/Person.png" alt="Perfil" className="profileicon"/>
                 </a>
 
-                <a href="#favoritos">
+                <a href="/favoritos">
                     <img src="/ICONOS/Heart.png" alt="Favoritos" className="hearticon"/>
                 </a>
 

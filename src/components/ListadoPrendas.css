@@ -117,3 +117,7 @@
     text-decoration: none;
     color: black;
 }
+
+.prenda-sin-imagen {
+    background: #eee;
+}
