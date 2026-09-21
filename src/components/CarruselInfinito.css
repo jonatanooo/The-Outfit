@@ -171,6 +171,12 @@ font-family: "DM Sans", sans-serif;
     pointer-events: none;
 }
 
+/* talla elegida por el usuario para agregar al carrito */
+.talla-btn.talla-seleccionada
+{
+    text-decoration-thickness: 0.15em;
+}
+
 .tallas-mensaje
 {
     font-family: "DM Sans", sans-serif;
@@ -193,6 +199,12 @@ font-family: "DM Sans", sans-serif;
     margin: 0 auto;
     border-radius: 0.5em;
     height: clamp(1.5em, 1.7vw, 1.7em);
+}
+
+.anadircesta:disabled
+{
+    background-color: #999;
+    cursor: not-allowed;
 }
 
 .disponibilidad

@@ -84,7 +84,7 @@ const [menuAbierto, setMenuAbierto] = useState(false)
                     <img src="/ICONOS/Heart.png" alt="Favoritos" className="hearticon"/>
                 </a>
 
-                <a href="#carrito" >
+                <a href="/carrito" >
                     <img src="/ICONOS/Shopping Cart.png" alt="Carrito" className="carritoicon"/>
                 </a>
 

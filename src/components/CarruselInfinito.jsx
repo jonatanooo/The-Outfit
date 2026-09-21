@@ -1,7 +1,9 @@
 "use client"
+import { useEffect, useState } from "react";
 import "./CarruselInfinito.css";
 import { useProducto, useTallasProducto } from "@/lib/productos";
 import { useFavoritos } from "@/lib/useFavoritos";
+import { useCarrito } from "@/lib/CarritoContext";
 
 // Carrusel de fotos + panel de precio/talla de la prenda real, cargada por su ID
 // (viene de la ruta /prenda-pag/[id]).
@@ -9,6 +11,22 @@ function CarruselInfinito({ idProducto }) {
     const { producto, cargando } = useProducto(idProducto);
     const { tallas, cargando: cargandoTallas } = useTallasProducto(idProducto);
     const { esFavorito, alternarFavorito } = useFavoritos();
+    const { agregarAlCarrito } = useCarrito();
+    const [tallaSeleccionada, setTallaSeleccionada] = useState(null);
+
+    // Si se navega a otra prenda, la talla elegida en la anterior no debe seguir marcada.
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- reinicia la seleccion al cambiar de prenda (prop idProducto), no hay nada async que envolver.
+        setTallaSeleccionada(null);
+    }, [idProducto]);
+
+    // Si la prenda solo viene en una talla y hay stock, se preselecciona sola.
+    useEffect(() => {
+        if (tallas.length === 1 && tallas[0].disponible) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- deriva la seleccion del array tallas ya cargado, no hay nada async que envolver.
+            setTallaSeleccionada(tallas[0].idVariante);
+        }
+    }, [tallas]);
 
     if (cargando) {
         return <main><p className="cargando-prenda">Cargando...</p></main>;
@@ -73,9 +91,11 @@ function CarruselInfinito({ idProducto }) {
                                     <button
                                         key={talla.idVariante}
                                         type="button"
-                                        className={`talla-btn ${talla.disponible ? 'talla-disponible' : 'talla-agotada'}`}
+                                        className={`talla-btn ${talla.disponible ? 'talla-disponible' : 'talla-agotada'} ${tallaSeleccionada === talla.idVariante ? 'talla-seleccionada' : ''}`}
                                         disabled={!talla.disponible}
+                                        aria-pressed={tallaSeleccionada === talla.idVariante}
                                         aria-label={talla.disponible ? `Talla ${talla.nombre}` : `Talla ${talla.nombre}, agotada`}
+                                        onClick={() => setTallaSeleccionada(talla.idVariante)}
                                     >
                                         {talla.nombre}
                                     </button>
@@ -84,7 +104,28 @@ function CarruselInfinito({ idProducto }) {
                         </div>
                     </div>
 
-                    <button className="anadircesta">AÑADIR A LA CESTA</button>
+                    <button
+                        type="button"
+                        className="anadircesta"
+                        disabled={!tallaSeleccionada}
+                        onClick={() => {
+                            const talla = tallas.find((t) => t.idVariante === tallaSeleccionada);
+                            if (!talla) return;
+
+                            agregarAlCarrito({
+                                idVariante: talla.idVariante,
+                                idProducto: producto.id,
+                                nombre: producto.nombre,
+                                talla: talla.nombre,
+                                precio: talla.precio || producto.precio,
+                                imagen: producto.imagen,
+                                stockDisponible: talla.stock,
+                            });
+                            alert(`Se agregó "${producto.nombre}" (talla ${talla.nombre}) a la cesta.`);
+                        }}
+                    >
+                        {tallas.length > 1 && !tallaSeleccionada ? 'ELEGÍ UNA TALLA' : 'AÑADIR A LA CESTA'}
+                    </button>
 
                     <p className="disponibilidad">
                         <img src="/ICONOS/Store.png" alt="tienda" />Disponible para recoger en tienda
