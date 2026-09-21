@@ -9,7 +9,7 @@ export default function Home() {
         <Header />
             <main>
         <section className="imgbanner">
-            <img src="/Fotos/banner-men.jpg" alt="" className="hero-img"/>
+            <img src="/Fotos/banner-man.jpg" alt="" className="hero-img"/>
             <h3 className='nombre-seccion'>HOMBRE</h3>
             <p className='descripcion-seccion'>Ropa de hombre y accesorios de las más recientes colecciones en The Outfit.</p>
         </section>

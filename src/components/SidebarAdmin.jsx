@@ -28,7 +28,7 @@ function SidebarAdmin() {
     const menuItems = [
     { icon: '/ICONOS/inventario.png', label: 'Inventario', href: '/Inventario' },
     { icon: '/ICONOS/transacciones.png', label: 'Transacciones', href: '/transacciones' },
-    { icon: '/ICONOS/empleados.png', label: 'Empleados', href: '#' },
+    { icon: '/ICONOS/empleados.png', label: 'Empleados', href: '/empleados' },
     { icon: '/ICONOS/reportes.png', label: 'Reportes', href: '#' },
     { icon: '/ICONOS/configuracion.png', label: 'Configuración', href: '#' }
 ];

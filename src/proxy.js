@@ -4,10 +4,14 @@ import { createServerClient } from '@supabase/ssr'
 // Rutas y el rol (app_metadata) mínimo que necesitan para entrar.
 // /Inventario y /transacciones son las páginas reales del panel (linkeadas desde
 // SidebarAdmin.jsx) y viven fuera de /admin, así que hay que listarlas aparte.
+// OJO con el orden: "/empleados" (directorio de admin) tiene que ir ANTES que
+// "/empleado" (panel del propio empleado) porque el match de abajo es por
+// startsWith y "/empleados".startsWith("/empleado") también da true.
 const RUTAS_PROTEGIDAS = [
   { prefijo: '/admin', rolPermitido: 'admin' },
   { prefijo: '/Inventario', rolPermitido: 'admin' },
   { prefijo: '/transacciones', rolPermitido: 'admin' },
+  { prefijo: '/empleados', rolPermitido: 'admin' },
   { prefijo: '/empleado', rolPermitido: 'empleado' },
 ]
 
@@ -59,5 +63,5 @@ export async function proxy(request) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/Inventario/:path*', '/transacciones/:path*', '/empleado/:path*'],
+  matcher: ['/admin/:path*', '/Inventario/:path*', '/transacciones/:path*', '/empleados/:path*', '/empleado/:path*'],
 }
