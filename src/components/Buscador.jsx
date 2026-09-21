@@ -40,9 +40,9 @@ function Buscador({ onClose }) {
         return () => clearTimeout(timeoutId)
     }, [texto])
 
-    const irAlCatalogo = () => {
+    const irALaPrenda = (idProducto) => {
         onClose()
-        router.push('/productos')
+        router.push(`/prenda-pag/${idProducto}`)
     }
 
     return (
@@ -78,7 +78,7 @@ function Buscador({ onClose }) {
                                     key={producto.ID_Producto}
                                     type="button"
                                     className="buscador-sugerencia"
-                                    onClick={irAlCatalogo}
+                                    onClick={() => irALaPrenda(producto.ID_Producto)}
                                 >
                                     {foto ? (
                                         <img src={foto.URL_Foto} alt="" className="buscador-sugerencia-foto" />
