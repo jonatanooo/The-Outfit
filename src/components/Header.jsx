@@ -163,6 +163,15 @@ function Header ({ siempreSolido = false }) {
                         <img src="/ICONOS/Search.png" alt="Buscar" className="searchicon"/>
                     </button>
 
+                {/* En el proyecto solo hay 2 roles con panel propio: admin y empleado.
+                    Este acceso rapido solo se muestra para admin (empleado ya tiene su
+                    propio panel en /empleado). */}
+                {usuario?.app_metadata?.rol === 'admin' && (
+                    <Link href="/admin" className="btn-admin">
+                        ADMIN
+                    </Link>
+                )}
+
                 <button
                     type="button"
                     onClick={handleClickPerfil}
