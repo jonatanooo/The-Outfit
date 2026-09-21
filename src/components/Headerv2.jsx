@@ -1,15 +1,23 @@
 "use client"
 import './Headerv2.css'
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
+import PerfilPanel from './PerfilPanel';
 import Buscador from './Buscador';
 
 function Headerv2 () {
     // comentario Jona
-    // Los 2 useState son las banderas que remplazan las clases CSS que antes agregaba/quitaba en JS con classList.scrolled reemplaza la clase .scrolled del header, 
+    // Los 2 useState son las banderas que remplazan las clases CSS que antes agregaba/quitaba en JS con classList.scrolled reemplaza la clase .scrolled del header,
     // menuAbierto reemplaza la clase .abierto del menu
     const [scrolled, setScrolled] = useState(false)
     const [menuAbierto, setMenuAbierto] = useState(false)
     const [buscadorAbierto, setBuscadorAbierto] = useState(false)
+    const [usuario, setUsuario] = useState(null)
+    const [perfilAbierto, setPerfilAbierto] = useState(false)
+    const perfilPanelRef = useRef(null)
+    const router = useRouter();
+    const sesionActiva = !!usuario
     const categorias = [
         {id: 'mujer', 
             label: 'MUJERES ', 
@@ -100,6 +108,28 @@ function Headerv2 () {
     return () => document.removeEventListener('click', manejarClickFuera)
     }, [] )
 
+    // guarda el usuario logueado (o null) para mostrar el botón de perfil/cerrar sesión
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => setUsuario(user))
+        const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+            setUsuario(session?.user ?? null)
+        })
+        return () => listener.subscription.unsubscribe()
+    }, [])
+
+    const handleClickPerfil = () => {
+        if (sesionActiva) {
+            perfilPanelRef.current?.refrescar()
+            setPerfilAbierto(true)
+        } else {
+            router.push('/login')
+        }
+    }
+
+    const handleCerrarSesion = async () => {
+        await supabase.auth.signOut();
+        router.push('/login');
+    };
 
     return (
         // la cual es un operador condicional ternario en el cual si la condicion es scrolled dara como verdadero scrolled si es falso no dara ningun valor
@@ -131,9 +161,14 @@ function Headerv2 () {
                         <img src="/ICONOS/Search.png" alt="Buscar" className="searchicon"/>
                     </button>
 
-                <a href="#perfil">
+                <button
+                    type="button"
+                    onClick={handleClickPerfil}
+                    aria-label="Perfil"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                >
                     <img src="/ICONOS/Person.png" alt="Perfil" className="profileicon"/>
-                </a>
+                </button>
 
                 <a href="/favoritos">
                     <img src="/ICONOS/Heart.png" alt="Favoritos" className="hearticon"/>
@@ -175,7 +210,15 @@ function Headerv2 () {
                         <li><a href="" className="partinfo">+503 2261-3004</a></li>
                     </ul>
                     <div>
-                        <button className="logout">CERRAR SESIÓN <img src="/ICONOS/logout.png" alt="" className="logouticon"/></button>
+                        {sesionActiva ? (
+                            <button className="logout" onClick={handleCerrarSesion}>
+                                CERRAR SESIÓN <img src="/ICONOS/logout.png" alt="" className="logouticon"/>
+                            </button>
+                        ) : (
+                            <a className="logout" href="/login">
+                                INICIAR SESIÓN
+                            </a>
+                        )}
                     </div>
                 </div>
             </div>
@@ -186,10 +229,18 @@ function Headerv2 () {
             {/* con el && es la forma abreviada del condicional ternario, forma abreviada de: */}
             {/* {menuAbierto ? <div className="Overlay activo">...</div> : null} */}
             {/* pusimos las 2 condiciones */}
-            {(menuAbierto || categoriaActiva) &&  (
+            {(menuAbierto || categoriaActiva || perfilAbierto) &&  (
                 // quiere decir que si le hacemos click al overlay se desactiva el menu desplegable
-                <div className="Overlay" onClick={() => {setMenuAbierto(false); setCategoriaActiva(null)}}></div>
+                <div className="Overlay" onClick={() => {setMenuAbierto(false); setCategoriaActiva(null); setPerfilAbierto(false)}}></div>
             )}
+
+            <PerfilPanel
+                ref={perfilPanelRef}
+                abierto={perfilAbierto}
+                usuario={usuario}
+                onClose={() => setPerfilAbierto(false)}
+                onSesionCerrada={() => setUsuario(null)}
+            />
 
                 {/* en el operador ternario no comparamos nada, solo con preguntar si categoriaActiva tiene un valor verdadero (no es null). Si es cualquier string vacio lo toma como true  */}
             <div ref= {menuSubcategoriaRef} className={`menu-subca ${categoriaActiva ? 'abierto' : ''}`}>
