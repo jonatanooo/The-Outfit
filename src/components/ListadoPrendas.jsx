@@ -1,11 +1,13 @@
 "use client"
+import Link from "next/link";
 // importamos libreria de animaciones
-import {useState, useEffect} from "react"
+import { useState, useEffect } from "react"
 import { motion } from "motion/react";
 import { supabase } from "@/lib/supabaseClient";
+import { useFavoritos } from "@/lib/useFavoritos";
 import "./ListadoPrendas.css";
 
-async function buscarProductosFiltrados(filtros ={}) {
+async function buscarProductosFiltrados(filtros = {}) {
   const filtroCategorias = filtros.Categorias?.length > 0;
   const filtroColores = filtros.Colores?.length > 0;
   const filtroTallas = filtros.Tallas?.length > 0;
@@ -47,13 +49,15 @@ async function buscarProductosFiltrados(filtros ={}) {
   for (const producto of data) {
     if (!vistos.has(producto.ID_Producto)) {
       const precios = producto.Variante_Producto?.map((v) => v.Precio_Actual) ?? [];
+      // La imagen principal es la 4ta foto cargada (índice 3, 0-based); si el
+      // producto tiene menos de 4 fotos, se usa la primera como respaldo.
+      const fotos = [...(producto.Fotos_Productos ?? [])].sort((a, b) => (a.Orden ?? 0) - (b.Orden ?? 0));
       vistos.set(producto.ID_Producto, {
         id: producto.ID_Producto,
         nombre: producto.Nombre_Producto,
         marca: producto.Marca?.Nombre_Marca ?? "",
         precio: precios.length ? Math.min(...precios) : null,
-        imagen: producto.Fotos_Productos?.find((f) => f.Orden === 4)?.URL_Foto
-          ?? "/Fotos/placeholder.jpg",
+        imagen: fotos[3]?.URL_Foto ?? fotos[0]?.URL_Foto ?? "/Fotos/placeholder.jpg",
       });
     }
   }
@@ -65,50 +69,80 @@ async function buscarProductosFiltrados(filtros ={}) {
   if (orden === "Precio: mayor a menor") resultado.sort((a, b) => b.precio - a.precio);
 
   return resultado;
-
-
 }
-// funcion que carga el carrusel
-function ListadoPrendas({filtros, onResultados}) {
+
+// funcion que carga el listado de productos reales desde Supabase, filtrado
+function ListadoPrendas({ filtros, onResultados }) {
   const [prendas, setPrendas] = useState([]);
   const [cargando, setCargando] = useState(true);
-
+  const { esFavorito, alternarFavorito } = useFavoritos();
 
   useEffect(() => {
-    setCargando(true);
-    buscarProductosFiltrados(filtros).then((data) => {
+    let activo = true;
+
+    async function cargar() {
+      setCargando(true);
+      const data = await buscarProductosFiltrados(filtros);
+      if (!activo) return;
       setPrendas(data);
       setCargando(false);
       onResultados?.(data.length);
-    });
+    }
+
+    cargar();
+    return () => { activo = false; };
   }, [filtros]);
 
-  if (cargando) return <p>Cargando prendas...</p>;
+  if (cargando) {
+    return (
+      <div className="seccion-listado">
+        <p>Cargando productos...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="seccion-listado">
       <div className="listado-grid">
         {/* con el .map() recorre las prendas visibles y genera una card por cada una, usando sus propios datos, lo cual evita que tengamos que escribir una por una a mano */}
-        {productos.map((prenda) => (
+        {prendas.map((prenda) => (
           // el key={prenda.id} es obligatoria en cualquier .map() que genere JSX en React, ya que le da a cada elemento una identidad unica para que Reatc pueda rastrear cual es cual si la lista cambia
-          <div className="prenda-card" key={prenda.id}>
-            <div className="prenda-imagen-wrap">
-              <button className="btn-favorito" aria-label="Agregar a favoritos">
-                <img src="/ICONOS/Heart.png" alt="like" className="favicon" />
-              </button>
-              <a href={`/producto/${prenda.id}`}><motion.img  whileHover={{scale: 1.2}} src={prenda.imagen} alt={prenda.nombre} className="prenda-imagen" /></a>
-            </div>
+          // el Link manda a la pagina propia de la prenda; el boton de favorito frena la propagacion para no navegar al tocarlo
+          <Link href={`/prenda-pag/${prenda.id}`} className="card-link" key={prenda.id}>
+            <div className="prenda-card">
+              <div className="prenda-imagen-wrap">
+                <button
+                  type="button"
+                  className="btn-favorito"
+                  aria-label={esFavorito(prenda.id) ? "Quitar de favoritos" : "Agregar a favoritos"}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    alternarFavorito(prenda.id);
+                  }}
+                >
+                  <img
+                    src={esFavorito(prenda.id) ? "/ICONOS/Heart2.png" : "/ICONOS/Heart.png"}
+                    alt="like"
+                    className="favicon"
+                  />
+                </button>
+                {prenda.imagen ? (
+                  <motion.img whileHover={{ scale: 1.2 }} src={prenda.imagen} alt={prenda.nombre} className="prenda-imagen" />
+                ) : (
+                  <div className="prenda-imagen prenda-sin-imagen" />
+                )}
+              </div>
 
-            <a href={`/producto/${prenda.id}`} className="card-link"> 
-                <div className="prenda-info">
-                    <div>
-                        <p className="prenda-nombre">{prenda.nombre}</p>
-                        <p className="prenda-marca">{prenda.marca}</p>
-                    </div>
-                    <p className="prenda-precio">${prenda.precio}</p>
+              <div className="prenda-info">
+                <div>
+                  <p className="prenda-nombre">{prenda.nombre}</p>
+                  <p className="prenda-marca">{prenda.marca}</p>
                 </div>
-            </a>
-          </div>
+                <p className="prenda-precio">${prenda.precio != null ? prenda.precio.toFixed(2) : "0.00"}</p>
+              </div>
+            </div>
+          </Link>
         ))}
       </div>
     </div>

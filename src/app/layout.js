@@ -1,4 +1,5 @@
 import "./globals.css";
+import { CarritoProvider } from '@/lib/CarritoContext'
 
 
 export const metadata = {

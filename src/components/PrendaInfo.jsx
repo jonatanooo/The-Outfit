@@ -3,24 +3,22 @@ import './PrendaInfo.css';
 import { useState } from 'react'
 import { useProducto } from '@/lib/productos'
 
-function PrendaIfo ({producto}) {
+function PrendaIfo ({ idProducto }) {
 
     const [abiertoId, setAbiertoId] = useState(null)
     const { producto } = useProducto(idProducto)
 
     const secciones = [
-        {id: 1, titulo: "DETALLES DE PRODUCTO", texto: producto?.descripcion || "Sin descripcion disponible"},
+        {id: 1, titulo: "DETALLES DE PRODUCTO", texto: producto?.descripcion || "Esta prenda es una sudadera o camiseta gruesa de manga larga con un estilo casual y relajado. Destaca por su patrón de finas rayas horizontales blancas sobre un tono verde oscuro, acompañado de un clásico cuello redondo con acabado acanalado. Su diseño presenta un corte cuadrado (boxy fit) ligeramente corto, complementado con hombros caídos y mangas anchas que ofrecen una silueta holgada, muy cómoda y perfecta para el uso diario."},
         {id: 2, titulo: "CUIDADO DE MATERIALES", texto: "Para cuidar esta prenda, lávala a máquina con agua fría, siempre del revés y con colores similares. No utilices lejía ni blanqueador. Es preferible secarla al aire sobre una superficie plana para que no pierda su forma, o en secadora a un ciclo de temperatura baja. Si necesita planchado, hazlo a baja temperatura y por el reverso de la tela."},
         {id: 3, titulo: "NUESTRO COMPROMISO", texto: "En The Outfit, nuestro principal compromiso es ayudarte a verte y sentirte bien ofreciéndote ropa, zapatos y accesorios de excelente calidad. Nuestra misión es proporcionarte opciones de moda que sean accesibles para tu bolsillo y que, al mismo tiempo, se adapten con facilidad a tus diferentes actividades diarias. Para complementar este compromiso, también nos dedicamos a brindarte asesoría personalizada con el objetivo de acompañarte, elegir y crear junto a ti el atuendo perfecto para cualquier ocasión."},
     ]
-
-    const imagenPrincipal = producto?.imagenes?.[0] ?? "/Fotos/placeholder.jpg";
 
     return (
         <>
             <section className="prendainfo">
             <div className="galeria">
-                <img src={imagenPrincipal} alt={producto?.nombre} />
+                <img src={producto?.imagen || "/PrendasCarrusel/5.jpg"} alt={producto?.nombre || ""} />
             </div>
 
             <div className="descripcionprenda">
@@ -38,7 +36,7 @@ function PrendaIfo ({producto}) {
                             </div>
                         </div>
                     ))}
-                    
+
                 </div>
             </div>
             </section>

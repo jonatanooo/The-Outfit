@@ -175,7 +175,7 @@ function Header ({ siempreSolido = false }) {
                     <img src="/ICONOS/Heart.png" alt="Favoritos" className="hearticon"/>
                 </a>
 
-                <a href="#carrito" className='contenedor-carrito'>
+                <a href="/carrito" className='contenedor-carrito'>
                     <img src="/ICONOS/Shopping Cart.png" alt="Carrito" className="carritoicon"/>
                 </a>
 

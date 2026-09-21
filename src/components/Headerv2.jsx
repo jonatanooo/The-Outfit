@@ -9,6 +9,7 @@ function Headerv2 () {
     // menuAbierto reemplaza la clase .abierto del menu
     const [scrolled, setScrolled] = useState(false)
     const [menuAbierto, setMenuAbierto] = useState(false)
+    const [buscadorAbierto, setBuscadorAbierto] = useState(false)
     const categorias = [
         {id: 'mujer', 
             label: 'MUJERES ', 
@@ -138,7 +139,7 @@ function Headerv2 () {
                     <img src="/ICONOS/Heart.png" alt="Favoritos" className="hearticon"/>
                 </a>
 
-                <a href="#carrito" className='contenedor-carrito'>
+                <a href="/carrito" className='contenedor-carrito'>
                     <img src="/ICONOS/Shopping Cart.png" alt="Carrito" className="carritoicon"/>
                 </a>
 
@@ -217,6 +218,8 @@ function Headerv2 () {
                     </ul>
                 </div>
             </div>
+
+            {buscadorAbierto && <Buscador onClose={() => setBuscadorAbierto(false)} />}
 
     </header>
     );
