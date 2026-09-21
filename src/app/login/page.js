@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, aplicarMantenerSesion } from '@/lib/supabaseClient';
 
 /* ---------- Iconos SVG (redes + ojo + Google) ---------- */
 const IconInstagram = (props) => (
@@ -65,6 +65,29 @@ export default function LoginPage() {
   const [mantenerSesion, setMantenerSesion] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [enviandoReset, setEnviandoReset] = useState(false);
+  const [resetInfo, setResetInfo] = useState('');
+
+  const handleOlvideContrasena = async () => {
+    setError('');
+    if (!correo.trim()) {
+      setError('Escribí tu correo arriba y volvé a hacer clic en "¿Has olvidado la contraseña?"');
+      return;
+    }
+
+    setEnviandoReset(true);
+    setResetInfo('');
+    const { error } = await supabase.auth.resetPasswordForEmail(correo, {
+      redirectTo: `${window.location.origin}/restablecer-password`,
+    });
+    setEnviandoReset(false);
+
+    if (error) {
+      setError(error.message);
+    } else {
+      setResetInfo('Si ese correo tiene una cuenta, te enviamos un enlace para restablecer la contraseña.');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -85,7 +108,9 @@ export default function LoginPage() {
 
       if (error) throw error;
 
-      const rol = data.user?.user_metadata?.rol || 'usuario';
+      aplicarMantenerSesion(mantenerSesion);
+
+      const rol = data.user?.app_metadata?.rol || 'usuario';
       if (rol === 'admin') {
         router.push('/admin');
       } else if (rol === 'empleado') {
@@ -184,6 +209,7 @@ export default function LoginPage() {
               </div>
 
               {error && <p className="text-red-500 text-xs" style={{ marginBottom: '16px' }}>{error}</p>}
+              {resetInfo && <p className="text-green-600 text-xs" style={{ marginBottom: '16px' }}>{resetInfo}</p>}
 
               {/* 🔓 CHECKBOX  */}
               <div
@@ -199,7 +225,14 @@ export default function LoginPage() {
                   />
                   <span>Mantener Sesión</span>
                 </label>
-                <a href="#" className="hover:underline">¿HAS OLVIDADO LA CONTRASEÑA?</a>
+                <button
+                  type="button"
+                  onClick={handleOlvideContrasena}
+                  disabled={enviandoReset}
+                  className="hover:underline disabled:opacity-50"
+                >
+                  {enviandoReset ? 'ENVIANDO...' : '¿HAS OLVIDADO LA CONTRASEÑA?'}
+                </button>
               </div>
 
               {/* 🔓 BOTÓN CONTINUAR  */}

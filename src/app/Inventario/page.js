@@ -365,10 +365,19 @@ function AdminInventario() {
 
 // ---------- CREAR CATEGORIA / SUBCATEGORIA AL VUELO ----------
 
-    // Obtiene un ID de usuario por defecto para auditoría
+    // Obtiene el ID_User (de tu tabla "User") que corresponde al usuario logueado,
+    // para dejar registrado quién hizo el cambio.
     async function obtenerIdUsuario() {
-        const { data } = await supabase.from('User').select('ID_User').limit(1);
-        return data?.[0]?.ID_User;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return null;
+
+        const { data } = await supabase
+            .from('User')
+            .select('ID_User')
+            .eq('auth_id', user.id)
+            .maybeSingle();
+
+        return data?.ID_User ?? null;
     }
     // Crea una nueva categoría al vuelo
     async function crearCategoria() {

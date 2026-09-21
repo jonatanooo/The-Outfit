@@ -54,6 +54,7 @@ export default function RegisterPage() {
     nombre: '',
     correo: '',
     telefono: '',
+    dui: '',
     password: '',
     aceptaPromos: false,
     aceptaTerminos: false,
@@ -86,6 +87,8 @@ export default function RegisterPage() {
     else if (!/\S+@\S+\.\S+/.test(form.correo)) nuevosErrores.correo = 'Correo inválido';
     if (!form.telefono.trim()) nuevosErrores.telefono = 'El teléfono es obligatorio';
     else if (!/^\d{8}$/.test(form.telefono)) nuevosErrores.telefono = 'Debe tener 8 dígitos';
+    if (!form.dui.trim()) nuevosErrores.dui = 'El DUI es obligatorio';
+    else if (!/^\d{8}-\d$/.test(form.dui)) nuevosErrores.dui = 'Formato: 12345678-9';
 
     const erroresPwd = validarPassword(form.password);
     if (erroresPwd.length > 0) nuevosErrores.password = erroresPwd.join(', ');
@@ -108,12 +111,21 @@ export default function RegisterPage() {
           data: {
             nombre: form.nombre,
             telefono: form.telefono,
-            rol: 'usuario',
+            dui: form.dui,
           },
         },
       });
 
       if (error) throw error;
+
+      // Por seguridad (evitar enumeración de correos), Supabase responde "éxito" sin
+      // avisar cuando el correo ya tiene una cuenta confirmada: devuelve un usuario
+      // con identities vacío en vez de un error. Si no lo detectamos, el formulario
+      // muestra "¡Cuenta creada!" aunque no haya pasado nada.
+      if (data.user && data.user.identities?.length === 0) {
+        setErrores({ general: 'Ya existe una cuenta con este correo. Iniciá sesión o restablecé tu contraseña.' });
+        return;
+      }
 
       alert('¡Cuenta creada! Revisa tu correo para confirmar.');
       router.push('/login');
@@ -227,6 +239,23 @@ export default function RegisterPage() {
                   />
                 </div>
                 {errores.telefono && <p className="text-red-500 text-xs" style={{ marginTop: '4px' }}>{errores.telefono}</p>}
+              </div>
+
+              {/* 🔓 DUI  */}
+              <div style={{ marginBottom: '25px' }}>
+                <label className="block text-xs uppercase tracking-wider text-gray-700" style={{ marginBottom: '6px' }}>
+                  DUI
+                </label>
+                <input
+                  type="text"
+                  name="dui"
+                  placeholder="12345678-9"
+                  value={form.dui}
+                  onChange={handleChange}
+                  maxLength={10}
+                  className="w-full h-11 border border-gray-300 rounded-sm px-4 text-base focus:outline-none focus:border-black"
+                />
+                {errores.dui && <p className="text-red-500 text-xs" style={{ marginTop: '4px' }}>{errores.dui}</p>}
               </div>
 
               {/* 🔓 CHECKBOXES  */}

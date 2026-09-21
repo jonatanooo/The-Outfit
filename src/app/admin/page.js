@@ -11,6 +11,8 @@ export default function AdminPage() {
     const router = useRouter();
     const [usuario, setUsuario] = useState(null);
 
+    const [verificando, setVerificando] = useState(true);
+
     useEffect(() => {
         const verificarUsuario = async () => {
             const { data: { user } } = await supabase.auth.getUser();
@@ -20,13 +22,16 @@ export default function AdminPage() {
                 return;
             }
 
-            const rol = user.user_metadata?.rol || 'usuario';
+            // El proxy ya bloquea /admin a quien no tenga este rol; esta verificación
+            // es una segunda capa por si la página se sirve desde caché.
+            const rol = user.app_metadata?.rol || 'usuario';
             if (rol !== 'admin') {
                 router.push('/');
                 return;
             }
 
             setUsuario(user);
+            setVerificando(false);
         };
 
         verificarUsuario();
@@ -40,6 +45,10 @@ export default function AdminPage() {
         { titulo: 'Sin stock', valor: 50, color: '#d32f2f' },
     ];
 
+    if (verificando) {
+        return null;
+    }
+
     return (
         <div className="admin-layout">
             <SidebarAdmin />
@@ -47,7 +56,7 @@ export default function AdminPage() {
             <main className="admin-main">
                 <AdminHeader
                     titulo="Panel de Administrador"
-                    subtitulo={usuario ? `Bienvenido, ${usuario.email}` : 'Cargando...'}
+                    subtitulo={`Bienvenido, ${usuario.email}`}
                 />
 
                 <AdminStats stats={stats} />
