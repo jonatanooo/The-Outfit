@@ -44,7 +44,28 @@ function CarruselInfinito({producto}) {
                         </div>
                     </div>
 
-                    <button className="anadircesta">AÑADIR A LA CESTA</button>
+                    <button
+                        type="button"
+                        className="anadircesta"
+                        disabled={!tallaSeleccionada}
+                        onClick={() => {
+                            const talla = tallas.find((t) => t.idVariante === tallaSeleccionada);
+                            if (!talla) return;
+
+                            agregarAlCarrito({
+                                idVariante: talla.idVariante,
+                                idProducto: producto.id,
+                                nombre: producto.nombre,
+                                talla: talla.nombre,
+                                precio: talla.precio || producto.precio,
+                                imagen: producto.imagen,
+                                stockDisponible: talla.stock,
+                            });
+                            alert(`Se agregó "${producto.nombre}" (talla ${talla.nombre}) a la cesta.`);
+                        }}
+                    >
+                        {tallas.length > 1 && !tallaSeleccionada ? 'ELEGÍ UNA TALLA' : 'AÑADIR A LA CESTA'}
+                    </button>
 
                     <p className="disponibilidad">
                         <img src="/ICONOS/Store.png" alt="tienda" />Disponible para recoger en tienda

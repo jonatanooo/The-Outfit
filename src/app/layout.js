@@ -10,7 +10,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="es">
       <body>
-        {children}
+        <CarritoProvider>
+          {children}
+        </CarritoProvider>
       </body>
     </html>
   );

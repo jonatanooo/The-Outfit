@@ -124,7 +124,8 @@ export function useProducto(idProducto) {
 }
 
 // Convierte una fila de "Variante_Producto" (con Talla/Tipos_Talla e Inventario
-// embebidos) en {idVariante, nombre, disponible} para los botones de talla.
+// embebidos) en {idVariante, nombre, precio, stock, disponible} para los
+// botones de talla y para agregar la variante elegida al carrito.
 function normalizarTalla(v) {
   const nombre = v.Talla?.Tipos_Talla?.Nombre_TipoTalla?.trim();
   // Igual que en el resto del catálogo: sin dato, la variante se considera activa.
@@ -137,6 +138,8 @@ function normalizarTalla(v) {
   return {
     idVariante: v.ID_Variante,
     nombre,
+    precio: Number(v.Precio_Actual ?? 0),
+    stock,
     disponible: activa && stock > 0,
   };
 }
@@ -164,6 +167,7 @@ export function useTallasProducto(idProducto) {
         .select(`
           ID_Variante,
           ID_EstadoProducto,
+          Precio_Actual,
           Talla ( Tipos_Talla ( Nombre_TipoTalla ) ),
           Inventario ( Cantidad_Disponible, Cantidad_Reservada )
         `)
