@@ -87,10 +87,9 @@ function ListadoPrendas({filtros, onResultados}) {
 
   return (
     <div className="seccion-listado">
-
       <div className="listado-grid">
-        {/* con el .map() recorre las  prendas visibles y genera una card por cada una, usando sus propios datos, lo cual evita que tengamos que escribir una por una a mano */}
-        {prendas.map((prenda) => (
+        {/* con el .map() recorre las prendas visibles y genera una card por cada una, usando sus propios datos, lo cual evita que tengamos que escribir una por una a mano */}
+        {productos.map((prenda) => (
           // el key={prenda.id} es obligatoria en cualquier .map() que genere JSX en React, ya que le da a cada elemento una identidad unica para que Reatc pueda rastrear cual es cual si la lista cambia
           <div className="prenda-card" key={prenda.id}>
             <div className="prenda-imagen-wrap">

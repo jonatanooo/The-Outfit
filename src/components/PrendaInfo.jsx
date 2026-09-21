@@ -1,10 +1,12 @@
 "use client"
 import './PrendaInfo.css';
 import { useState } from 'react'
+import { useProducto } from '@/lib/productos'
 
 function PrendaIfo ({producto}) {
 
     const [abiertoId, setAbiertoId] = useState(null)
+    const { producto } = useProducto(idProducto)
 
     const secciones = [
         {id: 1, titulo: "DETALLES DE PRODUCTO", texto: producto?.descripcion || "Sin descripcion disponible"},

@@ -52,7 +52,7 @@ function CarruselInfinito({producto}) {
                 </div>
             </section>
         </main>
-        
+
         </>
     )
 }
