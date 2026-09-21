@@ -1,6 +1,7 @@
 "use client"
 import './Headerv2.css'
 import { useState, useEffect, useRef } from 'react';
+import Buscador from './Buscador';
 
 function Headerv2 () {
     // comentario Jona
@@ -21,6 +22,7 @@ function Headerv2 () {
     // <header className={scrolled ? 'scrolled' : ''}>
     // la cual es un operador condicional ternario en el cual si la condicion es scrolled dara como verdadero scrolled si es falso no dara ningun valor
 const [menuAbierto, setMenuAbierto] = useState(false)
+    const [buscadorAbierto, setBuscadorAbierto] = useState(false)
     //cerrar menu al hacer click afuera
     useEffect (() => {
         // al dar click afuera se activara un evento/funcion
@@ -65,9 +67,14 @@ const [menuAbierto, setMenuAbierto] = useState(false)
 
                 <div className="nav-right">
 
-                    <a href="#buscar">
+                    <button
+                        type="button"
+                        className="search-toggle"
+                        onClick={() => setBuscadorAbierto(true)}
+                        aria-label="Buscar"
+                    >
                         <img src="/ICONOS/Search.png" alt="Buscar" className="searchicon"/>
-                    </a>
+                    </button>
 
                 <a href="#perfil">
                     <img src="/ICONOS/Person.png" alt="Perfil" className="profileicon"/>
@@ -118,6 +125,8 @@ const [menuAbierto, setMenuAbierto] = useState(false)
                 // quiere decir que si le hacemos click al overlay se desactiva el menu desplegable
                 <div className="Overlay" onClick={() => setMenuAbierto(false)}></div>
             )}
+
+            {buscadorAbierto && <Buscador onClose={() => setBuscadorAbierto(false)} />}
 
     </header>
     );
