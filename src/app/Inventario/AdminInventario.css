@@ -31,17 +31,17 @@
     font-weight: 600;
 }
 
+.btn-Entrada-de-stock
+{
+    cursor: pointer;
+}
+
 .btn-agregar:hover {
     background-color: #333;
 }
 
-/* tarjetas de estadisticas */
-.stats-row {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-}
+
+
 
 .stats-row {
     display: flex;
@@ -60,6 +60,18 @@
     flex-direction: column;
     justify-content: center;
     border: 1px solid rgba(0, 0, 0, 0.04);
+    cursor: pointer;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+    
+}
+
+.stat-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card-activa {
+    outline: 2px solid #333;
+    outline-offset: -2px;
 }
 
 .stat-titulo {
@@ -75,7 +87,27 @@
     line-height: 1;
 }
 
-/* buscador */
+/*---------Boton de Quitar Filtro*/
+.filtro-indicador {
+    background: #000000;
+    padding: 8px 14px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+}
+
+.filtro-indicador button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.8rem;
+    text-decoration: underline;
+}
+
+/*---------- buscador -------------*/
 .buscador {
     width: 100%;
     padding: 10px 14px;
@@ -91,7 +123,7 @@
     border-color: rgb(22, 13, 13);
 }
 
-/* tabla de productos */
+/* ----------tabla de productos---------- */
 .tabla-productos {
     width: 100%;
     border-collapse: collapse;
@@ -127,10 +159,12 @@
 }
 
 .stock-bajo {
-    color: #f9a825;
+    color: #7007ad;
     font-weight: 600;
 }
 
+
+/*---------Modales-------------*/
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -159,6 +193,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    color: #0f0808;
     margin-bottom: 16px;
 }
 
@@ -231,12 +266,19 @@
     color: #0f0808;
 }
 
+
+
 .fotos-row {
     display: flex;
     gap: 8px;
     margin-top: 8px;
     flex-wrap: wrap;
     align-items: center;
+}
+
+.Entrada de stock
+{
+    cursor: pointer;
 }
 
 .fotos-row .foto-box.agregar {
