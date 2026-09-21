@@ -172,6 +172,18 @@ export default function CheckoutPage() {
       return;
     }
 
+    // Descuenta el stock recién vendido antes de dar la compra por aprobada
+    // (la función valida que alcance el stock y aborta si no).
+    const { error: errorStock } = await supabase.rpc('descontar_inventario_pedido', {
+      p_id_pedido: pedido.ID_Pedido,
+    });
+
+    if (errorStock) {
+      setErrorCompra('No se pudo descontar el stock: ' + errorStock.message);
+      setProcesandoCompra(false);
+      return;
+    }
+
     const { error: errorPago } = await supabase.from('Transacciones_Pago').insert({
       ID_Pedido: pedido.ID_Pedido,
       Monto: subtotal,
