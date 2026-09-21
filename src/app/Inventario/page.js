@@ -103,6 +103,16 @@ function AdminInventario() {
             }
         }
     
+
+function IconoCamisa() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+      <path d="M8 3l-5 3 2 4 3-1v11h8V9l3 1 2-4-5-3a4 4 0 0 1-8 0z" />
+    </svg>
+  );
+}
+        
     //------------------- CARGA DE TALLAS DISPONIBLES AL ABRIR EL MODAL DE STOCK ----------------//
         useEffect(() => {
             if (modalAbierto === 'stock') {
