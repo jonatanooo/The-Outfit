@@ -78,6 +78,16 @@ export default function RegisterPage() {
     setForm({ ...form, [name]: type === 'checkbox' ? checked : value });
   };
 
+  // El DUI se guarda como "12345678-9": dejamos solo dígitos y metemos el
+  // guion nosotros después del 8vo, para que el usuario no tenga que tipearlo.
+  const handleChangeDui = (e) => {
+    const soloDigitos = e.target.value.replace(/\D/g, '').slice(0, 9);
+    const formateado = soloDigitos.length > 8
+      ? `${soloDigitos.slice(0, 8)}-${soloDigitos.slice(8)}`
+      : soloDigitos;
+    setForm((prev) => ({ ...prev, dui: formateado }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const nuevosErrores = {};
@@ -251,7 +261,8 @@ export default function RegisterPage() {
                   name="dui"
                   placeholder="12345678-9"
                   value={form.dui}
-                  onChange={handleChange}
+                  onChange={handleChangeDui}
+                  inputMode="numeric"
                   maxLength={10}
                   className="w-full h-11 border border-gray-300 rounded-sm px-4 text-base focus:outline-none focus:border-black"
                 />

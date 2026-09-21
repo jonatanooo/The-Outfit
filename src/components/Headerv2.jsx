@@ -2,6 +2,7 @@
 import './Headerv2.css'
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import PerfilPanel from './PerfilPanel';
 import Buscador from './Buscador';
@@ -19,11 +20,11 @@ function Headerv2 () {
     const router = useRouter();
     const sesionActiva = !!usuario
     const categorias = [
-        {id: 'mujer', 
-            label: 'MUJERES ', 
+        {id: 'mujer',
+            label: 'MUJERES ',
             href:'',
             subcategorias: [
-                {label: 'Ver Todo', href: ''},
+                {label: 'Ver Todo', href: '/productos'},
                 {label: 'Blusas', href: ''},
                 {label: 'Vestidos', href: ''},
                 {label: 'Pantalones', href: ''},
@@ -38,7 +39,7 @@ function Headerv2 () {
             label: 'HOMBRES',
             href:'',
             subcategorias: [
-                {label: 'Ver Todo', href: ''},
+                {label: 'Ver Todo', href: '/productos-hombre'},
                 {label: 'Camisas', href: ''},
                 {label: 'Camisetas', href: ''},
                 {label: 'Pantalones', href: ''},
@@ -261,9 +262,19 @@ function Headerv2 () {
                         // el ?. le dice a JS que si lo que esta antes de este punto es undefined o null, no siga intentano acceder a la propiedas, simplemente para ahi y devuelve undefined"
                         ?.subcategorias?.map((subcategoria) => (
                             <li key={subcategoria.label}>
-                                <a href={subcategoria.href} className="partsubca">
-                                    {subcategoria.label}
-                                </a>
+                                {subcategoria.href ? (
+                                    <Link
+                                        href={subcategoria.href}
+                                        className="partsubca"
+                                        onClick={() => { setCategoriaActiva(null); setMenuAbierto(false) }}
+                                    >
+                                        {subcategoria.label}
+                                    </Link>
+                                ) : (
+                                    <a href={subcategoria.href} className="partsubca">
+                                        {subcategoria.label}
+                                    </a>
+                                )}
                             </li>
                         ))}
                     </ul>
