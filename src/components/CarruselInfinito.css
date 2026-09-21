@@ -1,8 +1,9 @@
 .carrusel
 {
+    margin-top: 60px;
     width: 100%;
     /* vh es viewport heigh, 1vh=1% de la altura de la ventana del navegador, sin importar que este pasando con los padres */
-    height: 100vh;
+    height: calc(100vh - 60px);
     /* con el hidden nos dice que si algo sobresale de la caja se recorta */
     /* en este caso recorta segun lo valores que pusimos en width  y el vh del height */
     overflow: hidden;

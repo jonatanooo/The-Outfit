@@ -73,11 +73,18 @@ header nav
 {
     width: clamp(33px, 6vw, 50px);
     height: clamp(20px, 4vw, 35px);
-    background-color: black;
-    border-radius: 13%;
     padding: 4px 12px 4px 12px;
-    margin-left: 5px;
+    filter: brightness(0) invert(0);
 }
+
+.contenedor-carrito {
+    width: clamp(33px, 6vw, 50px);
+    height: clamp(20px, 4vw, 35px);
+    border-radius: 13%;
+    margin-left: 5px;
+    background-color: white;
+}
+
 
 .hearticon
 {
@@ -167,6 +174,15 @@ header.scrolled .Logo
 {
     color: black;
 }
+
+header.scrolled .contenedor-carrito {
+    background-color: black;
+}
+
+header.scrolled .carritoicon {
+    filter: brightness(0) invert(1);
+}
+
 
 /* MENU DESPEGABLE */
 /* estado oculto */
