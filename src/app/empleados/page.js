@@ -161,10 +161,6 @@ export default function EmpleadosPage() {
 
   return (
     <>
-      <p className="empleados-breadcrumb">
-        {modalAbierto === 'editar' ? 'Editar empleado' : 'Empleados'}
-      </p>
-
       <div className="admin-layout">
         <SidebarAdmin />
 
