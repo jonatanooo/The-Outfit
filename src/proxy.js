@@ -11,6 +11,7 @@ const RUTAS_PROTEGIDAS = [
   { prefijo: '/admin', rolPermitido: 'admin' },
   { prefijo: '/Inventario', rolPermitido: 'admin' },
   { prefijo: '/transacciones', rolPermitido: 'admin' },
+  { prefijo: '/reportes', rolPermitido: 'admin' },
   { prefijo: '/empleados', rolPermitido: 'admin' },
   { prefijo: '/empleado', rolPermitido: 'empleado' },
 ]
@@ -63,5 +64,5 @@ export async function proxy(request) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/Inventario/:path*', '/transacciones/:path*', '/empleados/:path*', '/empleado/:path*'],
+  matcher: ['/admin/:path*', '/Inventario/:path*', '/transacciones/:path*', '/reportes/:path*', '/empleados/:path*', '/empleado/:path*'],
 }
