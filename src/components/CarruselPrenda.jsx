@@ -94,7 +94,7 @@ function CarruselPrendas({ idGenero } = {}) {
               <div className="prenda-info">
                 <div>
                   <p className="prenda-nombre">{prenda.nombre}</p>
-                  {prenda.marca && <p className="prenda-marca">{prenda.marca}</p>}
+                  <p className="prenda-marca">{prenda.marca || '\u00A0'}</p>
                 </div>
                 <p className="prenda-precio">${prenda.precio.toFixed(2)}</p>
               </div>

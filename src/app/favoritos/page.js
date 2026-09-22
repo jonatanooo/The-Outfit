@@ -160,7 +160,7 @@ export default function FavoritosPage() {
                   <div className="favorito-info">
                     <div>
                       <p className="favorito-nombre">{item.nombre}</p>
-                      {item.marca && <p className="favorito-marca">{item.marca}</p>}
+                      <p className="favorito-marca">{item.marca || '\u00A0'}</p>
                       <p className="favorito-precio">${item.precio.toFixed(2)}</p>
                     </div>
                     <button

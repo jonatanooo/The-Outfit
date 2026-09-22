@@ -376,3 +376,10 @@
     .pedido-cards { grid-template-columns: 1fr; }
     .pedido-footer { grid-template-columns: 1fr; }
 }
+
+.stat-card.activo {
+    border: 2px solid black;
+}
+.stat-card.clickable:hover {
+    opacity: 0.8;
+}

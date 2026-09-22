@@ -7,14 +7,14 @@ import { supabase } from "@/lib/supabaseClient";
 import { useFavoritos } from "@/lib/useFavoritos";
 import "./ListadoPrendas.css";
 
-async function buscarProductosFiltrados(filtros = {}) {
+async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null) {
   const filtroCategorias = filtros.Categorias?.length > 0;
   const filtroColores = filtros.Colores?.length > 0;
   const filtroTallas = filtros.Tallas?.length > 0;
 
   //usamos !inner solo en las relaciones donde hay filtro activo
   // para no excluir productos que no tengan filtro aplicado en esa dimensión
-  const joinCategoria = filtroCategorias ? "Categorias_Producto!inner" : "Categorias_Producto";
+  const joinCategoria = (filtroCategorias || idCategoriaPadre) ? "Categorias_Producto!inner" : "Categorias_Producto";
   const joinVariante = (filtroColores || filtroTallas) ? "Variante_Producto!inner" : "Variante_Producto";
   const joinColor = filtroColores ? "Colores!inner" : "Colores";
   const joinTalla = filtroTallas ? "Talla!inner" : "Talla";
@@ -23,7 +23,7 @@ async function buscarProductosFiltrados(filtros = {}) {
   let query = supabase.from("Productos").select(`
     ID_Producto,
     Nombre_Producto,
-    ${joinCategoria} ( Nombre_Categoria ),
+    ${joinCategoria} ( Nombre_Categoria, ID_CategoriaPadre ),
     Marca ( Nombre_Marca ),
     ${joinVariante} (
       Precio_Actual,
@@ -34,6 +34,7 @@ async function buscarProductosFiltrados(filtros = {}) {
   `);
 
   if (filtroCategorias) query = query.in("Categorias_Producto.Nombre_Categoria", filtros.Categorias);
+  // JS fallback filter below to handle direct categories
   if (filtroColores) query = query.in("Variante_Producto.Colores.Nombre_Color", filtros.Colores);
   if (filtroTallas) query = query.in("Variante_Producto.Talla.Tipos_Talla.Nombre_TipoTalla", filtros.Tallas);
 
@@ -47,6 +48,10 @@ async function buscarProductosFiltrados(filtros = {}) {
   // un producto puede repetirse si matchea con varias variantes -> dedupe
   const vistos = new Map();
   for (const producto of data) {
+    if (idCategoriaPadre) {
+      const idGenero = producto.Categorias_Producto?.ID_CategoriaPadre ?? producto.ID_Categoria ?? null;
+      if (idGenero !== idCategoriaPadre) continue;
+    }
     if (!vistos.has(producto.ID_Producto)) {
       const precios = producto.Variante_Producto?.map((v) => v.Precio_Actual) ?? [];
       // La imagen principal es la 4ta foto cargada (índice 3, 0-based); si el
@@ -72,7 +77,7 @@ async function buscarProductosFiltrados(filtros = {}) {
 }
 
 // funcion que carga el listado de productos reales desde Supabase, filtrado
-function ListadoPrendas({ filtros, onResultados }) {
+function ListadoPrendas({ filtros, onResultados, idCategoriaPadre }) {
   const [prendas, setPrendas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const { esFavorito, alternarFavorito } = useFavoritos();
@@ -82,7 +87,7 @@ function ListadoPrendas({ filtros, onResultados }) {
 
     async function cargar() {
       setCargando(true);
-      const data = await buscarProductosFiltrados(filtros);
+      const data = await buscarProductosFiltrados(filtros, idCategoriaPadre);
       if (!activo) return;
       setPrendas(data);
       setCargando(false);
@@ -148,7 +153,7 @@ function ListadoPrendas({ filtros, onResultados }) {
               <div className="prenda-info">
                 <div>
                   <p className="prenda-nombre">{prenda.nombre}</p>
-                  <p className="prenda-marca">{prenda.marca}</p>
+                  <p className="prenda-marca">{prenda.marca || '\u00A0'}</p>
                 </div>
                 <p className="prenda-precio">${prenda.precio != null ? prenda.precio.toFixed(2) : "0.00"}</p>
               </div>

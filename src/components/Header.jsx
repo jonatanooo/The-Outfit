@@ -262,13 +262,9 @@ function Header ({ siempreSolido = false }) {
                     
                     {/* 🔓 BOTÓN CERRAR SESION / INICIAR SESION */}
                     <div className="logout-container">
-                        {sesionActiva ? (
-                            <button className="logout" onClick={handleCerrarSesion}>
-                                CERRAR SESIÓN <img src="/ICONOS/logout.png" alt="" className="logouticon"/>
-                            </button>
-                        ) : (
+                        {!sesionActiva && (
                             <a className="logout" href="/login">
-                                INICIAR SESIÓN
+                                INICIAR SESI�N
                             </a>
                         )}
                     </div>

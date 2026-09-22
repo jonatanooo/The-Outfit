@@ -198,6 +198,15 @@ function Headerv2 () {
                     >
                         <img src="/ICONOS/Search.png" alt="Buscar" className="searchicon"/>
                     </button>
+                {/* En el proyecto solo hay 2 roles con panel propio: admin y empleado.
+                    Este acceso rapido solo se muestra para admin (empleado ya tiene su
+                    propio panel en /empleado). */}
+                {usuario?.app_metadata?.rol === 'admin' && (
+                    <Link href="/Inventario" className="btn-admin">
+                        ADMIN
+                    </Link>
+                )}
+
 
                 <button
                     type="button"
@@ -227,7 +236,7 @@ function Headerv2 () {
                 <div className="exitbuttondiv" onClick={() => setMenuAbierto(false)}>
                     <a><img src="/ICONOS/EXIT.png" alt="salir" className="exitbutton"/></a>
                 </div>
-                <div>
+                <div className="menu-contenido">
                     <ul>
                         {/* de la constante categoria creo un map con una variable inventada 'categoria', en el cual con ella pondria los atributos como id etc */}
                         {categorias.map((categoria) => (
@@ -247,14 +256,10 @@ function Headerv2 () {
                         <li className="part3">CONTACTANOS</li>
                         <li><a href="" className="partinfo">+503 2261-3004</a></li>
                     </ul>
-                    <div>
-                        {sesionActiva ? (
-                            <button className="logout" onClick={handleCerrarSesion}>
-                                CERRAR SESIÓN <img src="/ICONOS/logout.png" alt="" className="logouticon"/>
-                            </button>
-                        ) : (
+                    <div className="logout-container">
+                        {!sesionActiva && (
                             <a className="logout" href="/login">
-                                INICIAR SESIÓN
+                                INICIAR SESI�N
                             </a>
                         )}
                     </div>
