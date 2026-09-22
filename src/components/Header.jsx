@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import PerfilPanel from './PerfilPanel';
 import Buscador from './Buscador';
+import { useCarrito } from '@/lib/CarritoContext';
 
 function Header ({ siempreSolido = false }) {
     // comentario Jona
@@ -13,6 +14,7 @@ function Header ({ siempreSolido = false }) {
     // menuAbierto reemplaza la clase .abierto del menu
     const [scrolled, setScrolled] = useState(false)
     const [menuAbierto, setMenuAbierto] = useState(false)
+    const { totalItems } = useCarrito();
     const router = useRouter();
     const [categorias, setCategorias] = useState([
         {id: 'mujer', label: 'MUJERES ', href: '', subcategorias: [{label: 'Ver Todo', href: '/productos'}]},
@@ -218,12 +220,14 @@ function Header ({ siempreSolido = false }) {
                     <img src="/ICONOS/Person.png" alt="Perfil" className="profileicon"/>
                 </button>
 
-                <a href="/favoritos">
+                <a href="/favoritos" className="contenedor-favoritos">
                     <img src="/ICONOS/Heart.png" alt="Favoritos" className="hearticon"/>
+                    
                 </a>
 
                 <a href="/carrito" className='contenedor-carrito'>
                     <img src="/ICONOS/Shopping Cart.png" alt="Carrito" className="carritoicon"/>
+                    {totalItems > 0 && <span className="nav-badge">{totalItems}</span>}
                 </a>
 
                 </div>

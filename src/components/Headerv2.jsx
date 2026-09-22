@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import PerfilPanel from './PerfilPanel';
 import Buscador from './Buscador';
+import { useCarrito } from '@/lib/CarritoContext';
 
 function Headerv2 () {
     // comentario Jona
@@ -13,6 +14,7 @@ function Headerv2 () {
     // menuAbierto reemplaza la clase .abierto del menu
     const [scrolled, setScrolled] = useState(false)
     const [menuAbierto, setMenuAbierto] = useState(false)
+    const { totalItems } = useCarrito();
     const [buscadorAbierto, setBuscadorAbierto] = useState(false)
     const [usuario, setUsuario] = useState(null)
     const [perfilAbierto, setPerfilAbierto] = useState(false)
