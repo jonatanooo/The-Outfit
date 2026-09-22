@@ -34,8 +34,8 @@
 
 .favicon
 {
-    width: 3em;
-    height: 3em;
+    width: 2em;
+    height: 2em;
 }
 
 .prenda-info
@@ -51,7 +51,8 @@
     font-weight: 400;
     font-size: clamp(1rem, 1vw, 2rem);
     /* si algun dia da problemas cambiarlo */
-    height: 1em;
+    height: auto;
+    min-height: 2.5em;
 }
 
 .prenda-marca
@@ -61,7 +62,8 @@
     font-size: clamp(1rem, 1vw, 1.2rem);
     opacity: 70%;
     /* si algun dia da problemas cambiarlo */
-    height: 1em;
+    height: auto;
+    min-height: 1.5em;
 }
 
 .prenda-precio
@@ -71,7 +73,8 @@
     font-size: clamp(1rem, 1vw, 2rem);
     margin: 0;
     /* si algun dia da problemas cambiarlo */
-    height: 1em;
+    height: auto;
+    min-height: 1.5em;
 }
 
 .seccion-listado {

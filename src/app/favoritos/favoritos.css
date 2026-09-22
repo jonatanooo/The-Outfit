@@ -1,27 +1,25 @@
 .favoritos-main {
-    background: #f2f2f2;
-    min-height: 70vh;
-    padding: 100px 2em 4em;
+    background: #fff;
+    min-height: 100vh;
+    padding: 120px 4em 4em;
 }
 
 .favoritos-breadcrumb {
-    max-width: 1100px;
-    margin: 0 auto 0.8em;
-    color: #8a8a8a;
-    font-size: 0.9rem;
+    display: none;
 }
 
 .favoritos-box {
-    max-width: 1100px;
-    margin: 0 auto;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
     background: #fff;
-    border-radius: 10px;
-    padding: 2em 2.5em 2.5em;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
 }
 
 .favoritos-titulo {
-    font-size: 1.1rem;
+    font-size: 1.5rem;
     font-weight: 700;
     letter-spacing: 0.05em;
     margin-bottom: 1.8em;
@@ -30,12 +28,12 @@
 .favoritos-vacio {
     color: #777;
     text-align: center;
-    padding: 2em 0;
+    padding: 4em 0;
 }
 
 .favoritos-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 2em;
 }
 
@@ -119,18 +117,142 @@
     cursor: not-allowed;
 }
 
+@media (max-width: 1200px) {
+    .favoritos-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
 @media (max-width: 900px) {
+    .favoritos-main {
+        padding: 110px 2em 4em;
+    }
+    
     .favoritos-grid {
         grid-template-columns: repeat(2, 1fr);
     }
 }
 
 @media (max-width: 560px) {
-    .favoritos-box {
-        padding: 1.5em 1.2em 2em;
+    .favoritos-main {
+        padding: 100px 1.5em 3em;
     }
 
     .favoritos-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* Modal de Tallas */
+.modal-tallas-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.modal-tallas-content {
+    background: #fff;
+    padding: 2.5em;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 400px;
+    position: relative;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.modal-tallas-close {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #555;
+}
+
+.modal-tallas-titulo {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5em;
+}
+
+.modal-tallas-nombre {
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 1.5em;
+}
+
+.modal-tallas-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8em;
+    justify-content: center;
+    margin-bottom: 2em;
+}
+
+.modal-talla-btn {
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 0.4em 1em;
+    background-color: transparent;
+    cursor: pointer;
+    transition: border 0.2s ease, opacity 0.2s ease;
+}
+
+.modal-talla-disponible {
+    opacity: 1;
+}
+
+.modal-talla-agotada {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+    text-decoration: line-through;
+}
+
+.modal-talla-seleccionada {
+    border: 1px solid black;
+}
+
+.modal-tallas-ok {
+    width: 100%;
+    height: 2.8em;
+    background: #000;
+    color: #fff;
+    border: none;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.modal-tallas-ok:hover {
+    background: #333;
+}
+
+.modal-tallas-ok:disabled {
+    background: #bbb;
+    cursor: not-allowed;
+}
+
+.favorito-marca {
+    font-family: "DM Sans", sans-serif;
+    font-size: 0.9rem;
+    opacity: 0.7;
+    margin: 0.2em 0;
 }

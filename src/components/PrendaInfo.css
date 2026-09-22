@@ -73,3 +73,129 @@
 {
     margin-bottom: 1em;
 }
+
+/* Botón flotante para expandir imagen */
+.btn-expandir-img {
+    position: absolute;
+    bottom: 25px;
+    right: 25px;
+    background: rgba(255, 255, 255, 0.85);
+    border: none;
+    border-radius: 50%;
+    width: 45px;
+    height: 45px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    transition: transform 0.2s, background 0.2s;
+    color: #111;
+}
+
+.btn-expandir-img:hover {
+    transform: scale(1.1);
+    background: #fff;
+}
+
+/* Modal Visor de Imágenes */
+.visor-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+}
+
+.visor-content {
+    position: relative;
+    width: 90%;
+    max-width: 900px;
+    height: 85vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.visor-close {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 2.5rem;
+    cursor: pointer;
+    z-index: 10;
+    padding: 10px;
+}
+
+.visor-close:hover {
+    color: #ccc;
+}
+
+.visor-carrusel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.visor-img-principal {
+    max-width: 85%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
+    margin: 0 auto;
+}
+
+.visor-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: background 0.3s;
+    flex-shrink: 0;
+}
+
+.visor-btn:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.visor-btn img {
+    width: 16px;
+    height: 26px;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+}
+
+.visor-indicadores {
+    display: flex;
+    gap: 8px;
+    margin-top: 15px;
+}
+
+.visor-punto {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4);
+    transition: background 0.3s;
+}
+
+.visor-punto.activo {
+    background: white;
+}

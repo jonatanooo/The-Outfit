@@ -33,7 +33,27 @@ function CarruselPrendas({ idGenero } = {}) {
   };
 
   if (cargando) {
-    return <p>Cargando recomendaciones...</p>;
+    return (
+      <div className="carrusel-wrap">
+        <button disabled className="buttons-move-card" style={{ opacity: 0.5 }}>
+          <img src="/ICONOS/previous.png" alt="" />
+        </button>
+        <div className="carrusel-fila">
+          {[1, 2, 3].map((i) => (
+            <div className="prenda-card" key={i} style={{ width: '280px' }}>
+              <div className="prenda-imagen-wrap skeleton" />
+              <div className="prenda-info">
+                <div className="skeleton skeleton-title" />
+                <div className="skeleton skeleton-price" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <button disabled className="buttons-move-card" style={{ opacity: 0.5 }}>
+          <img src="/ICONOS/next.png" alt="" />
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -72,7 +92,10 @@ function CarruselPrendas({ idGenero } = {}) {
               </div>
 
               <div className="prenda-info">
-                <p className="prenda-nombre">{prenda.nombre}</p>
+                <div>
+                  <p className="prenda-nombre">{prenda.nombre}</p>
+                  {prenda.marca && <p className="prenda-marca">{prenda.marca}</p>}
+                </div>
                 <p className="prenda-precio">${prenda.precio.toFixed(2)}</p>
               </div>
             </div>

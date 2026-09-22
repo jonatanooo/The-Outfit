@@ -101,6 +101,17 @@ function ListadoPrendas({ filtros, onResultados }) {
     );
   }
 
+  if (prendas.length === 0) {
+    return (
+      <div className="seccion-listado">
+        <div style={{ textAlign: "center", padding: "80px 20px", color: "#666" }}>
+          <h2>De momento no hay prendas disponibles</h2>
+          <p style={{ marginTop: "10px" }}>Intenta buscar otra subcategoría o quitar algunos filtros.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="seccion-listado">
       <div className="listado-grid">

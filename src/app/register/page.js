@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import Footer from '@/components/Footer';
 
 /* ---------- Iconos de redes sociales  */
 const IconInstagram = (props) => (
@@ -331,46 +332,7 @@ export default function RegisterPage() {
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 bg-white px-6 sm:px-10 md:px-20 py-8">
-        <div className="flex flex-col md:flex-row justify-between gap-8 max-w-6xl mx-auto text-xs text-gray-700">
-          <div className="md:w-1/4">
-            <p className="font-serif text-lg mb-3 text-black">The Outfit</p>
-            <div className="flex gap-4">
-              <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-60 transition">
-                <IconInstagram className="w-5 h-5" />
-              </a>
-              <a href="https://tiktok.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-60 transition">
-                <IconTiktok className="w-5 h-5" />
-              </a>
-              <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-60 transition">
-                <IconYoutube className="w-5 h-5" />
-              </a>
-              <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-60 transition">
-                <IconFacebook className="w-5 h-5" />
-              </a>
-            </div>
-          </div>
-
-          <div className="md:w-1/4">
-            <p className="font-bold uppercase tracking-wider mb-2 text-black">Ayuda</p>
-            <Link href="/pagos" className="block mb-1 hover:underline cursor-pointer">Pagos</Link>
-            <Link href="/devoluciones" className="block mb-1 hover:underline cursor-pointer">Devoluciones</Link>
-            <Link href="/envios" className="block hover:underline cursor-pointer">Envíos</Link>
-          </div>
-
-          <div className="md:w-1/4">
-            <p className="font-bold uppercase tracking-wider mb-2 text-black">Sobre Nosotros</p>
-            <Link href="/historia" className="block mb-1 hover:underline cursor-pointer">Historia</Link>
-            <Link href="/ubicacion" className="block hover:underline cursor-pointer">Ubicación</Link>
-          </div>
-
-          <div className="md:w-1/4">
-            <p className="font-bold uppercase tracking-wider mb-2 text-black">Recomendaciones</p>
-            <Link href="/verano" className="block mb-1 hover:underline cursor-pointer">Temporada de Verano</Link>
-            <Link href="/ofertas" className="block hover:underline cursor-pointer">Ofertas Agosto</Link>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

@@ -20,16 +20,37 @@ function CarruselInfinito({ idProducto }) {
         setTallaSeleccionada(null);
     }, [idProducto]);
 
-    // Si la prenda solo viene en una talla y hay stock, se preselecciona sola.
-    useEffect(() => {
-        if (tallas.length === 1 && tallas[0].disponible) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect -- deriva la seleccion del array tallas ya cargado, no hay nada async que envolver.
-            setTallaSeleccionada(tallas[0].idVariante);
-        }
-    }, [tallas]);
-
-    if (cargando) {
-        return <main><p className="cargando-prenda">Cargando...</p></main>;
+        if (cargando) {
+        return (
+            <main>
+                <section className="carrusel">
+                    <div className="carruselfotos">
+                        {[1, 2].map(i => (
+                            <div className="fotocarru skeleton" key={i} />
+                        ))}
+                    </div>
+                    <div className="panelprecios" style={{ backgroundColor: 'transparent', backdropFilter: 'none' }}>
+                        <div className="infosuperior">
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5em', flex: 1 }}>
+                                <div className="skeleton skeleton-text" style={{ width: '80%', height: '1.5em' }} />
+                                <div className="skeleton skeleton-text" style={{ width: '40%' }} />
+                            </div>
+                            <div className="skeleton skeleton-text" style={{ width: '20%', height: '1.5em', margin: '0 1em' }} />
+                            <div className="skeleton" style={{ width: '24px', height: '24px', borderRadius: '50%' }} />
+                        </div>
+                        <div className="skeleton skeleton-text" style={{ width: '30%', marginTop: '1em', marginLeft: '0.7em' }} />
+                        <hr className="divisor" />
+                        <div className="tallas">
+                            <div className="skeleton skeleton-text" style={{ width: '20%' }} />
+                            <div className="listatallas" style={{ display: 'flex', gap: '1em' }}>
+                                {[1, 2, 3, 4].map(i => <div key={i} className="skeleton" style={{ width: '4em', height: '4em', borderRadius: '4px' }} />)}
+                            </div>
+                        </div>
+                        <div className="skeleton" style={{ width: '90%', height: '4em', marginTop: '3em', marginInline: 'auto', borderRadius: '0' }} />
+                    </div>
+                </section>
+            </main>
+        );
     }
 
     if (!producto) {
@@ -61,7 +82,10 @@ function CarruselInfinito({ idProducto }) {
 
                 <div className="panelprecios">
                     <div className="infosuperior">
-                        <h3>{producto.nombre}</h3>
+                        <div style={{ textAlign: 'left' }}>
+                            <h3 style={{ margin: 0 }}>{producto.nombre}</h3>
+                            {producto.marca && <span className="marca" style={{ display: 'block', marginTop: '0.2em' }}>{producto.marca}</span>}
+                        </div>
                         <span className="precio">${producto.precio.toFixed(2)}</span>
                         <button
                             type="button"
@@ -116,6 +140,7 @@ function CarruselInfinito({ idProducto }) {
                                 idVariante: talla.idVariante,
                                 idProducto: producto.id,
                                 nombre: producto.nombre,
+                                marca: producto.marca,
                                 talla: talla.nombre,
                                 precio: talla.precio || producto.precio,
                                 imagen: producto.imagen,
@@ -124,7 +149,7 @@ function CarruselInfinito({ idProducto }) {
                             alert(`Se agregó "${producto.nombre}" (talla ${talla.nombre}) a la cesta.`);
                         }}
                     >
-                        {tallas.length > 1 && !tallaSeleccionada ? 'ELEGÍ UNA TALLA' : 'AÑADIR A LA CESTA'}
+                        {!tallaSeleccionada ? 'ELIGE UNA TALLA' : 'AÑADIR A LA CESTA'}
                     </button>
 
                     <p className="disponibilidad">
