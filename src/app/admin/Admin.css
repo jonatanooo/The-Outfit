@@ -1,7 +1,8 @@
 .admin-layout {
     display: flex;
     min-height: 100vh;
-    background-color: #f5f5f5;
+    background-color: #e4e0de;
+    width: 100%;
 }
 
 .admin-main {
@@ -11,23 +12,62 @@
     overflow-x: hidden;
 }
 
-.admin-bienvenida {
-    padding: 40px;
-    margin-top: 20px;
-}
-
-.admin-bienvenida h2 {
-    font-family: "Instrument Serif", serif;
-    font-weight: 400;
-    font-size: 1.6rem;
-    color: #111;
-    margin-bottom: 12px;
-}
-
-.admin-bienvenida p {
+.admin-configuracion {
+    background-color: rgb(253, 252, 252);
+    padding: 32px 40px;
+    margin: 32px 40px;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     font-family: "DM Sans", sans-serif;
-    font-size: 0.95rem;
-    color: #555;
-    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
     max-width: 600px;
+}
+
+.config-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 16px;
+}
+
+.config-header h2 {
+    font-weight: 600;
+    font-size: 1.5rem;
+    color: #0f0808;
+    margin: 0;
+}
+
+.config-header img {
+    width: 28px;
+    height: 28px;
+    opacity: 0.8;
+}
+
+.config-datos {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.dato-grupo {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dato-label {
+    font-size: 0.85rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.dato-valor {
+    font-size: 1.1rem;
+    color: #111;
+    font-weight: 500;
 }

@@ -228,6 +228,36 @@ function IconoCamisa() {
      
     }
 
+    // Activa o desactiva un producto (variante)
+    async function alternarEstadoProducto(v) {
+        const nuevoEstado = v.ID_EstadoProducto === 2 ? 1 : 2;
+        
+        // 1. Actualizar el estado de la variante
+        const { error: errorVariante } = await supabase
+            .from('Variante_Producto')
+            .update({ ID_EstadoProducto: nuevoEstado })
+            .eq('ID_Variante', v.ID_Variante);
+
+        // 2. Actualizar el estado del producto padre para que se oculte del feed general
+        const { error: errorProducto } = await supabase
+            .from('Productos')
+            .update({ ID_EstadoProducto: nuevoEstado })
+            .eq('ID_Producto', v.ID_Producto);
+
+        if (!errorVariante && !errorProducto) {
+            setVariantes((prev) => 
+                prev.map((item) => 
+                    item.ID_Variante === v.ID_Variante 
+                        ? { ...item, ID_EstadoProducto: nuevoEstado } 
+                        : item
+                )
+            );
+        } else {
+            console.error('Error al cambiar el estado del producto:', errorVariante?.message || errorProducto?.message);
+            alert('Hubo un error al intentar cambiar el estado del producto.');
+        }
+    }
+
     // Manejo de nuevas fotos dentro del modal de edición
     function manejarSeleccionFotosEditar(event) {
         const archivos = Array.from(event.target.files);
@@ -410,61 +440,118 @@ function IconoCamisa() {
             const idInventario = varianteStock.Inventario?.[0]?.ID_Inventario;
             const stockActual = varianteStock.Inventario?.[0]?.Cantidad_Disponible ?? 0;
             const cant = parseInt(cantidadIngresar, 10) || 0;
-            const nuevoStock = tipoMovimiento === 'entrada' ? stockActual + cant : stockActual - cant;
+            let nuevoStock = tipoMovimiento === 'entrada' ? stockActual + cant : stockActual - cant;
 
             if (!idInventario) {
                 console.log('❌ No se encontró el registro de inventario');
                 return;
             }
 
-            // 1. Resolver la talla (si cambio)
+            // 1. Resolver la talla final
             let idTallaFinal = varianteStock.Talla?.ID_Talla;
             const idTipoTallaActual = varianteStock.Talla?.Tipos_Talla?.ID_TipoTalla;
+            
+            const tallaCambio = tipoTallaSeleccionada && Number(tipoTallaSeleccionada) !== idTipoTallaActual;
+            const colorCambio = colorSeleccionado && Number(colorSeleccionado) !== (varianteStock.Colores?.ID_Color || null);
 
-            if (tipoTallaSeleccionada && Number(tipoTallaSeleccionada) !== idTipoTallaActual) {
-                const { data: tallaExistente } = await supabase
-                    .from('Talla')
-                    .select('ID_Talla')
-                    .eq('ID_TipoTalla', tipoTallaSeleccionada)
-                    .limit(1)
+            let idVarianteObjetivo = varianteStock.ID_Variante;
+            let idInventarioObjetivo = idInventario;
+
+            if (tallaCambio || colorCambio) {
+                // Si cambiaron la talla o el color, buscamos si ya existe una variante con esos datos
+                let idNuevaTalla = null;
+                
+                if (tipoTallaSeleccionada) {
+                    const { data: tallaExistente } = await supabase
+                        .from('Talla')
+                        .select('ID_Talla')
+                        .eq('ID_TipoTalla', tipoTallaSeleccionada)
+                        .limit(1)
+                        .maybeSingle();
+
+                    idNuevaTalla = tallaExistente?.ID_Talla;
+
+                    if (!idNuevaTalla) {
+                        const { data: nuevaTalla, error: errorTalla } = await supabase
+                            .from('Talla')
+                            .insert({ ID_TipoTalla: tipoTallaSeleccionada })
+                            .select()
+                            .single();
+
+                        if (errorTalla) {
+                            console.log('❌ Error creando talla:', errorTalla.message);
+                            setGuardandoStock(false);
+                            return;
+                        }
+                        idNuevaTalla = nuevaTalla.ID_Talla;
+                    }
+                }
+
+                const idColorFinal = colorSeleccionado || null;
+
+                // Buscar variante existente con misma talla y color
+                const { data: varExistente } = await supabase
+                    .from('Variante_Producto')
+                    .select('ID_Variante, Inventario(ID_Inventario, Cantidad_Disponible)')
+                    .eq('ID_Producto', varianteStock.ID_Producto)
+                    .eq(idNuevaTalla ? 'ID_Talla' : 'ID_Talla', idNuevaTalla)
+                    .eq(idColorFinal ? 'ID_Color' : 'ID_Color', idColorFinal)
                     .maybeSingle();
 
-                idTallaFinal = tallaExistente?.ID_Talla;
-
-                if (!idTallaFinal) {
-                    const { data: nuevaTalla, error: errorTalla } = await supabase
-                        .from('Talla')
-                        .insert({ ID_TipoTalla: tipoTallaSeleccionada })
+                if (varExistente && varExistente.ID_Variante !== varianteStock.ID_Variante) {
+                    idVarianteObjetivo = varExistente.ID_Variante;
+                    idInventarioObjetivo = varExistente.Inventario?.[0]?.ID_Inventario;
+                    // Ajustar el calculo del nuevo stock sobre la variante existente
+                    const stockBase = varExistente.Inventario?.[0]?.Cantidad_Disponible ?? 0;
+                    nuevoStock = tipoMovimiento === 'entrada' ? stockBase + cant : stockBase - cant;
+                } else if (!varExistente) {
+                    // Crear nueva variante
+                    const { data: nuevaVar, error: errVar } = await supabase
+                        .from('Variante_Producto')
+                        .insert({
+                            ID_Producto: varianteStock.ID_Producto,
+                            ID_Talla: idNuevaTalla,
+                            ID_Color: idColorFinal,
+                            Precio_Actual: varianteStock.Precio_Actual,
+                            ID_EstadoProducto: 1
+                        })
                         .select()
                         .single();
 
-                    if (errorTalla) {
-                        console.log('❌ Error creando talla:', errorTalla.message);
+                    if (errVar) {
+                        console.log('❌ Error creando variante:', errVar.message);
+                        setGuardandoStock(false);
                         return;
                     }
-                    idTallaFinal = nuevaTalla.ID_Talla;
+                    idVarianteObjetivo = nuevaVar.ID_Variante;
+
+                    // Crear inventario para la nueva variante
+                    const { data: nuevoInv, error: errInv } = await supabase
+                        .from('Inventario')
+                        .insert({
+                            ID_Variante: idVarianteObjetivo,
+                            Cantidad_Disponible: cant // Como es nueva, el stock es directamente la cantidad
+                        })
+                        .select()
+                        .single();
+                        
+                    if (errInv) {
+                        console.log('❌ Error creando inventario:', errInv.message);
+                        setGuardandoStock(false);
+                        return;
+                    }
+                    idInventarioObjetivo = nuevoInv.ID_Inventario;
+                    nuevoStock = cant;
                 }
             }
 
-            // 2. Actualizar Talla y Color juntos en la Variante
-            const { error: errorVariante } = await supabase
-                .from('Variante_Producto')
-                .update({
-                    ID_Talla: idTallaFinal || null,
-                    ID_Color: colorSeleccionado || null,
-                })
-                .eq('ID_Variante', varianteStock.ID_Variante);
-
-            if (errorVariante) {
-                console.log('❌ Error actualizando variante:', errorVariante.message);
-                return;
-            }
-
             // 3. Actualizar el stock
-            await supabase
-                .from('Inventario')
-                .update({ Cantidad_Disponible: nuevoStock, Fecha_Actualizacion: new Date().toISOString() })
-                .eq('ID_Inventario', idInventario);
+            if (idInventarioObjetivo) {
+                await supabase
+                    .from('Inventario')
+                    .update({ Cantidad_Disponible: nuevoStock, Fecha_Actualizacion: new Date().toISOString() })
+                    .eq('ID_Inventario', idInventarioObjetivo);
+            }
 
             setModalAbierto(null);
             cargarVariantes();
@@ -835,12 +922,13 @@ function IconoCamisa() {
                         <thead>
                             <tr>
                                 <th>ID</th>
-                                <th>Producto</th><
-                                    th>Precio</th>
-                                    <th>Stock</th>
-                                    <th>Talla</th>
-                                    <th>Color</th>
-                                    <th>Marca</th>
+                                <th>Producto</th>
+                                <th>Precio</th>
+                                <th>Stock</th>
+                                <th>Talla</th>
+                                <th>Color</th>
+                                <th>Marca</th>
+                                <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -881,17 +969,17 @@ function IconoCamisa() {
                         type="button" 
                         title="Entrada de stock" 
                         onClick={() => abrirModalStock(v)}
-                        style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '1.1rem' }}
+                        style={{ cursor: 'pointer', background: 'none', border: 'none', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     >
-                        📦
+                        <img src="/ICONOS/Box.png" alt="Agregar stock" width={24} height={24} />
                     </button>
                     <button 
                         type="button" 
                         title="Editar producto" 
                         onClick={() => abrirModalEditar(v)}
-                        style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '1.1rem' }}
+                        style={{ cursor: 'pointer', background: 'none', border: 'none', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     >
-                        ✏️
+                        <img src="/ICONOS/PENCIL.png" alt="Editar producto" width={24} height={24} />
                     </button>
                     <button 
                         type="button" 

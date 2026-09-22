@@ -41,11 +41,10 @@ export default function EmpleadosPage() {
     const { data, error } = await supabase
       .from('User')
       .select('ID_User, Nombres, Apellidos, DUI, Correo, Puesto, ID_EstadoUsuario, Fecha_Incorporacion')
-      .eq('Es_Empleado', true)
       .order('ID_User');
 
     if (error) {
-      console.error('Error cargando empleados:', error.message);
+      console.error('Error cargando usuarios:', error.message);
       setEmpleados([]);
     } else {
       setEmpleados(data ?? []);
@@ -66,11 +65,11 @@ export default function EmpleadosPage() {
   function abrirEditar(emp) {
     setEmpleadoEditando(emp);
     setForm({
-      nombres: emp.Nombres || '',
-      apellidos: emp.Apellidos || '',
-      correo: emp.Correo || '',
-      dui: emp.DUI || '',
-      puesto: emp.Puesto || 'Empleado',
+      nombres: emp.Nombres ?? '',
+      apellidos: emp.Apellidos ?? '',
+      correo: emp.Correo ?? '',
+      dui: emp.DUI ?? '',
+      puesto: emp.Puesto ?? 'Empleado',
     });
     setErrorForm('');
     setModalAbierto('editar');
@@ -79,12 +78,20 @@ export default function EmpleadosPage() {
   function cerrarModal() {
     setModalAbierto(null);
     setEmpleadoEditando(null);
+    setErrorForm('');
   }
 
   function validarForm() {
-    if (!form.nombres.trim() || !form.apellidos.trim()) return 'Nombres y apellidos son obligatorios.';
-    if (!form.correo.trim() || !/\S+@\S+\.\S+/.test(form.correo)) return 'Correo inválido.';
-    if (!/^\d{8}-\d$/.test(form.dui)) return 'DUI inválido, formato 12345678-9.';
+    if (!form.nombres.trim() || !form.apellidos.trim() || !form.correo.trim() || !form.dui.trim()) {
+      return 'Todos los campos son obligatorios.';
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.correo)) {
+      return 'El correo no es válido.';
+    }
+    if (form.dui.length !== 10) {
+      return 'El DUI debe tener 10 caracteres (ej. 12345678-9).';
+    }
     return '';
   }
 
@@ -93,21 +100,35 @@ export default function EmpleadosPage() {
     if (error) { setErrorForm(error); return; }
 
     setGuardando(true);
+    
+    // Check DUI
+    const { data: duiRepetido } = await supabase
+      .from('User')
+      .select('ID_User')
+      .eq('DUI', form.dui)
+      .maybeSingle();
+
+    if (duiRepetido) {
+      setErrorForm('Ese DUI ya está registrado para otro usuario.');
+      setGuardando(false);
+      return;
+    }
+
     const { error: errorInsert } = await supabase.from('User').insert({
       Nombres: form.nombres.trim(),
       Apellidos: form.apellidos.trim(),
       Correo: form.correo.trim(),
       Usuario: `${form.nombres.trim()} ${form.apellidos.trim()}`,
+      Contrasena: '12345',
       DUI: form.dui,
       Puesto: form.puesto,
-      Es_Empleado: true,
       ID_EstadoUsuario: 1,
-      Fecha_Incorporacion: new Date().toISOString(),
+      Es_Empleado: true
     });
     setGuardando(false);
 
     if (errorInsert) {
-      setErrorForm('No se pudo agregar: ' + errorInsert.message);
+      setErrorForm('No se pudo crear: ' + errorInsert.message);
       return;
     }
     cerrarModal();
@@ -119,6 +140,21 @@ export default function EmpleadosPage() {
     if (error) { setErrorForm(error); return; }
 
     setGuardando(true);
+
+    if (form.dui !== empleadoEditando.DUI) {
+      const { data: duiRepetido } = await supabase
+        .from('User')
+        .select('ID_User')
+        .eq('DUI', form.dui)
+        .maybeSingle();
+
+      if (duiRepetido) {
+        setErrorForm('No se puede actualizar. Ese DUI ya está registrado para otro usuario.');
+        setGuardando(false);
+        return;
+      }
+    }
+
     const { error: errorUpdate } = await supabase
       .from('User')
       .update({
@@ -130,12 +166,33 @@ export default function EmpleadosPage() {
         Puesto: form.puesto,
       })
       .eq('ID_User', empleadoEditando.ID_User);
-    setGuardando(false);
 
     if (errorUpdate) {
       setErrorForm('No se pudo guardar: ' + errorUpdate.message);
+      setGuardando(false);
       return;
     }
+
+    // Insertar en tabla de auditoría (intentar con diferentes nombres comunes por si acaso, o Auditoria genérica)
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const adminEmail = authData?.user?.email || 'Admin Desconocido';
+      
+      const datosAnteriores = `Nombre: ${empleadoEditando.Nombres} ${empleadoEditando.Apellidos}, DUI: ${empleadoEditando.DUI}, Puesto: ${empleadoEditando.Puesto}`;
+      const datosNuevos = `Nombre: ${form.nombres} ${form.apellidos}, DUI: ${form.dui}, Puesto: ${form.puesto}`;
+
+      // Insert general en Auditoria (ajusta el nombre de tabla y columnas según tu base de datos)
+      await supabase.from('Auditoria').insert({
+        Usuario_Admin: adminEmail,
+        Accion: 'Edición de Usuario',
+        Dato_Anterior: datosAnteriores,
+        Dato_Nuevo: datosNuevos
+      });
+    } catch (err) {
+      console.log('No se pudo guardar en auditoría:', err);
+    }
+
+    setGuardando(false);
     cerrarModal();
     cargarEmpleados();
   }
@@ -146,6 +203,14 @@ export default function EmpleadosPage() {
     const nombre = `${emp.Nombres ?? ''} ${emp.Apellidos ?? ''}`.trim() || `#${emp.ID_User}`;
 
     if (!confirm(`¿Seguro que deseas ${accion} a ${nombre}?`)) return;
+
+    // Primero verificamos si el estado 2 existe, si no, lo intentamos crear.
+    if (nuevoEstado === 2) {
+       const { data: estadoData } = await supabase.from('Estado_User').select('ID_EstadoUsuario').eq('ID_EstadoUsuario', 2).maybeSingle();
+       if (!estadoData) {
+           await supabase.from('Estado_User').insert([{ ID_EstadoUsuario: 2, Estado: 'Baneado' }]);
+       }
+    }
 
     const { error } = await supabase
       .from('User')
@@ -166,15 +231,15 @@ export default function EmpleadosPage() {
 
         <main className="admin-content">
           <div className="admin-top">
-            <h1>Empleado</h1>
+            <h1>Usuarios</h1>
             <button className="btn-agregar" onClick={abrirAgregar}>
-              + Agregar empleado
+              + Agregar usuario
             </button>
           </div>
 
           <input
             className="buscador"
-            placeholder="Buscar empleado"
+            placeholder="Buscar usuario"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
@@ -324,3 +389,4 @@ export default function EmpleadosPage() {
     </>
   );
 }
+
