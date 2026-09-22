@@ -29,7 +29,7 @@ function SidebarAdmin() {
     { icon: '/ICONOS/inventario.png', label: 'Inventario', href: '/Inventario' },
     { icon: '/ICONOS/transacciones.png', label: 'Transacciones', href: '/transacciones' },
     { icon: '/ICONOS/empleados.png', label: 'Empleados', href: '/empleados' },
-    { icon: '/ICONOS/reportes.png', label: 'Reportes', href: '#' },
+    { icon: '/ICONOS/reportes.png', label: 'Reportes', href: '/reportes' },
     { icon: '/ICONOS/configuracion.png', label: 'Configuración', href: '#' }
 ];
 
