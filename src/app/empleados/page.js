@@ -161,14 +161,14 @@ export default function EmpleadosPage() {
 
   return (
     <>
-      <p className="empleados-breadcrumb">
-        {modalAbierto === 'editar' ? 'Editar empleado' : 'Empleados'}
-      </p>
-
       <div className="admin-layout">
         <SidebarAdmin />
 
         <main className="admin-content">
+          <p className="empleados-breadcrumb">
+            {modalAbierto === 'editar' ? 'Editar empleado' : 'Empleados'}
+          </p>
+
           <div className="admin-top">
             <h1>Empleado</h1>
             <button className="btn-agregar" onClick={abrirAgregar}>
