@@ -4,7 +4,7 @@ import SidebarAdmin from '@/components/SidebarAdmin'
 import { supabase } from '@/lib/supabaseClient'
 import './Empleados.css'
 
-const PUESTOS = ['Empleado'];
+const PUESTOS = ['Empleado', 'Usuario normal'];
 
 // Igual que en register/page.js: deja solo dígitos y mete el guion después del 8vo.
 function formatearDui(valor) {
@@ -40,7 +40,7 @@ export default function EmpleadosPage() {
     setCargando(true);
     const { data, error } = await supabase
       .from('User')
-      .select('ID_User, Nombres, Apellidos, DUI, Correo, Puesto, ID_EstadoUsuario, Fecha_Incorporacion')
+      .select('ID_User, Nombres, Apellidos, DUI, Correo, Puesto, ID_EstadoUsuario, Fecha_Incorporacion, Es_Empleado')
       .order('ID_User');
 
     if (error) {
@@ -69,7 +69,7 @@ export default function EmpleadosPage() {
       apellidos: emp.Apellidos ?? '',
       correo: emp.Correo ?? '',
       dui: emp.DUI ?? '',
-      puesto: emp.Puesto ?? 'Empleado',
+      puesto: emp.Puesto || (emp.Es_Empleado ? 'Empleado' : 'Usuario normal'),
     });
     setErrorForm('');
     setModalAbierto('editar');
@@ -122,8 +122,8 @@ export default function EmpleadosPage() {
       Contrasena: '12345',
       DUI: form.dui,
       Puesto: form.puesto,
-      ID_EstadoUsuario: 1,
-      Es_Empleado: true
+        ID_EstadoUsuario: 1,
+        Es_Empleado: form.puesto === 'Empleado'
     });
     setGuardando(false);
 
@@ -164,8 +164,9 @@ export default function EmpleadosPage() {
         Usuario: `${form.nombres.trim()} ${form.apellidos.trim()}`,
         DUI: form.dui,
         Puesto: form.puesto,
+          Es_Empleado: form.puesto === 'Empleado'
       })
-      .eq('ID_User', empleadoEditando.ID_User);
+        .eq('ID_User', empleadoEditando.ID_User);
 
     if (errorUpdate) {
       setErrorForm('No se pudo guardar: ' + errorUpdate.message);
@@ -267,7 +268,7 @@ export default function EmpleadosPage() {
                       <td>{emp.ID_User}</td>
                       <td>{emp.Nombres}</td>
                       <td className="empleados-correo">{emp.Correo || '—'}</td>
-                      <td>{emp.Puesto || 'Empleado'}</td>
+                      <td>{emp.Puesto || (emp.Es_Empleado ? 'Empleado' : 'Usuario normal')}</td>
                       <td className="empleados-sucursal">Antiguo C.</td>
                       <td className={activo ? 'empleados-activo' : 'empleados-inactivo'}>
                         {activo ? 'Activo' : 'Inactivo'}

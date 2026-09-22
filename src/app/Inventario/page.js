@@ -45,7 +45,11 @@ function AdminInventario() {
     const [nombreNuevaMarcaEditar, setNombreNuevaMarcaEditar] = useState('');
     const [precioEditar, setPrecioEditar] = useState('');
     const [tallaEditar, setTallaEditar] = useState('');
-    const [stockEditar, setStockEditar] = useState('');
+        const [stockEditar, setStockEditar] = useState('');
+    const [categoriaEditar, setCategoriaEditar] = useState('');
+    const [subcategoriaEditar, setSubcategoriaEditar] = useState('');
+    const [creandoSubcategoriaEditar, setCreandoSubcategoriaEditar] = useState(false);
+    const [nombreNuevaSubcategoriaEditar, setNombreNuevaSubcategoriaEditar] = useState('');
     const [fotosExistentes, setFotosExistentes] = useState([]); // Fotos ya en Supabase
     const [fotosNuevasEditar, setFotosNuevasEditar] = useState([]); // Archivos nuevos File
     const [previewsNuevasEditar, setPreviewsNuevasEditar] = useState([]); // Previews locales
@@ -206,7 +210,29 @@ function IconoCamisa() {
     setTallaEditar(v.Talla?.Tipos_Talla?.Nombre_TipoTalla || '');
     setMarcaEditar(v.Marca?.ID_Marca || '');
     cargarMarcas();
+    cargarCategorias();
     setStockEditar(v.Inventario?.[0]?.Cantidad_Disponible ?? 0);
+    
+    let idPadre = v.Productos?.Categorias_Producto?.ID_CategoriaPadre;
+    let idSub = v.Productos?.ID_Categoria;
+    
+    if (idPadre == null && (idSub === 56 || idSub === 57)) {
+        idPadre = idSub;
+        idSub = '';
+    } else if (idPadre == null && idSub == null) {
+        idPadre = '';
+        idSub = '';
+    }
+
+    setCategoriaEditar(idPadre || '');
+    setSubcategoriaEditar(idSub || '');
+    setCreandoSubcategoriaEditar(false);
+    setNombreNuevaSubcategoriaEditar('');
+    
+    if (idPadre) {
+        cargarSubcategorias(idPadre);
+    }
+
     
     // Carga las fotos que ya existen en la base de datos
     const fotos = (v.Productos?.Fotos_Productos || []).sort((a, b) => (a.Orden ?? 0) - (b.Orden ?? 0));
@@ -339,11 +365,15 @@ function IconoCamisa() {
                 .update({ Precio_Actual: parseFloat(precioEditar) })
                 .eq('ID_Variante', idVariante);
 
-         // 2.1 Actualiza la marca (Productos)
+         // 2.1 Actualiza la marca y categoría (Productos)
             if (idProducto) {
+                const idCatUpdate = subcategoriaEditar ? subcategoriaEditar : (categoriaEditar || null);
                 await supabase
                     .from('Productos')
-                    .update({ ID_Marca: marcaEditar || null })
+                    .update({ 
+                        ID_Marca: marcaEditar || null,
+                        ID_Categoria: idCatUpdate
+                    })
                     .eq('ID_Producto', idProducto);
             }
         
@@ -571,7 +601,9 @@ function IconoCamisa() {
                     ID_Producto, 
                     Nombre_Producto, 
                     Descripcion,
+                    ID_Categoria,
                     Marca ( ID_Marca, Nombre_Marca ),
+                    Categorias_Producto ( ID_categoria, Nombre_Categoria, ID_CategoriaPadre ),
                     Fotos_Productos ( ID_Foto, URL_Foto, Orden )
                 ),
                 Talla ( ID_Talla, Tipos_Talla ( ID_TipoTalla, Nombre_TipoTalla ) ),
@@ -1208,6 +1240,74 @@ function IconoCamisa() {
                 value={nombreEditar}
                 onChange={(e) => setNombreEditar(e.target.value)}
             />
+            <label>Categoría</label>
+            <div className="select-con-boton">
+                <select
+                    value={categoriaEditar}
+                    onChange={(e) => {
+                        setCategoriaEditar(e.target.value);
+                        setSubcategoriaEditar('');
+                        if (e.target.value) cargarSubcategorias(e.target.value);
+                    }}
+                >
+                    <option value="">Selecciona una categoría</option>
+                    {categorias.map((c) => (
+                        <option key={c.ID_categoria} value={c.ID_categoria}>
+                            {c.Nombre_Categoria}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            {categoriaEditar && (
+                <>
+                    <label>Subcategoría</label>
+                    {!creandoSubcategoriaEditar ? (
+                        <div className="select-con-boton">
+                            <select
+                                value={subcategoriaEditar}
+                                onChange={(e) => setSubcategoriaEditar(e.target.value)}
+                            >
+                                <option value="">Sin subcategoría</option>
+                                {subcategorias.map((s) => (
+                                    <option key={s.ID_categoria} value={s.ID_categoria}>
+                                        {s.Nombre_Categoria}
+                                    </option>
+                                ))}
+                            </select>
+                            <button type="button" onClick={() => setCreandoSubcategoriaEditar(true)}>+ Nueva</button>
+                        </div>
+                    ) : (
+                        <div className="select-con-boton">
+                            <input
+                                type="text"
+                                placeholder="Nombre de la subcategoría"
+                                value={nombreNuevaSubcategoriaEditar}
+                                onChange={(e) => setNombreNuevaSubcategoriaEditar(e.target.value)}
+                            />
+                            <button type="button" onClick={async () => {
+                                const idUser = await obtenerIdUsuario();
+                                const { data, error } = await supabase
+                                    .from('Categorias_Producto')
+                                    .insert({ ID_User: idUser, Nombre_Categoria: nombreNuevaSubcategoriaEditar, ID_CategoriaPadre: categoriaEditar })
+                                    .select()
+                                    .single();
+        
+                                if (!error) {
+                                    setSubcategorias((prev) => [...prev, data]);
+                                    setSubcategoriaEditar(data.ID_categoria);
+                                    setNombreNuevaSubcategoriaEditar('');
+                                    setCreandoSubcategoriaEditar(false);
+                                } else {
+                                    console.log('Error creando subcategoría:', error.message);
+                                }
+                            }}>Crear</button>
+                            <button type="button" onClick={() => setCreandoSubcategoriaEditar(false)}>Cancelar</button>
+                        </div>
+                    )}
+                </>
+            )}
+
 
             <div className="modal-row">
                 <div>

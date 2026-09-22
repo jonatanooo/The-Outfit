@@ -130,7 +130,7 @@
     background-color: #1f1f1f;
 }
 
-.perfil-logout {
+.perfil-panel button.logout.perfil-logout {
     margin-top: 2em;
     margin-left: 0;
     width: 100%;

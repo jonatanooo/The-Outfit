@@ -152,7 +152,8 @@ function AdminTransacciones() {
         const coincideEstado =
             filtroEstado === 'todos' ||
             (filtroEstado === 'pendientes' && k.includes('pendiente')) ||
-            (filtroEstado === 'entregados' && k.includes('entregado'));
+            (filtroEstado === 'entregados' && k.includes('entregado')) ||
+            (filtroEstado === 'encamino' && k.includes('camino'));
 
         return coincideBusqueda && coincideEstado;
     });
@@ -266,6 +267,12 @@ function AdminTransacciones() {
                             Pendientes
                         </button>
                         <button
+                            className={filtroEstado === 'encamino' ? 'filtro activo' : 'filtro'}
+                            onClick={() => setFiltroEstado('encamino')}
+                        >
+                            En camino
+                        </button>
+                        <button
                             className={filtroEstado === 'entregados' ? 'filtro activo' : 'filtro'}
                             onClick={() => setFiltroEstado('entregados')}
                         >
@@ -280,15 +287,27 @@ function AdminTransacciones() {
                         <span className="stat-titulo">Ventas hoy</span>
                         <span className="stat-valor">${ventasHoy.toFixed(2)}</span>
                     </div>
-                    <div className="stat-card">
+                    <div 
+                        className={`stat-card clickable ${filtroEstado === 'pendientes' ? 'activo' : ''}`}
+                        onClick={() => setFiltroEstado('pendientes')}
+                        style={{ cursor: 'pointer' }}
+                    >
                         <span className="stat-titulo">Pendientes</span>
                         <span className="stat-valor" style={{ color: '#e65100' }}>{totalPendientes}</span>
                     </div>
-                    <div className="stat-card">
+                    <div 
+                        className={`stat-card clickable ${filtroEstado === 'encamino' ? 'activo' : ''}`}
+                        onClick={() => setFiltroEstado('encamino')}
+                        style={{ cursor: 'pointer' }}
+                    >
                         <span className="stat-titulo">En camino</span>
                         <span className="stat-valor" style={{ color: '#1a1a1a' }}>{totalEnCamino}</span>
                     </div>
-                    <div className="stat-card">
+                    <div 
+                        className={`stat-card clickable ${filtroEstado === 'entregados' ? 'activo' : ''}`}
+                        onClick={() => setFiltroEstado('entregados')}
+                        style={{ cursor: 'pointer' }}
+                    >
                         <span className="stat-titulo">Entregados</span>
                         <span className="stat-valor" style={{ color: '#2e7d32' }}>{totalEntregados}</span>
                     </div>

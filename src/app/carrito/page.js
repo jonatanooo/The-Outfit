@@ -56,7 +56,7 @@ export default function CarritoPage() {
                     <div className="carrito-info">
                       <div>
                         <p className="carrito-nombre">{item.nombre}</p>
-                          {item.marca && <p className="carrito-marca">{item.marca}</p>}
+                          <p className="carrito-marca">{item.marca || '\u00A0'}</p>
                         <p className="carrito-precio">${item.precio.toFixed(2)}</p>
                         <p className="carrito-detalle">
                           TALLA {item.talla || 'ÚNICA'} | #{item.idVariante}

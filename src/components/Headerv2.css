@@ -350,24 +350,22 @@ filter: brightness(0) invert(1);
     background-color: black;
 }
 
-.header-v2 .logout 
-{
+.header-v2 .logout {
     border: solid 1px black;
     border-radius: 3em;
-    height: 2em;
-    margin-top: 10em;
-    margin-left: 15%;
+    height: 2.2em;
+    margin-top: auto;
+    margin-left: 9%;
     display: flex;
-    width: 60%;
-    gap: 2em;
+    width: 65%;
+    gap: 0.6em;
     align-items: center;
     justify-content: center;
     color: black;
     font-family: "DM Sans", sans-serif;
     font-weight: 600;
     text-decoration: none;
-    font-size: clamp(0.1rem, 2vw, 1.4rem);
-    background-color: transparent;
+    white-space: nowrap;
     cursor: pointer;
 }
 
@@ -390,4 +388,16 @@ filter: brightness(0) invert(1);
     font-size: clamp(0.1rem, 2.7vw, 1.8rem);
     margin-left: 8%;
     width: 90%;
+}
+
+.header-v2 .logout-container {
+    margin-top: auto;
+    padding: 20px 0;
+}
+
+.header-v2 .menu-contenido {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }

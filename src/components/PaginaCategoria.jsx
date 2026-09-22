@@ -57,7 +57,7 @@ function PaginaCategoriaContenido({ idCategoriaPadre }) {
         cantidadResultados={cantidadResultados}
       />
       <div className="prenda-wrap-listado">
-        <ListadoPrendas filtros={filtrosCombinados} onResultados={setCantidadResultados} />
+        <ListadoPrendas filtros={filtrosCombinados} onResultados={setCantidadResultados} idCategoriaPadre={idCategoriaPadre} />
       </div>
     </>
   );
