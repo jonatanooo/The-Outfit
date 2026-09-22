@@ -109,6 +109,20 @@ export default function LoginPage() {
 
       if (error) throw error;
 
+      // Verificar si el usuario está baneado
+      const { data: userData } = await supabase
+        .from('User')
+        .select('ID_EstadoUsuario')
+        .eq('Correo', correo)
+        .maybeSingle();
+
+      if (userData && userData.ID_EstadoUsuario === 2) {
+        await supabase.auth.signOut();
+        setError('Tu cuenta fue baneada. No tienes acceso al sitio.');
+        setLoading(false);
+        return;
+      }
+
       aplicarMantenerSesion(mantenerSesion);
 
       const rol = data.user?.app_metadata?.rol || 'usuario';

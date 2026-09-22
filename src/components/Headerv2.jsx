@@ -130,12 +130,30 @@ function Headerv2 () {
 
     // guarda el usuario logueado (o null) para mostrar el botón de perfil/cerrar sesión
     useEffect(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => setUsuario(user))
-        const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-            setUsuario(session?.user ?? null)
-        })
-        return () => listener.subscription.unsubscribe()
-    }, [])
+        const verificarBaneo = async (userObj) => {
+            if (!userObj) return false;
+            const { data } = await supabase.from('User').select('ID_EstadoUsuario').eq('Correo', userObj.email).maybeSingle();
+            if (data && data.ID_EstadoUsuario === 2) {
+                alert('Tu cuenta fue baneada. No tienes acceso al sitio.');
+                await supabase.auth.signOut();
+                router.push('/login');
+                return true;
+            }
+            return false;
+        };
+
+        supabase.auth.getUser().then(async ({ data: { user } }) => {
+            const baneado = await verificarBaneo(user);
+            if (!baneado) setUsuario(user);
+        });
+
+        const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            const baneado = await verificarBaneo(session?.user);
+            if (!baneado) setUsuario(session?.user ?? null);
+        });
+
+        return () => listener.subscription.unsubscribe();
+    }, [router]);
 
     const handleClickPerfil = () => {
         if (sesionActiva) {

@@ -2,11 +2,15 @@
     display: flex;
     min-height: 100vh;
     background-color: #e4e0de;
+    width: 100%;
 }
 
 .admin-content {
     flex: 1;
     padding: 32px;
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: auto;
 }
 
 .admin-top {
@@ -151,6 +155,20 @@
 
 .tabla-productos tr:last-child td {
     border-bottom: none;
+}
+
+.tabla-productos th:last-child {
+    text-align: left;
+    width: 120px;
+}
+
+.tabla-productos td:last-child {
+    text-align: right;
+    width: 120px;
+}
+
+.tabla-productos td:last-child > div {
+    justify-content: flex-end;
 }
 
 .sin-stock {

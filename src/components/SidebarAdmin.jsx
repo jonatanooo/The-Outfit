@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import './SidebarAdmin.css';
 
 function SidebarAdmin() {
@@ -30,7 +31,7 @@ function SidebarAdmin() {
     { icon: '/ICONOS/transacciones.png', label: 'Transacciones', href: '/transacciones' },
     { icon: '/ICONOS/empleados.png', label: 'Empleados', href: '/empleados' },
     { icon: '/ICONOS/reportes.png', label: 'Reportes', href: '/reportes' },
-    { icon: '/ICONOS/configuracion.png', label: 'Configuración', href: '#' }
+    { icon: '/ICONOS/configuracion.png', label: 'Configuración', href: '/configuracion' }
 ];
 
 
@@ -48,7 +49,7 @@ function SidebarAdmin() {
                     ☰
                 </button>
                 {/* el && solo muestra el texto si expandido es true */}
-                {expandido && <span className="marca">THE OUTFIT</span>}
+                {expandido && <Link href="/" className="marca" style={{ color: 'inherit' }}>THE OUTFIT</Link>}
             </div>
 
             {/* el menuItems.map() recorre cada item del arreglo y genera un enlace <a> para cada uno, usando sus propios datos (icono, label, href) */}
