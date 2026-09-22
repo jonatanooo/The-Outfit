@@ -88,5 +88,5 @@ export function useFavoritos() {
     }
   }, [favoritos, idUsuario]);
 
-  return { esFavorito, alternarFavorito, idUsuario, cargando };
+  return { favoritos, esFavorito, alternarFavorito, idUsuario, cargando };
 }

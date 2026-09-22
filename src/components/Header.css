@@ -414,3 +414,33 @@ header.scrolled .carritoicon {
     margin-top: auto;
     padding: 20px 0;
 }
+
+/* BADGES PARA CARRITO Y FAVORITOS */
+.contenedor-favoritos, .contenedor-carrito {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-badge {
+    position: absolute;
+    top: -5px;
+    right: -8px;
+    background-color: #e65100;
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid white;
+    z-index: 2;
+}
+
+header.scrolled .nav-badge {
+    border: 2px solid black;
+}
