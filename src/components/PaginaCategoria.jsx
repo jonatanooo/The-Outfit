@@ -46,6 +46,7 @@ function PaginaCategoriaContenido({ idCategoriaPadre }) {
   const filtrosCombinados = {
     ...filtrosMenu,
     Categorias: filtrosMenu.Categorias?.length > 0 ? filtrosMenu.Categorias : subcategorias,
+    idCategoriaPadre: idCategoriaPadre
   };
 
   return (

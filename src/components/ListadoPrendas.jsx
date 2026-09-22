@@ -14,8 +14,9 @@ async function buscarProductosFiltrados(filtros = {}) {
 
   //usamos !inner solo en las relaciones donde hay filtro activo
   // para no excluir productos que no tengan filtro aplicado en esa dimensión
-  const joinCategoria = filtroCategorias ? "Categorias_Producto!inner" : "Categorias_Producto";
-  const joinVariante = (filtroColores || filtroTallas) ? "Variante_Producto!inner" : "Variante_Producto";
+  // Siempre requerimos inner para categorías si estamos filtrando por género o categorías
+  const joinCategoria = "Categorias_Producto!inner";
+  const joinVariante = filtroColores || filtroTallas ? "Variante_Producto!inner" : "Variante_Producto";
   const joinColor = filtroColores ? "Colores!inner" : "Colores";
   const joinTalla = filtroTallas ? "Talla!inner" : "Talla";
   const joinTipoTalla = filtroTallas ? "Tipos_Talla!inner" : "Tipos_Talla";
@@ -23,7 +24,7 @@ async function buscarProductosFiltrados(filtros = {}) {
   let query = supabase.from("Productos").select(`
     ID_Producto,
     Nombre_Producto,
-    ${joinCategoria} ( Nombre_Categoria ),
+    ${joinCategoria} ( Nombre_Categoria, ID_CategoriaPadre ),
     Marca ( Nombre_Marca ),
     ${joinVariante} (
       Precio_Actual,
@@ -33,6 +34,7 @@ async function buscarProductosFiltrados(filtros = {}) {
     Fotos_Productos ( URL_Foto, Orden )
   `);
 
+  if (filtros.idCategoriaPadre) query = query.eq("Categorias_Producto.ID_CategoriaPadre", filtros.idCategoriaPadre);
   if (filtroCategorias) query = query.in("Categorias_Producto.Nombre_Categoria", filtros.Categorias);
   if (filtroColores) query = query.in("Variante_Producto.Colores.Nombre_Color", filtros.Colores);
   if (filtroTallas) query = query.in("Variante_Producto.Talla.Tipos_Talla.Nombre_TipoTalla", filtros.Tallas);

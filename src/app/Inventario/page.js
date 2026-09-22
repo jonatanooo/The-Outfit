@@ -38,9 +38,11 @@ function AdminInventario() {
     const [previews, setPreviews] = useState([]);
 
     //---------- ESTADOS DE MODAL DE EDICION ----------//
-    const [varianteEditando, setVarianteEditando] = useState(null);
+    const [varianteEditando, setVarianteEditando] = useState(null);    // ---------- ESTADOS PARA EDICION DE PRODUCTO ----------
     const [nombreEditar, setNombreEditar] = useState('');
     const [marcaEditar, setMarcaEditar] = useState('');
+    const [categoriaEditar, setCategoriaEditar] = useState('');
+    const [subcategoriaEditar, setSubcategoriaEditar] = useState('');
     const [creandoMarcaEditar, setCreandoMarcaEditar] = useState(false);
     const [nombreNuevaMarcaEditar, setNombreNuevaMarcaEditar] = useState('');
     const [precioEditar, setPrecioEditar] = useState('');
@@ -199,23 +201,47 @@ function IconoCamisa() {
 
 
     // ---------------- ABRIR MODALES ----------------//
-    function abrirModalEditar(v) {
-    setVarianteEditando(v);
-    setNombreEditar(v.Productos?.Nombre_Producto || '');
-    setPrecioEditar(v.Precio_Actual || '');
-    setTallaEditar(v.Talla?.Tipos_Talla?.Nombre_TipoTalla || '');
-    setMarcaEditar(v.Marca?.ID_Marca || '');
-    cargarMarcas();
-    setStockEditar(v.Inventario?.[0]?.Cantidad_Disponible ?? 0);
-    
-    // Carga las fotos que ya existen en la base de datos
-    const fotos = (v.Productos?.Fotos_Productos || []).sort((a, b) => (a.Orden ?? 0) - (b.Orden ?? 0));
-    setFotosExistentes(fotos);
-    setFotosNuevasEditar([]);
-    setPreviewsNuevasEditar([]);
-    setFotosAEliminar([]);
-    setModalAbierto('editar');
-}
+    async function abrirModalEditar(v) {
+        setVarianteEditando(v);
+        setNombreEditar(v.Productos?.Nombre_Producto || '');
+        setPrecioEditar(v.Precio_Actual || '');
+        setTallaEditar(v.Talla?.Tipos_Talla?.Nombre_TipoTalla || '');
+        setMarcaEditar(v.Productos?.Marca?.ID_Marca || '');
+        cargarMarcas();
+        cargarCategorias();
+        setStockEditar(v.Inventario?.[0]?.Cantidad_Disponible ?? 0);
+
+        // Buscar categoría del producto
+        const idProd = v.Productos?.ID_Producto;
+        if (idProd) {
+            const { data: prodData } = await supabase.from('Productos').select('ID_Categoria').eq('ID_Producto', idProd).maybeSingle();
+            if (prodData?.ID_Categoria) {
+                const { data: catData } = await supabase.from('Categorias').select('ID_categoria, ID_CategoriaPadre').eq('ID_categoria', prodData.ID_Categoria).maybeSingle();
+                if (catData) {
+                    if (catData.ID_CategoriaPadre) {
+                        setCategoriaEditar(catData.ID_CategoriaPadre);
+                        cargarSubcategorias(catData.ID_CategoriaPadre);
+                        setSubcategoriaEditar(catData.ID_categoria);
+                    } else {
+                        setCategoriaEditar(catData.ID_categoria);
+                        cargarSubcategorias(catData.ID_categoria);
+                        setSubcategoriaEditar('');
+                    }
+                }
+            } else {
+                setCategoriaEditar('');
+                setSubcategoriaEditar('');
+            }
+        }
+        
+        // Carga las fotos que ya existen en la base de datos
+        const fotos = (v.Productos?.Fotos_Productos || []).sort((a, b) => (a.Orden ?? 0) - (b.Orden ?? 0));
+        setFotosExistentes(fotos);
+        setFotosNuevasEditar([]);
+        setPreviewsNuevasEditar([]);
+        setFotosAEliminar([]);
+        setModalAbierto('editar');
+    }
 
     // Abre el modal para registrar entrada rápida de stock
     function abrirModalStock(v) {
@@ -326,11 +352,15 @@ function IconoCamisa() {
     });
 
     try {
-        // 1. Actualiza el nombre del producto
+        // 1. Actualiza el nombre y categoría del producto
         if (idProducto) {
+            const idCategoriaFinal = subcategoriaEditar || categoriaEditar || null;
             await supabase
                 .from('Productos')
-                .update({ Nombre_Producto: nombreEditar })
+                .update({ 
+                    Nombre_Producto: nombreEditar,
+                    ID_Categoria: idCategoriaFinal
+                })
                 .eq('ID_Producto', idProducto);
         }
         // 2. Actualiza el precio actual (Variante_Producto)
@@ -1237,6 +1267,44 @@ function IconoCamisa() {
                     />
                 </div>
             </div>
+
+            <label>Categoría</label>
+            <div className="select-con-boton">
+                <select
+                    value={categoriaEditar}
+                    onChange={(e) => {
+                        setCategoriaEditar(e.target.value);
+                        setSubcategoriaEditar('');
+                        if (e.target.value) cargarSubcategorias(e.target.value);
+                    }}
+                >
+                    <option value="">Selecciona una categoría</option>
+                    {categorias.map((c) => (
+                        <option key={c.ID_categoria} value={c.ID_categoria}>
+                            {c.Nombre_Categoria}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            {categoriaEditar && (
+                <>
+                    <label>Subcategoría</label>
+                    <div className="select-con-boton">
+                        <select
+                            value={subcategoriaEditar}
+                            onChange={(e) => setSubcategoriaEditar(e.target.value)}
+                        >
+                            <option value="">Sin subcategoría</option>
+                            {subcategorias.map((s) => (
+                                <option key={s.ID_categoria} value={s.ID_categoria}>
+                                    {s.Nombre_Categoria}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                </>
+            )}
 
                         <label>Marca</label>
             {!creandoMarcaEditar ? (
