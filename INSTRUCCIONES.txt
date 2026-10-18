@@ -1,1 +1,1 @@
-pnpm add @supabase/supabase-js
+pnpm add firebase firebase-admin

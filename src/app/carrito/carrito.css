@@ -150,6 +150,15 @@
     margin-right: 0.6em;
 }
 
+.carrito-resumen-ahorro {
+    color: #81c784;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-left: 0.4em;
+    margin-right: 1.4em;
+    display: inline-block;
+}
+
 .carrito-resumen-iva {
     font-size: 0.7rem;
     color: #bbb;

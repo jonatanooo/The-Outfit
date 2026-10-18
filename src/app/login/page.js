@@ -3,7 +3,15 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase, aplicarMantenerSesion } from '@/lib/supabaseClient';
+import { auth, db } from '@/lib/firebaseClient';
+import {
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut
+} from 'firebase/auth';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import Footer from '@/components/Footer';
 
 /* ---------- Iconos SVG (redes + ojo + Google) ---------- */
@@ -78,15 +86,14 @@ export default function LoginPage() {
 
     setEnviandoReset(true);
     setResetInfo('');
-    const { error } = await supabase.auth.resetPasswordForEmail(correo, {
-      redirectTo: `${window.location.origin}/restablecer-password`,
-    });
-    setEnviandoReset(false);
-
-    if (error) {
-      setError(error.message);
-    } else {
+    try {
+      await sendPasswordResetEmail(auth, correo);
       setResetInfo('Si ese correo tiene una cuenta, te enviamos un enlace para restablecer la contraseña.');
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Error al enviar correo de recuperación');
+    } finally {
+      setEnviandoReset(false);
     }
   };
 
@@ -102,59 +109,64 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: correo,
-        password: password,
-      });
+      const userCredential = await signInWithEmailAndPassword(auth, correo, password);
+      const user = userCredential.user;
 
-      if (error) throw error;
+      // Verificar si el usuario está baneado o su rol en la colección User de Firestore
+      let userData = null;
+      try {
+        const qUser = query(collection(db, 'User'), where('Correo', '==', correo));
+        const snapUser = await getDocs(qUser);
+        if (!snapUser.empty) {
+          userData = snapUser.docs[0].data();
+        } else {
+          const docSnap = await getDoc(doc(db, 'User', user.uid));
+          if (docSnap.exists()) userData = docSnap.data();
+        }
+      } catch (errUser) {
+        console.warn('Aviso: No se pudo consultar la colección User:', errUser);
+      }
 
-      // Verificar si el usuario está baneado
-      const { data: userData } = await supabase
-        .from('User')
-        .select('ID_EstadoUsuario')
-        .eq('Correo', correo)
-        .maybeSingle();
-
-      if (userData && userData.ID_EstadoUsuario === 2) {
-        await supabase.auth.signOut();
+      if (userData && (Number(userData.ID_EstadoUsuario) === 2 || userData.ID_EstadoUsuario === 2)) {
+        await signOut(auth);
         setError('Tu cuenta fue baneada. No tienes acceso al sitio.');
         setLoading(false);
         return;
       }
 
-      aplicarMantenerSesion(mantenerSesion);
-
-      const rol = data.user?.app_metadata?.rol || 'usuario';
-      if (rol === 'admin') {
+      const idRol = Number(userData?.ID_Rol);
+      const puesto = (userData?.Puesto || '').toLowerCase();
+      if (idRol === 1 || puesto === 'admin' || puesto === 'administrador') {
         router.push('/admin');
-      } else if (rol === 'empleado') {
+      } else if (idRol === 2 || puesto === 'empleado' || userData?.Es_Empleado) {
         router.push('/empleado');
       } else {
         router.push('/');
       }
     } catch (error) {
       console.error(error);
-      setError(error.message || 'Credenciales inválidas');
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+        setError('Credenciales inválidas. Verifica tu correo y contraseña.');
+      } else if (error.code === 'auth/configuration-not-found') {
+        setError('La autenticación aún no ha sido habilitada en Firebase Console. Ve a Firebase Console > Authentication > Comenzar > Métodos de acceso y activa "Correo electrónico/Contraseña".');
+      } else {
+        setError(error.message || 'Error al iniciar sesión');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
-  try {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/`,
-      },
-    });
-    if (error) throw error;
-  } catch (error) {
-    console.error('Error al iniciar con Google:', error.message);
-    alert('Error al iniciar sesión con Google. Intenta de nuevo.');
-  }
-};
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      router.push('/');
+    } catch (error) {
+      console.error('Error al iniciar con Google:', error);
+      alert('Error al iniciar sesión con Google. Intenta de nuevo.');
+    }
+  };
 
   return (
     <div className="w-full flex flex-col bg-white">

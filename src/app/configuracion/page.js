@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { db, auth } from '@/lib/firebaseClient';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 import SidebarAdmin from '@/components/SidebarAdmin';
 import AdminHeader from '@/components/AdminHeader';
-import '../admin/Admin.css'; // Reusing the admin layout CSS
+import '../admin/Admin.css';
 
 export default function ConfiguracionPage() {
     const router = useRouter();
@@ -12,25 +14,56 @@ export default function ConfiguracionPage() {
     const [verificando, setVerificando] = useState(true);
 
     useEffect(() => {
-        const verificarUsuario = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (!user) {
                 router.push('/login');
                 return;
             }
 
-            const rol = user.app_metadata?.rol || 'usuario';
-            if (rol !== 'admin') {
+            try {
+                let rol = 'usuario';
+
+                const docRef = doc(db, 'User', user.uid);
+                const docSnap = await getDoc(docRef);
+                let userData = docSnap.exists() ? docSnap.data() : null;
+
+                if (!userData) {
+                    const q = query(collection(db, 'User'), where('auth_id', '==', user.uid));
+                    const snap = await getDocs(q);
+                    if (!snap.empty) {
+                        userData = snap.docs[0].data();
+                    } else if (user.email) {
+                        const qE = query(collection(db, 'User'), where('Correo', '==', user.email));
+                        const snapE = await getDocs(qE);
+                        if (!snapE.empty) userData = snapE.docs[0].data();
+                    }
+                }
+
+                if (userData) {
+                    const puesto = (userData.Puesto || '').toLowerCase();
+                    const rolCampo = (userData.Rol || '').toLowerCase();
+                    if (puesto === 'admin' || rolCampo === 'admin' || userData.ID_Rol === 1 || userData.ID_Rol === '1') {
+                        rol = 'admin';
+                    }
+                }
+
+                const tokenResult = await user.getIdTokenResult().catch(() => null);
+                if (tokenResult?.claims?.rol === 'admin' || tokenResult?.claims?.admin) rol = 'admin';
+
+                if (rol !== 'admin') {
+                    router.push('/');
+                    return;
+                }
+
+                setUsuario(user);
+                setVerificando(false);
+            } catch (err) {
+                console.error('Error al verificar admin en configuracion:', err);
                 router.push('/');
-                return;
             }
+        });
 
-            setUsuario(user);
-            setVerificando(false);
-        };
-
-        verificarUsuario();
+        return () => unsubscribe();
     }, [router]);
 
     const limpiarTallas = async () => {
@@ -38,23 +71,27 @@ export default function ConfiguracionPage() {
         
         try {
             // 1. Obtener todas las tallas
-            const { data: tipos } = await supabase.from('Tipos_Talla').select('*');
+            const tiposSnap = await getDocs(collection(db, 'Tipos_Talla'));
+            const tipos = tiposSnap.docs.map(d => ({ ...d.data(), _docId: d.id, ID_TipoTalla: d.data().ID_TipoTalla ?? d.id }));
             const standardNames = ['S', 'M', 'L', 'XL', 'XXL'];
             let standardIds = {};
             
             for (const name of standardNames) {
                 let existing = tipos.find(t => t.Nombre_TipoTalla === name);
                 if (!existing) {
-                    const { data } = await supabase.from('Tipos_Talla').insert({ Nombre_TipoTalla: name }).select().single();
-                    if(data) standardIds[name] = data.ID_TipoTalla;
+                    const nuevoId = Date.now();
+                    const nuevoTipo = { ID_TipoTalla: nuevoId, Nombre_TipoTalla: name };
+                    await setDoc(doc(db, 'Tipos_Talla', String(nuevoId)), nuevoTipo);
+                    standardIds[name] = nuevoId;
                 } else {
                     standardIds[name] = existing.ID_TipoTalla;
                 }
             }
 
-            const { data: tallas } = await supabase.from('Talla').select('*');
-            for (const talla of tallas) {
-                const tipoTalla = tipos.find(t => t.ID_TipoTalla === talla.ID_TipoTalla);
+            const tallasSnap = await getDocs(collection(db, 'Talla'));
+            for (const d of tallasSnap.docs) {
+                const talla = d.data();
+                const tipoTalla = tipos.find(t => String(t.ID_TipoTalla) === String(talla.ID_TipoTalla));
                 if (!tipoTalla) continue;
                 
                 let nombre = tipoTalla.Nombre_TipoTalla?.trim().toUpperCase() || 'S';
@@ -65,15 +102,17 @@ export default function ConfiguracionPage() {
                 else nombre = 'S';
                 
                 const correctId = standardIds[nombre];
-                if (correctId && talla.ID_TipoTalla !== correctId) {
-                    await supabase.from('Talla').update({ ID_TipoTalla: correctId }).eq('ID_Talla', talla.ID_Talla);
+                if (correctId && String(talla.ID_TipoTalla) !== String(correctId)) {
+                    await updateDoc(d.ref, { ID_TipoTalla: correctId });
                 }
             }
 
-            const keepIds = Object.values(standardIds);
-            for (const tipo of tipos) {
-                if (!keepIds.includes(tipo.ID_TipoTalla)) {
-                    await supabase.from('Tipos_Talla').delete().eq('ID_TipoTalla', tipo.ID_TipoTalla);
+            const keepIds = Object.values(standardIds).map(String);
+            for (const d of tiposSnap.docs) {
+                const tipo = d.data();
+                const id = String(tipo.ID_TipoTalla ?? d.id);
+                if (!keepIds.includes(id)) {
+                    await deleteDoc(d.ref);
                 }
             }
 
@@ -111,7 +150,7 @@ export default function ConfiguracionPage() {
                         <div className="dato-grupo">
                             <span className="dato-label">Rol de usuario</span>
                             <span className="dato-valor" style={{ textTransform: 'capitalize' }}>
-                                {usuario.app_metadata?.rol || 'Administrador'}
+                                Administrador
                             </span>
                         </div>
                     </div>
@@ -132,4 +171,3 @@ export default function ConfiguracionPage() {
         </div>
     );
 }
-

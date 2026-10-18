@@ -396,3 +396,25 @@
         text-align: center;
     }
 }
+
+.checkout-item-mini-badge {
+    display: inline-block;
+    background: #d32f2f;
+    color: #ffffff !important;
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 0.4em;
+    line-height: 1.2;
+    vertical-align: middle;
+    letter-spacing: 0.02em;
+    width: 3.5em;
+    justify-content: center;
+}
+
+.checkout-linea-ahorro {
+    color: #2e7d32 !important;
+    font-weight: 600;
+}
+

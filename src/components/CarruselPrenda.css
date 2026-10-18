@@ -1,7 +1,8 @@
 .prenda-card
 {
+    width: 100%;
     max-width: 280px;
-    margin-bottom: 1em;
+    margin: 0 auto 1em auto;
 }
 
 .prenda-imagen-wrap {
@@ -41,59 +42,124 @@
 .prenda-info
 {
     display: flex;
+    justify-content: space-between;
     align-items: flex-start;
-    gap: 5em;
+    gap: 0.5em;
+    margin-top: 0.5em;
+    margin-bottom: 1em;
 }
 
 .prenda-nombre
 {
     font-family: "DM Sans", sans-serif;
-    font-weight: 400;
-    font-size: clamp(0.9rem, 1vw, 1.4rem);
-    /* si algun dia da problemas cambiarlo */
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin: 0 0 0.3em;
     height: auto;
-    min-height: 2.5em;
+    min-height: auto;
 }
 
 .prenda-marca
 {
     font-family: "DM Sans", sans-serif;
-    font-weight: 400;
-    font-size: clamp(1rem, 1vw, 1.2rem);
-    opacity: 70%;
-    /* si algun dia da problemas cambiarlo */
+    font-size: 0.9rem;
+    opacity: 0.7;
+    margin: 0.2em 0;
     height: auto;
-    min-height: 1.5em;
+    min-height: auto;
 }
 
 .prenda-precio
 {
     font-family: "DM Sans", sans-serif;
-    font-weight: 400;
-    font-size: clamp(1rem, 1vw, 2rem);
+    font-size: 0.85rem;
     margin: 0;
-    /* si algun dia da problemas cambiarlo */
+    color: #333;
     height: auto;
-    min-height: 1.5em;
+    min-height: auto;
 }
 
+.prenda-precios-oferta {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin: 0;
+}
+
+.prenda-precio-original-tachado {
+    font-family: "DM Sans", sans-serif;
+    text-decoration: line-through;
+    color: #888;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.prenda-precio-oferta {
+    font-family: "DM Sans", sans-serif;
+    color: #c62828;
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.badge-oferta-card {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background-color: #c62828;
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 6px;
+    border-radius: 4px;
+    z-index: 2;
+}
+
+/* CARRUSEL CONTENEDOR Y RESPONSIVE */
 .carrusel-wrap {
-    margin-top: 3em;
+    --items-visibles: 3;
+    margin-top: 2.5em;
+    margin-bottom: 2em;
     display: flex;
     flex-direction: row;
-    gap: 7em;
     align-items: center;
     justify-content: center;
+    gap: clamp(12px, 3vw, 40px);
+    width: 100%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0 16px;
+    box-sizing: border-box;
+    position: relative;
 }
 
-.carrusel-fila {
+.carrusel-viewport {
+    overflow: hidden;
+    width: 100%;
+    max-width: 960px;
+    position: relative;
+    user-select: none;
+}
+
+.carrusel-track {
     display: flex;
-    gap: 10em;
+    width: 100%;
+    transition: transform 0.45s cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: transform;
+}
+
+.carrusel-item {
+    flex: 0 0 calc(100% / var(--items-visibles, 3));
+    max-width: calc(100% / var(--items-visibles, 3));
+    box-sizing: border-box;
+    padding: 0 14px;
 }
 
 .buttons-move-card img {
-    width: clamp(20px,1.5vw,20px);
-    height: clamp(20px,3.5vw,30px);
+    width: clamp(20px, 1.5vw, 20px);
+    height: clamp(20px, 3.5vw, 30px);
     filter: brightness(0) invert(1);
     display: flex;
 }
@@ -108,16 +174,28 @@
     border: none;
     border-radius: 5em;
     cursor: pointer;
+    flex-shrink: 0;
+    transition: opacity 0.25s ease, background-color 0.25s ease;
+    z-index: 2;
+}
+
+.buttons-move-card:disabled {
+    opacity: 0.2 !important;
+    cursor: not-allowed !important;
+    pointer-events: none;
 }
 
 .card-link {
     text-decoration: none;
     color: black;
+    display: block;
+    width: 100%;
 }
 
 .prenda-sin-imagen {
     background: #eee;
 }
+
 /* SKELETON LOADING */
 .skeleton {
     background: #e0e0e0;
@@ -143,4 +221,42 @@
     height: 14px;
     width: 35%;
     margin-top: 5px;
+}
+
+/* RESPONSIVE BREAKPOINTS (3 -> 2 -> 1 PRENDA) */
+@media (max-width: 1023px) {
+    .carrusel-wrap {
+        --items-visibles: 2;
+        gap: clamp(10px, 2.5vw, 24px);
+        padding: 0 12px;
+    }
+
+    .carrusel-viewport {
+        max-width: 660px;
+    }
+
+    .carrusel-item {
+        padding: 0 10px;
+    }
+}
+
+@media (max-width: 679px) {
+    .carrusel-wrap {
+        --items-visibles: 1;
+        gap: 8px;
+        padding: 0 6px;
+    }
+
+    .carrusel-viewport {
+        max-width: 320px;
+    }
+
+    .carrusel-item {
+        padding: 0 4px;
+    }
+
+    .buttons-move-card {
+        width: 3.2em;
+        height: 3.2em;
+    }
 }

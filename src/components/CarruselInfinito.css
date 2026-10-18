@@ -90,6 +90,38 @@ animation: spin 30s infinite linear;
     padding-left: 0;
 }
 
+.precio-wrap-detalle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    margin-right: 1.5em;
+}
+
+.precio-tachado-detalle {
+    font-family: "DM Sans", sans-serif;
+    font-size: clamp(0.85rem, 1vw, 1rem);
+    color: #888;
+    text-decoration: line-through;
+}
+
+.precio-oferta-detalle {
+    font-family: "DM Sans", sans-serif;
+    color: #c62828;
+    font-weight: 700;
+    font-size: clamp(1.1rem, 1.3vw, 1.4rem);
+}
+
+.badge-oferta-detalle {
+    background-color: #c62828;
+    color: white;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+}
+
 .favbutton
 {
     display: flex;

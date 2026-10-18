@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, Suspense } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { db } from "@/lib/firebaseClient";
+import { collection, getDocs } from "firebase/firestore";
 import { useSearchParams } from "next/navigation";
 import FiltroMenu from "./FiltroMenu";
 import ListadoPrendas from "./ListadoPrendas";
@@ -29,16 +30,17 @@ function PaginaCategoriaContenido({ idCategoriaPadre }) {
 
   useEffect(() => {
     async function cargarSubcategorias() {
-      const { data, error } = await supabase
-        .from("Categorias_Producto")
-        .select("Nombre_Categoria")
-        .eq("ID_CategoriaPadre", idCategoriaPadre);
-
-      if (error) {
-        console.error("Error subcategorias:", JSON.stringify(error, null, 2));
-        return;
+      try {
+        const snap = await getDocs(collection(db, "Categorias_Producto"));
+        const subs = snap.docs
+          .map((d) => d.data())
+          .filter((c) => String(c.ID_CategoriaPadre) === String(idCategoriaPadre))
+          .map((c) => c.Nombre_Categoria)
+          .filter(Boolean);
+        setSubcategorias(subs);
+      } catch (error) {
+        console.error("Error al cargar subcategorias desde Firestore:", error);
       }
-      setSubcategorias(data.map((c) => c.Nombre_Categoria));
     }
     cargarSubcategorias();
   }, [idCategoriaPadre]);

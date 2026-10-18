@@ -1,24 +1,19 @@
 "use client";
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from './supabaseClient';
+import { db } from './firebaseClient';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  doc
+} from 'firebase/firestore';
+import { obtenerIdUsuario } from './usuario';
 
-// Traduce el usuario logueado (auth.users) al ID_User de la tabla "User" propia,
-// que es la que usan las FK del resto del esquema (Fotos_Productos, Favoritos, etc.).
-async function obtenerIdUsuario() {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data } = await supabase
-    .from('User')
-    .select('ID_User')
-    .eq('auth_id', user.id)
-    .maybeSingle();
-
-  return data?.ID_User ?? null;
-}
-
-// Maneja el estado de "favoritos" del usuario logueado contra la tabla
-// "Favoritos" de Supabase: qué IDs de producto tiene marcados, y agregar/quitar.
+// Maneja el estado de "favoritos" del usuario logueado contra la colección
+// "Favoritos" de Firestore: qué IDs de producto tiene marcados, y agregar/quitar.
 export function useFavoritos() {
   const [favoritos, setFavoritos] = useState(new Set());
   const [idUsuario, setIdUsuario] = useState(null);
@@ -38,21 +33,41 @@ export function useFavoritos() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('Favoritos')
-        .select('ID_Producto')
-        .eq('ID_User', idUser);
+      try {
+        const numId = Number(idUser);
+        const qFav = query(
+          collection(db, 'Favoritos'),
+          where('ID_User', 'in', [idUser, !isNaN(numId) ? numId : idUser, String(idUser)])
+        );
+        const favSnap = await getDocs(qFav);
 
-      if (!activo) return;
-      if (!error) setFavoritos(new Set((data ?? []).map((f) => f.ID_Producto)));
-      setCargando(false);
+        if (!activo) return;
+        const setIds = new Set();
+        favSnap.docs.forEach((d) => {
+          const data = d.data();
+          if (data.ID_Producto != null) {
+            setIds.add(data.ID_Producto);
+            if (!isNaN(Number(data.ID_Producto))) {
+              setIds.add(Number(data.ID_Producto));
+            }
+          }
+        });
+
+        setFavoritos(setIds);
+      } catch (err) {
+        console.error('Error cargando favoritos desde Firestore:', err);
+      } finally {
+        if (activo) setCargando(false);
+      }
     }
 
     cargar();
     return () => { activo = false; };
   }, []);
 
-  const esFavorito = useCallback((idProducto) => favoritos.has(idProducto), [favoritos]);
+  const esFavorito = useCallback((idProducto) => {
+    return favoritos.has(idProducto) || favoritos.has(Number(idProducto)) || favoritos.has(String(idProducto));
+  }, [favoritos]);
 
   const alternarFavorito = useCallback(async (idProducto) => {
     const idUser = idUsuario ?? await obtenerIdUsuario();
@@ -62,31 +77,55 @@ export function useFavoritos() {
     }
     if (idUsuario !== idUser) setIdUsuario(idUser);
 
-    const yaEsFavorito = favoritos.has(idProducto);
+    const yaEsFavorito = esFavorito(idProducto);
 
-    // Actualización optimista: el corazón cambia al toque, sin esperar la respuesta del servidor.
+    // Actualización optimista: el corazón cambia al instante
     setFavoritos((prev) => {
       const copia = new Set(prev);
-      if (yaEsFavorito) copia.delete(idProducto);
-      else copia.add(idProducto);
+      if (yaEsFavorito) {
+        copia.delete(idProducto);
+        copia.delete(Number(idProducto));
+        copia.delete(String(idProducto));
+      } else {
+        copia.add(idProducto);
+      }
       return copia;
     });
 
-    const { error } = yaEsFavorito
-      ? await supabase.from('Favoritos').delete().eq('ID_User', idUser).eq('ID_Producto', idProducto)
-      : await supabase.from('Favoritos').insert({ ID_User: idUser, ID_Producto: idProducto });
+    try {
+      const numIdUser = Number(idUser);
+      const numIdProd = Number(idProducto);
 
-    if (error) {
-      console.error('Error actualizando favorito:', error.message);
-      // Revertir el cambio optimista si falló en el servidor.
+      if (yaEsFavorito) {
+        const qFav = query(
+          collection(db, 'Favoritos'),
+          where('ID_User', 'in', [idUser, !isNaN(numIdUser) ? numIdUser : idUser, String(idUser)]),
+          where('ID_Producto', 'in', [idProducto, !isNaN(numIdProd) ? numIdProd : idProducto, String(idProducto)])
+        );
+        const snap = await getDocs(qFav);
+        await Promise.all(snap.docs.map((d) => deleteDoc(doc(db, 'Favoritos', d.id))));
+      } else {
+        await addDoc(collection(db, 'Favoritos'), {
+          ID_User: !isNaN(numIdUser) ? numIdUser : idUser,
+          ID_Producto: !isNaN(numIdProd) ? numIdProd : idProducto,
+          Fecha_Agregado: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('Error actualizando favorito en Firestore:', error);
+      // Revertir el cambio optimista si falló
       setFavoritos((prev) => {
         const copia = new Set(prev);
         if (yaEsFavorito) copia.add(idProducto);
-        else copia.delete(idProducto);
+        else {
+          copia.delete(idProducto);
+          copia.delete(Number(idProducto));
+          copia.delete(String(idProducto));
+        }
         return copia;
       });
     }
-  }, [favoritos, idUsuario]);
+  }, [favoritos, idUsuario, esFavorito]);
 
   return { favoritos, esFavorito, alternarFavorito, idUsuario, cargando };
 }

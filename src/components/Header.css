@@ -314,6 +314,30 @@ header.scrolled .carritoicon {
     font-family: "DM Sans", sans-serif;
     font-weight: 600;
     font-size: clamp(0.1rem, 2.7vw, 2rem);
+    position: relative;
+    width: max-content;
+}
+
+.part1::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    transform: scaleX(0);
+    height: 3px;
+    bottom: -4px;
+    left: 0;
+    background-color: currentColor;
+    transform-origin: bottom right;
+    transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.part1:hover::after {
+    transform: scaleX(1);
+    transform-origin: bottom left;
+}
+
+.part1.part1-ofertas {
+    color: #d32f2f !important;
 }
 
 .part2
@@ -398,7 +422,26 @@ header.scrolled .carritoicon {
     font-weight: 600;
     font-size: clamp(0.1rem, 2.7vw, 1.8rem);
     margin-left: 8%;
-    width: 90%;
+    position: relative;
+    width: max-content;
+}
+
+.partsubca::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    transform: scaleX(0);
+    height: 3px;
+    bottom: -4px;
+    left: 0;
+    background-color: currentColor;
+    transform-origin: bottom right;
+    transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.partsubca:hover::after {
+    transform: scaleX(1);
+    transform-origin: bottom left;
 }
 
 /* 🔓 CONTENEDOR INTERNO  */

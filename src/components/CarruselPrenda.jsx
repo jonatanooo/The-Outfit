@@ -1,112 +1,222 @@
 "use client"
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-// importamos libreria de animaciones
 import { motion } from "motion/react";
 import { useProductosCatalogo } from "@/lib/productos";
 import { useFavoritos } from "@/lib/useFavoritos";
 import "./CarruselPrenda.css";
 
-// funcion que carga el carrusel con productos reales desde Supabase
-// idGenero: ID_CATEGORIA_MUJER o ID_CATEGORIA_HOMBRE (@/lib/productos) para
-// mostrar solo ese género; sin valor, muestra todos los productos activos.
+// Hook para calcular prendas visibles según el ancho de la ventana:
+// Hook para calcular prendas visibles según el ancho de la ventana:
+// Ancho máximo: 3 prendas
+// Ancho intermedio: 2 prendas
+// Ancho mínimo: 1 prenda
+function useItemsVisibles() {
+  const [itemsVisibles, setItemsVisibles] = useState(3);
+
+  useEffect(() => {
+    function calcular() {
+      const ancho = window.innerWidth;
+      if (ancho < 680) {
+        setItemsVisibles(1);
+      } else if (ancho < 1024) {
+        setItemsVisibles(2);
+      } else {
+        setItemsVisibles(3);
+      }
+    }
+
+    calcular();
+    window.addEventListener("resize", calcular);
+    return () => window.removeEventListener("resize", calcular);
+  }, []);
+
+  return itemsVisibles;
+}
+
+// Carrusel con animación de desplazamiento suave y ajuste responsivo (1 a 3 prendas)
 function CarruselPrendas({ idGenero } = {}) {
   const { productos: prendas, cargando } = useProductosCatalogo(idGenero);
   const { esFavorito, alternarFavorito } = useFavoritos();
+  const itemsVisibles = useItemsVisibles();
 
-  // para saber en que pagina del carrusel estamos, es decir estamos en la 0 (la cual muestra las primeras 3 prendas)
-  // si fuera useState(1) empezaria desde la prenda id=2
   const [indice, setIndice] = useState(0);
-  // mostramos solo 3 a la vez, recorta el arreglo para quedarnos con 3 elementos
-  // .slice(inicio, fin), es como poner .slice(0,3)
-  const prendasVisibles = prendas.slice(indice, indice + 3);
 
-  // botones que avanzan y retroceden de 1 en 1
+  const total = prendas?.length || 0;
+  const maxIndice = Math.max(0, total - itemsVisibles);
+
+  // Asegurar que el índice no supere el máximo si cambia la cantidad de items visibles
+  useEffect(() => {
+    setIndice((prev) => Math.min(prev, Math.max(0, (prendas?.length || 0) - itemsVisibles)));
+  }, [itemsVisibles, prendas?.length]);
+
   const siguiente = () => {
-    // avanzamos solo si todavía queda más de 1 prenda después de las 3 que se están mostrando
-    // (si indice+3 ya es igual o mayor al total, significa que llegamos al final)
-    if (indice + 3 < prendas.length) setIndice(indice + 1);
+    setIndice((prev) => (prev < maxIndice ? prev + 1 : prev));
   };
+
   const anterior = () => {
-    // tenemos que asegurarnos que el indice sea mayor a 0, y si es mayor se le resta 1
-    if (indice > 0) setIndice(indice - 1);
+    setIndice((prev) => (prev > 0 ? prev - 1 : 0));
+  };
+
+  // Soporte para gestos táctiles (swipe) en dispositivos móviles
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    const diff = touchStartX.current - touchEndX.current;
+    if (diff > 45) {
+      siguiente();
+    } else if (diff < -45) {
+      anterior();
+    }
+    touchStartX.current = 0;
+    touchEndX.current = 0;
   };
 
   if (cargando) {
     return (
-      <div className="carrusel-wrap">
-        <button disabled className="buttons-move-card" style={{ opacity: 0.5 }}>
+      <div className="carrusel-wrap" style={{ '--items-visibles': itemsVisibles }}>
+        <button disabled className="buttons-move-card" style={{ opacity: 0.25 }}>
           <img src="/ICONOS/previous.png" alt="" />
         </button>
-        <div className="carrusel-fila">
-          {[1, 2, 3].map((i) => (
-            <div className="prenda-card" key={i} style={{ width: '280px' }}>
-              <div className="prenda-imagen-wrap skeleton" />
-              <div className="prenda-info">
-                <div className="skeleton skeleton-title" />
-                <div className="skeleton skeleton-price" />
+        <div className="carrusel-viewport">
+          <div className="carrusel-track">
+            {Array.from({ length: itemsVisibles }).map((_, i) => (
+              <div className="carrusel-item" key={i}>
+                <div className="prenda-card">
+                  <div className="prenda-imagen-wrap skeleton" />
+                  <div className="prenda-info">
+                    <div className="skeleton skeleton-title" />
+                    <div className="skeleton skeleton-price" />
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-        <button disabled className="buttons-move-card" style={{ opacity: 0.5 }}>
+        <button disabled className="buttons-move-card" style={{ opacity: 0.25 }}>
           <img src="/ICONOS/next.png" alt="" />
         </button>
       </div>
     );
   }
 
-  return (
-    <div className="carrusel-wrap">
-      {/* con el disabled funciona cuando estamos en la posicion 0 se desactivo el boton de previous para que ya no se pueda retroceder */}
-      <motion.button whileHover={{scale: 1.1}} onClick={anterior} disabled={indice === 0} className="buttons-move-card"><img src="/ICONOS/previous.png" alt="" /></motion.button>
-      <div className="carrusel-fila">
-        {/* con el .map() recorre las 3 prendas visibles y genera una card por cada una, usando sus propios datos, lo cual evita que tengamos que escribir una por una a mano */}
-        {prendasVisibles.map((prenda) => (
-          // el key={prenda.id} es obligatoria en cualquier .map() que genere JSX en React, ya que le da a cada elemento una identidad unica para que Reatc pueda rastrear cual es cual si la lista cambia
-          // el Link manda a la pagina propia de la prenda; el boton de favorito frena la propagacion para no navegar al tocarlo
-          <Link href={`/prenda-pag/${prenda.id}`} className="card-link" key={prenda.id}>
-            <div className="prenda-card">
-              <div className="prenda-imagen-wrap">
-                <button
-                  type="button"
-                  className="btn-favorito"
-                  aria-label={esFavorito(prenda.id) ? "Quitar de favoritos" : "Agregar a favoritos"}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    alternarFavorito(prenda.id);
-                  }}
-                >
-                  <img
-                    src={esFavorito(prenda.id) ? "/ICONOS/Heart2.png" : "/ICONOS/Heart.png"}
-                    alt="like"
-                    className="favicon"
-                  />
-                </button>
-                {prenda.imagen ? (
-                  <motion.img whileHover={{scale: 1.2}} src={prenda.imagen} alt={prenda.nombre} className="prenda-imagen" />
-                ) : (
-                  <div className="prenda-imagen prenda-sin-imagen" />
-                )}
-              </div>
+  if (!prendas || prendas.length === 0) {
+    return null;
+  }
 
-              <div className="prenda-info">
-                <div>
-                  <p className="prenda-nombre">{prenda.nombre}</p>
-                  <p className="prenda-marca">{prenda.marca || '\u00A0'}</p>
+  // Porcentaje de desplazamiento: al mover 1 prenda, el track se desplaza (100 / itemsVisibles)%
+  const translateX = -(indice * (100 / itemsVisibles));
+
+  return (
+    <div className="carrusel-wrap" style={{ '--items-visibles': itemsVisibles }}>
+      <motion.button
+        whileHover={indice > 0 ? { scale: 1.1 } : {}}
+        whileTap={indice > 0 ? { scale: 0.95 } : {}}
+        onClick={anterior}
+        disabled={indice <= 0}
+        className="buttons-move-card"
+        aria-label="Prenda anterior"
+      >
+        <img src="/ICONOS/previous.png" alt="" />
+      </motion.button>
+
+      <div
+        className="carrusel-viewport"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div
+          className="carrusel-track"
+          style={{
+            transform: `translateX(${translateX}%)`,
+          }}
+        >
+          {prendas.map((prenda) => (
+            <div className="carrusel-item" key={prenda.id}>
+              <Link href={`/prenda-pag/${prenda.id}`} className="card-link">
+                <div className="prenda-card">
+                  <div className="prenda-imagen-wrap">
+                    {prenda.enOferta && (
+                      <span className="badge-oferta-card">
+                        -{prenda.porcentajeDescuento}%
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-favorito"
+                      aria-label={esFavorito(prenda.id) ? "Quitar de favoritos" : "Agregar a favoritos"}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        alternarFavorito(prenda.id);
+                      }}
+                    >
+                      <img
+                        src={esFavorito(prenda.id) ? "/ICONOS/Heart2.png" : "/ICONOS/Heart.png"}
+                        alt="like"
+                        className="favicon"
+                      />
+                    </button>
+                    {prenda.imagen ? (
+                      <motion.img
+                        whileHover={{ scale: 1.2 }}
+                        src={prenda.imagen}
+                        alt={prenda.nombre}
+                        className="prenda-imagen"
+                      />
+                    ) : (
+                      <div className="prenda-imagen prenda-sin-imagen" />
+                    )}
+                  </div>
+
+                  <div className="prenda-info">
+                    <div>
+                      <p className="prenda-nombre">{prenda.nombre}</p>
+                      <p className="prenda-marca">{prenda.marca || 'The Outfit'}</p>
+                      {prenda.enOferta ? (
+                        <div className="prenda-precios-oferta">
+                          <span className="prenda-precio-original-tachado">
+                            ${prenda.precioOriginal != null ? Number(prenda.precioOriginal).toFixed(2) : ''}
+                          </span>
+                          <span className="prenda-precio-oferta">
+                            ${Number(prenda.precio).toFixed(2)}
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="prenda-precio">${Number(prenda.precio).toFixed(2)}</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <p className="prenda-precio">${prenda.precio.toFixed(2)}</p>
-              </div>
+              </Link>
             </div>
-          </Link>
-        ))}
+          ))}
+        </div>
       </div>
-      {/* se desactiva "siguiente" cuando ya no caben 3 prendas más desde la posición actual
-      (es decir, cuando indice+3 alcanza o pasa el total de prendas) */}
-      <motion.button whileHover={{scale: 1.1}} onClick={siguiente} disabled={indice + 3 >= prendas.length} className="buttons-move-card"> <img src="/ICONOS/next.png" alt="" /></motion.button>
+
+      <motion.button
+        whileHover={indice < maxIndice ? { scale: 1.1 } : {}}
+        whileTap={indice < maxIndice ? { scale: 0.95 } : {}}
+        onClick={siguiente}
+        disabled={indice >= maxIndice}
+        className="buttons-move-card"
+        aria-label="Siguiente prenda"
+      >
+        <img src="/ICONOS/next.png" alt="" />
+      </motion.button>
     </div>
   );
 }
 
-export default CarruselPrendas
+export default CarruselPrendas;

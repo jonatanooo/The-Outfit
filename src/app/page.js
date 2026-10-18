@@ -31,13 +31,11 @@ export default function Home() {
                 </a>
 
                 <a href="">
-                    <h2 className="bannertitulos1">VER COLECCIÓN</h2>
                 </a>
             </div> 
             {/* <!-- foto 2 --> */}
             <div>
                 <a href="#"><img src="/Fotos/04813802712-a2.jpg" alt="" className="banners"/></a>
-                <a href=""><h2 className="bannertitulos2">SALES</h2></a>
             </div>
         </div>
         
