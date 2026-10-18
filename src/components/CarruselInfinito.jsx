@@ -66,29 +66,34 @@ function CarruselInfinito({ idProducto }) {
         return <main><p className="cargando-prenda">No encontramos esta prenda.</p></main>;
     }
 
-    const fotos = (producto?.fotos && producto.fotos.length > 0) ? producto.fotos : (producto?.imagen ? [producto.imagen] : ["/PrendasCarrusel/1.jpg"]);
+    const rawFotos = (producto?.fotos && producto.fotos.length > 0) ? producto.fotos : (producto?.imagen ? [producto.imagen] : ["/PrendasCarrusel/1.jpg"]);
+    let fotos = [...rawFotos];
+    while (fotos.length < 4) {
+        fotos = [...fotos, ...rawFotos];
+    }
     const precioFormateado = Number(producto?.precio ?? 0).toFixed(2);
 
     return(
         <>
         <main>
             <section className="carrusel">
-                <div className="carruselfotos">
-                    {/* map es quien se encarga de agarrar cada valor de la constante y se lo pasa a la funcion numero */}
-                    {fotos.map((url, indice) => (
-                        <div  className="fotocarru"  key={indice}>
-                            <img src={url} alt={producto?.nombre || ''} />
-                        </div>
-                    ))}
-                </div>
-{/* se repite para que se cree el efecto infinito */}
-                <div aria-hidden className="carruselfotos">
-                    {fotos.map((url, indice) => (
-                        <div  className="fotocarru" key={indice}>
-                            <img src={url} alt="" />
-                        </div>
-                    ))}
-                </div>
+                {[0, 1, 2, 3].map((trackIdx) => (
+                    <div
+                        key={trackIdx}
+                        className="carruselfotos"
+                        aria-hidden={trackIdx > 0 ? "true" : undefined}
+                    >
+                        {fotos.map((url, indice) => (
+                            <div className="fotocarru" key={`${trackIdx}-${indice}`}>
+                                <img
+                                    src={url}
+                                    alt={trackIdx === 0 ? (producto?.nombre || '') : ''}
+                                    loading={trackIdx === 0 && indice === 0 ? 'eager' : 'lazy'}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                ))}
 
                 <div className="panelprecios">
                     <div className="infosuperior">
@@ -127,7 +132,7 @@ function CarruselInfinito({ idProducto }) {
                             {cargandoTallas ? (
                                 <p className="tallas-mensaje">Cargando tallas...</p>
                             ) : tallas.length === 0 ? (
-                                <p className="tallas-mensaje">Sin tallas disponibles</p>
+                                <p className="tallas-mensaje tallas-no-disponibles">Tallas no disponibles</p>
                             ) : (
                                 tallas.map((talla) => (
                                     <button
@@ -148,9 +153,10 @@ function CarruselInfinito({ idProducto }) {
 
                     <button
                         type="button"
-                        className="anadircesta"
-                        disabled={!tallaSeleccionada}
+                        className={`anadircesta ${(!tallaSeleccionada || tallas.length === 0) ? 'boton-inactivo' : ''}`}
+                        disabled={!tallaSeleccionada || tallas.length === 0}
                         onClick={() => {
+                            if (!tallaSeleccionada || tallas.length === 0) return;
                             const talla = tallas.find((t) => t.idVariante === tallaSeleccionada);
                             if (!talla) return;
 
@@ -177,7 +183,9 @@ function CarruselInfinito({ idProducto }) {
                             alert(`Se agregó "${producto.nombre}" (talla ${talla.nombre}) a la cesta.`);
                         }}
                     >
-                        {!tallaSeleccionada ? 'ELIGE UNA TALLA' : 'AÑADIR A LA CESTA'}
+                        {tallas.length === 0
+                            ? 'TALLAS NO DISPONIBLES'
+                            : (!tallaSeleccionada ? 'ELIGE UNA TALLA' : 'AÑADIR A LA CESTA')}
                     </button>
 
                     <p className="disponibilidad">

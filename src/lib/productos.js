@@ -296,7 +296,13 @@ function normalizarTalla(v, tallaMap = {}, tiposTallaMap = {}, inventarioMap = {
   const tallaDoc = tallaMap[v.ID_Talla] || tallaMap[String(v.ID_Talla)] || {};
   const idTipoTalla = tallaDoc.ID_TipoTalla ?? tallaDoc.ID_tipoTalla ?? v.ID_TipoTalla;
   const tipoTallaDoc = tiposTallaMap[idTipoTalla] || tiposTallaMap[String(idTipoTalla)] || {};
-  const nombre = (tipoTallaDoc.Nombre_TipoTalla || tallaDoc.Nombre_Talla || tipoTallaDoc.Nombre_Talla || 'Única').trim();
+  const rawNombre = tipoTallaDoc.Nombre_TipoTalla || tallaDoc.Nombre_Talla || tipoTallaDoc.Nombre_Talla || '';
+  const nombre = rawNombre.trim();
+
+  // Si no hay nombre de talla válido o se guardó 'Única'/'Unica', se descarta para evitar 'Talla única' por defecto
+  if (!nombre || nombre.toLowerCase() === 'única' || nombre.toLowerCase() === 'unica') {
+    return null;
+  }
 
   // Sin dato, la variante se considera activa.
   const idEstado = v.ID_EstadoProducto != null ? Number(v.ID_EstadoProducto) : 1;
@@ -428,7 +434,7 @@ export function useTallasProducto(idProducto) {
 
         const tallasNormalizadas = variantes
           .map((v) => normalizarTalla(v, tallaMap, tiposTallaMap, inventarioMap, prodData))
-          .filter((t) => t.nombre);
+          .filter((t) => t && t.nombre);
 
         setTallas(tallasNormalizadas);
       } catch (error) {

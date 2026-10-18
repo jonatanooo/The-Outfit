@@ -720,10 +720,10 @@ function AdminInventario() {
                 });
             }
 
-            // 3. Actualiza el nombre de la talla
-            if (idTipoTalla) {
+            // 3. Actualiza el nombre de la talla (solo si se especificó una talla válida, para no vaciar la talla global)
+            if (idTipoTalla && tallaEditar && tallaEditar.trim() !== '') {
                 await actualizarDocPorId('Tipos_Talla', 'ID_TipoTalla', idTipoTalla, {
-                    Nombre_TipoTalla: tallaEditar
+                    Nombre_TipoTalla: tallaEditar.trim()
                 });
             }
 
