@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { supabase } from '@/lib/supabaseClient'
+import { db } from '@/lib/firebaseClient';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { normalizarProducto } from '@/lib/productos'
 import { useFavoritos } from '@/lib/useFavoritos'
 import Link from 'next/link';
@@ -16,7 +17,7 @@ function obtenerVariantes(variantes) {
     precio: Number(v.Precio_Actual ?? 0),
     talla: v.Talla?.Tipos_Talla?.Nombre_TipoTalla?.trim() || '',
     stock: (v.Inventario ?? []).reduce(
-      (total, inv) => total + (inv.Cantidad_Disponible ?? 0) - (inv.Cantidad_Reservada ?? 0),
+      (total, inv) => total + (Number(inv.Cantidad_Disponible ?? 0) - Number(inv.Cantidad_Reservada ?? 0)),
       0
     ),
   }));
@@ -47,36 +48,117 @@ export default function FavoritosPage() {
 
       setCargando(true);
 
-      const { data, error } = await supabase
-        .from('Favoritos')
-        .select(`
-          ID_Producto,
-          Productos (
-            ID_Producto,
-            Nombre_Producto,
-              Marca ( Nombre_Marca ),
-            ID_EstadoProducto,
-            Fotos_Productos ( URL_Foto, Orden ),
-            Variante_Producto (
-              ID_Variante,
-              Precio_Actual,
-              ID_EstadoProducto,
-              Talla ( Tipos_Talla ( Nombre_TipoTalla ) ),
-              Inventario ( Cantidad_Disponible, Cantidad_Reservada )
-            )
-          )
-        `)
-        .eq('ID_User', idUsuario);
+      try {
+        const opcionesUser = [idUsuario, String(idUsuario)];
+        if (!isNaN(Number(idUsuario))) opcionesUser.push(Number(idUsuario));
+        const qFav = query(collection(db, 'Favoritos'), where('ID_User', 'in', Array.from(new Set(opcionesUser))));
+        const snapFav = await getDocs(qFav);
 
-      if (!activo) return;
+        if (snapFav.empty) {
+          if (!activo) return;
+          setProductos([]);
+          setCargando(false);
+          return;
+        }
 
-      if (error) {
-        console.error('Error cargando favoritos:', error.message);
-        setProductos([]);
-      } else {
-        const items = (data ?? [])
-          .map((f) => f.Productos)
-          .filter(Boolean)
+        const pidsFavoritos = new Set(snapFav.docs.map((d) => d.data().ID_Producto).filter(Boolean).map(String));
+
+        const [
+          prodSnap,
+          marcasSnap,
+          fotosSnap,
+          varSnap,
+          tallaSnap,
+          tiposTallaSnap,
+          invSnap
+        ] = await Promise.all([
+          getDocs(collection(db, 'Productos')),
+          getDocs(collection(db, 'Marca')),
+          getDocs(collection(db, 'Fotos_Productos')),
+          getDocs(collection(db, 'Variante_Producto')),
+          getDocs(collection(db, 'Talla')),
+          getDocs(collection(db, 'Tipos_Talla')),
+          getDocs(collection(db, 'Inventario'))
+        ]);
+
+        if (!activo) return;
+
+        const marcasMap = {};
+        marcasSnap.docs.forEach((d) => {
+          const m = d.data();
+          const id = m.ID_Marca ?? d.id;
+          marcasMap[id] = m;
+          marcasMap[String(id)] = m;
+        });
+
+        const tiposTallaMap = {};
+        tiposTallaSnap.docs.forEach((d) => {
+          const t = d.data();
+          const id = t.ID_TipoTalla ?? d.id;
+          tiposTallaMap[id] = t;
+          tiposTallaMap[String(id)] = t;
+        });
+
+        const tallaMap = {};
+        tallaSnap.docs.forEach((d) => {
+          const t = d.data();
+          const id = t.ID_Talla ?? d.id;
+          tallaMap[id] = { ...t, Tipos_Talla: tiposTallaMap[t.ID_TipoTalla] || null };
+          tallaMap[String(id)] = tallaMap[id];
+        });
+
+        const invPorVariante = {};
+        invSnap.docs.forEach((d) => {
+          const i = d.data();
+          const vid = i.ID_Variante;
+          if (vid != null) {
+            if (!invPorVariante[vid]) invPorVariante[vid] = [];
+            invPorVariante[vid].push(i);
+            if (!invPorVariante[String(vid)]) invPorVariante[String(vid)] = invPorVariante[vid];
+          }
+        });
+
+        const fotosPorProducto = {};
+        fotosSnap.docs.forEach((d) => {
+          const f = d.data();
+          const pid = f.ID_Producto;
+          if (pid != null) {
+            if (!fotosPorProducto[pid]) fotosPorProducto[pid] = [];
+            fotosPorProducto[pid].push(f);
+            if (!fotosPorProducto[String(pid)]) fotosPorProducto[String(pid)] = fotosPorProducto[pid];
+          }
+        });
+
+        const variantesPorProducto = {};
+        varSnap.docs.forEach((d) => {
+          const v = d.data();
+          const pid = v.ID_Producto;
+          if (pid != null) {
+            const item = {
+              ...v,
+              ID_Variante: v.ID_Variante ?? d.id,
+              Talla: tallaMap[v.ID_Talla] || tallaMap[String(v.ID_Talla)] || null,
+              Inventario: invPorVariante[v.ID_Variante ?? d.id] || []
+            };
+            if (!variantesPorProducto[pid]) variantesPorProducto[pid] = [];
+            variantesPorProducto[pid].push(item);
+            if (!variantesPorProducto[String(pid)]) variantesPorProducto[String(pid)] = variantesPorProducto[pid];
+          }
+        });
+
+        const items = prodSnap.docs
+          .map((d) => {
+            const p = d.data();
+            const pid = p.ID_Producto ?? d.id;
+            return {
+              ...p,
+              ID_Producto: pid,
+              Marca: marcasMap[p.ID_Marca] || null,
+              Fotos_Productos: fotosPorProducto[pid] || fotosPorProducto[String(pid)] || [],
+              Variante_Producto: variantesPorProducto[pid] || variantesPorProducto[String(pid)] || []
+            };
+          })
+          .filter((p) => pidsFavoritos.has(String(p.ID_Producto)))
           .map((p) => {
             const variantes = obtenerVariantes(p.Variante_Producto);
             const hayStock = variantes.some((v) => v.stock > 0);
@@ -86,9 +168,14 @@ export default function FavoritosPage() {
               hayStock
             };
           });
+
         setProductos(items);
+      } catch (err) {
+        console.error('Error cargando favoritos desde Firestore:', err);
+        setProductos([]);
+      } finally {
+        setCargando(false);
       }
-      setCargando(false);
     }
 
     cargarFavoritos();
@@ -119,7 +206,7 @@ export default function FavoritosPage() {
       idVariante: variante.idVariante,
       idProducto: productoModal.id,
       nombre: productoModal.nombre,
-        marca: productoModal.marca,
+      marca: productoModal.marca || 'The Outfit',
       talla: variante.talla,
       precio: variante.precio,
       imagen: productoModal.imagen,
@@ -150,6 +237,22 @@ export default function FavoritosPage() {
               {productos.map((item) => (
                 <Link href={`/prenda-pag/${item.id}`} className="favorito-card" key={item.id} style={{ textDecoration: 'none', color: 'inherit' }}>
                   <div className="favorito-imagen-wrap">
+                    {item.enOferta && (
+                      <span style={{
+                        position: 'absolute',
+                        top: '8px',
+                        left: '8px',
+                        backgroundColor: '#c62828',
+                        color: 'white',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        padding: '3px 6px',
+                        borderRadius: '4px',
+                        zIndex: 2
+                      }}>
+                        -{item.porcentajeDescuento}%
+                      </span>
+                    )}
                     {item.imagen ? (
                       <img src={item.imagen} alt={item.nombre} className="favorito-imagen" />
                     ) : (
@@ -160,8 +263,19 @@ export default function FavoritosPage() {
                   <div className="favorito-info">
                     <div>
                       <p className="favorito-nombre">{item.nombre}</p>
-                      <p className="favorito-marca">{item.marca || '\u00A0'}</p>
-                      <p className="favorito-precio">${item.precio.toFixed(2)}</p>
+                      <p className="favorito-marca">{item.marca || 'The Outfit'}</p>
+                      {item.enOferta ? (
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
+                          <span style={{ textDecoration: 'line-through', color: '#888', fontSize: '0.85rem' }}>
+                            ${item.precioOriginal ? Number(item.precioOriginal).toFixed(2) : ''}
+                          </span>
+                          <span style={{ color: '#c62828', fontWeight: 'bold' }}>
+                            ${item.precio.toFixed(2)}
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="favorito-precio">${item.precio.toFixed(2)}</p>
+                      )}
                     </div>
                     <button
                       type="button"

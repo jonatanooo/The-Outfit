@@ -1,0 +1,925 @@
+================================================================================
+   GUÍA Y CÓDIGO DE MIGRACIÓN: DE SUPABASE (POSTGRESQL) A GOOGLE CLOUD FIRESTORE
+   Proyecto: The Outfit
+   Total de tablas / colecciones identificadas: 33
+================================================================================
+
+IMPORTANTE (Diferencia clave entre Supabase SQL y Firestore NoSQL):
+- En PostgreSQL (Supabase) las tablas y tipos de columnas son fijos y se crean con "CREATE TABLE".
+- En Firestore (NoSQL) no existe la sentencia "CREATE TABLE". Las colecciones y documentos se crean automáticamente al escribir datos en ellos mediante el SDK (Node.js/Firebase Admin).
+- Las claves foráneas (Foreign Keys) en Firestore se modelan como referencias de ID de documento (strings/números) o DocumentReference.
+
+Este archivo contiene:
+PARTE 1: La estructura equivalente de cada colección en Firestore con sus campos y tipos.
+PARTE 2: Script ejecutable en Node.js para inicializar y crear todas las colecciones con su estructura.
+PARTE 3: Script de migración en vivo (Extrae datos de Supabase y los inserta en Firestore por lotes).
+PARTE 4: Reglas de Seguridad recomendadas (firestore.rules) para validar campos y tipos.
+
+================================================================================
+PARTE 1: MAPEO DE TABLAS (SUPABASE) A COLECCIONES Y CAMPOS (FIRESTORE)
+================================================================================
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Almacenes"
+--------------------------------------------------------------------------------
+Document ID: ID_Almacenes (o ID autogenerado)
+Campos del Documento:
+  - ID_Almacen                     : number (entero / flotante) (Requerido) 
+  - Nombre_Almacen                 : string                    (Requerido) 
+  - Direccion                      : string                    (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Auditoria_Actualizacion_User"
+--------------------------------------------------------------------------------
+Document ID: ID_Auditoria_Actualizacion_User (o ID autogenerado)
+Campos del Documento:
+  - ID_Auditoria                   : number (entero / flotante) (Requerido) 
+  - ID_User                        : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - ID_UserAccion                  : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - ValorAntiguo                   : string                    (Requerido) 
+  - ValorNuevo                     : string                    (Requerido) 
+  - Fecha_Registro                 : Timestamp                 (Requerido) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Auditoria_CambioCategoria"
+--------------------------------------------------------------------------------
+Document ID: ID_Auditoria_CambioCategoria (o ID autogenerado)
+Campos del Documento:
+  - ID_Auditoria                   : number (entero / flotante) (Requerido) 
+  - ID_UserAccion                  : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - ID_CategoriaAntigua            : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Categorias_Producto.ID_categoria]
+  - ID_CategoriaNueva              : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Categorias_Producto.ID_categoria]
+  - Fecha_Registro                 : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Auditoria_CambioEstado_Producto"
+--------------------------------------------------------------------------------
+Document ID: ID_Auditoria_CambioEstado_Producto (o ID autogenerado)
+Campos del Documento:
+  - ID_Auditoria                   : number (entero / flotante) (Requerido) 
+  - ID_Producto                    : number (entero / flotante) (Requerido)  -> [Referencia a Productos.ID_Producto]
+  - ID_UserAccion                  : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a User.ID_User]
+  - ID_EstadoAnterior              : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Estado_Producto.ID_Estado_Producto]
+  - ID_EstadoNuevo                 : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Estado_Producto.ID_Estado_Producto]
+  - Fecha                          : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Auditoria_CambioEstado_User"
+--------------------------------------------------------------------------------
+Document ID: ID_Auditoria_CambioEstado_User (o ID autogenerado)
+Campos del Documento:
+  - ID_Auditoria                   : number (entero / flotante) (Requerido) 
+  - ID_User                        : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - ID_UserAccion                  : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - ID_EstadoAnterior              : number (entero / flotante) (Requerido)  -> [Referencia a Estado_User.ID_EstadoUsuario]
+  - ID_EstadoNuevo                 : number (entero / flotante) (Requerido)  -> [Referencia a Estado_User.ID_EstadoUsuario]
+  - Fecha_Registro                 : Timestamp                 (Requerido) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Auditoria_CambioRol"
+--------------------------------------------------------------------------------
+Document ID: ID_Auditoria_CambioRol (o ID autogenerado)
+Campos del Documento:
+  - ID_Auditoria                   : number (entero / flotante) (Requerido) 
+  - ID_User                        : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - ID_UserAccion                  : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - ID_RolAntiguo                  : number (entero / flotante) (Requerido)  -> [Referencia a Roles.ID_Rol]
+  - ID_RolNuevo                    : number (entero / flotante) (Requerido)  -> [Referencia a Roles.ID_Rol]
+  - Fecha_Registro                 : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Auditoria_Cambio_Estado Pedido"
+--------------------------------------------------------------------------------
+Document ID: ID_Auditoria_Cambio_Estado Pedido (o ID autogenerado)
+Campos del Documento:
+  - ID_Auditoria                   : number (entero / flotante) (Requerido) 
+  - ID_Pedido                      : number (entero / flotante) (Requerido)  -> [Referencia a Pedido.ID_Pedido]
+  - ID_UserAccion                  : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a User.ID_User]
+  - ID_EstadoAnterior              : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Estado_Pedido.ID_EstadoPedido]
+  - ID_EstadoNuevo                 : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Estado_Pedido.ID_EstadoPedido]
+  - Fecha_Cambio                   : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Auditoria_Inventario"
+--------------------------------------------------------------------------------
+Document ID: ID_Auditoria_Inventario (o ID autogenerado)
+Campos del Documento:
+  - ID_Auditoria                   : number (entero / flotante) (Requerido) 
+  - ID_Variante                    : number (entero / flotante) (Requerido)  -> [Referencia a Variante_Producto.ID_Variante]
+  - ID_UserAccion                  : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a User.ID_User]
+  - Cantidad_Anterior              : number (entero / flotante) (Opcional / Nullable) 
+  - Cantidad_Nueva                 : number (entero / flotante) (Opcional / Nullable) 
+  - Tipo_Movimiento                : string                    (Opcional / Nullable) 
+  - Fecha_Accion                   : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Auditoria_Precio_Variante"
+--------------------------------------------------------------------------------
+Document ID: ID_Auditoria_Precio_Variante (o ID autogenerado)
+Campos del Documento:
+  - ID_Auditoria                   : number (entero / flotante) (Requerido) 
+  - ID_Variante                    : number (entero / flotante) (Requerido)  -> [Referencia a Variante_Producto.ID_Variante]
+  - ID_UserAccion                  : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a User.ID_User]
+  - Precio_Anterior                : number (entero / flotante) (Opcional / Nullable) 
+  - Precio_Nuevo                   : number (entero / flotante) (Opcional / Nullable) 
+  - Fecha                          : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Carrito"
+--------------------------------------------------------------------------------
+Document ID: ID_Carrito (o ID autogenerado)
+Campos del Documento:
+  - ID_Carrito                     : number (entero / flotante) (Requerido) 
+  - ID_User                        : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - Fecha_Creacion                 : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Carrito_Detalle"
+--------------------------------------------------------------------------------
+Document ID: ID_Carrito_Detalle (o ID autogenerado)
+Campos del Documento:
+  - ID_CarritoDetalle              : number (entero / flotante) (Requerido) 
+  - ID_Carrito                     : number (entero / flotante) (Requerido)  -> [Referencia a Carrito.ID_Carrito]
+  - ID_Variante                    : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Variante_Producto.ID_Variante]
+  - Cantidad                       : number (entero / flotante) (Opcional / Nullable) 
+  - Fecha_agregado                 : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Categorias_Producto"
+--------------------------------------------------------------------------------
+Document ID: ID_Categorias_Producto (o ID autogenerado)
+Campos del Documento:
+  - ID_categoria                   : number (entero / flotante) (Requerido) 
+  - ID_User                        : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - Nombre_Categoria               : string                    (Opcional / Nullable) 
+  - Descripcion                    : string                    (Opcional / Nullable) 
+  - Fecha_Creacion                 : Timestamp                 (Opcional / Nullable) 
+  - ID_TipoTalla                   : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Talla.ID_Talla]
+  - ID_CategoriaPadre              : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Categorias_Producto.ID_categoria]
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Colores"
+--------------------------------------------------------------------------------
+Document ID: ID_Colores (o ID autogenerado)
+Campos del Documento:
+  - ID_Color                       : number (entero / flotante) (Requerido) 
+  - Nombre_Color                   : string                    (Requerido) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Direcciones"
+--------------------------------------------------------------------------------
+Document ID: ID_Direcciones (o ID autogenerado)
+Campos del Documento:
+  - ID_Direccion                   : number (entero / flotante) (Requerido) 
+  - ID_User                        : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - Calle                          : string                    (Opcional / Nullable) 
+  - Ciudad                         : string                    (Opcional / Nullable) 
+  - Departamento                   : string                    (Opcional / Nullable) 
+  - Codigo_Postal                  : number (entero / flotante) (Opcional / Nullable) 
+  - Pais                           : string                    (Opcional / Nullable) 
+  - Fecha_Creacion                 : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Estado_Pedido"
+--------------------------------------------------------------------------------
+Document ID: ID_Estado_Pedido (o ID autogenerado)
+Campos del Documento:
+  - ID_EstadoPedido                : number (entero / flotante) (Requerido) 
+  - Estado                         : string                    (Requerido) 
+  - Descripcion                    : string                    (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Estado_Producto"
+--------------------------------------------------------------------------------
+Document ID: ID_Estado_Producto (o ID autogenerado)
+Campos del Documento:
+  - ID_Estado_Producto             : number (entero / flotante) (Requerido) 
+  - ID_User                        : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - Estado                         : string                    (Opcional / Nullable) 
+  - Descripcion                    : string                    (Opcional / Nullable) 
+  - Fecha_Creacion                 : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Estado_User"
+--------------------------------------------------------------------------------
+Document ID: ID_Estado_User (o ID autogenerado)
+Campos del Documento:
+  - ID_EstadoUsuario               : number (entero / flotante) (Requerido) 
+  - Estado                         : string                    (Requerido) 
+  - Fecha_CreacionEstadoUsuario    : Timestamp                 (Requerido) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Favoritos"
+--------------------------------------------------------------------------------
+Document ID: ID_Favoritos (o ID autogenerado)
+Campos del Documento:
+  - ID_Favorito                    : number (entero / flotante) (Requerido) 
+  - ID_User                        : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - ID_Producto                    : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Productos.ID_Producto]
+  - Fecha_Agregado                 : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Fotos_Productos"
+--------------------------------------------------------------------------------
+Document ID: ID_Fotos_Productos (o ID autogenerado)
+Campos del Documento:
+  - ID_Foto                        : number (entero / flotante) (Requerido) 
+  - ID_Producto                    : number (entero / flotante) (Requerido)  -> [Referencia a Productos.ID_Producto]
+  - ID_User                        : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a User.ID_User]
+  - URL_Foto                       : string                    (Opcional / Nullable) 
+  - Orden                          : number (entero / flotante) (Opcional / Nullable) 
+  - Fecha_Carga                    : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Inventario"
+--------------------------------------------------------------------------------
+Document ID: ID_Inventario (o ID autogenerado)
+Campos del Documento:
+  - ID_Inventario                  : number (entero / flotante) (Requerido) 
+  - ID_Variante                    : number (entero / flotante) (Requerido)  -> [Referencia a Variante_Producto.ID_Variante]
+  - ID_Almacen                     : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Almacenes.ID_Almacen]
+  - Cantidad_Disponible            : number (entero / flotante) (Opcional / Nullable) 
+  - Cantidad_Reservada             : number (entero / flotante) (Opcional / Nullable) 
+  - Fecha_Actualizacion            : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Marca"
+--------------------------------------------------------------------------------
+Document ID: ID_Marca (o ID autogenerado)
+Campos del Documento:
+  - ID_Marca                       : number (entero / flotante) (Requerido) 
+  - ID_User                        : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - Nombre_Marca                   : string                    (Opcional / Nullable) 
+  - Fecha_Creacion                 : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Materiales"
+--------------------------------------------------------------------------------
+Document ID: ID_Materiales (o ID autogenerado)
+Campos del Documento:
+  - ID_Material                    : number (entero / flotante) (Requerido) 
+  - Nombre_Material                : string                    (Requerido) 
+  - Descripcion                    : string                    (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Pedido"
+--------------------------------------------------------------------------------
+Document ID: ID_Pedido (o ID autogenerado)
+Campos del Documento:
+  - ID_Pedido                      : number (entero / flotante) (Requerido) 
+  - ID_User                        : number (entero / flotante) (Requerido)  -> [Referencia a User.ID_User]
+  - ID_EstadoPedidoo               : number (entero / flotante) (Requerido)  -> [Referencia a Estado_Pedido.ID_EstadoPedido]
+  - ID_Direccion                   : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Direcciones.ID_Direccion]
+  - Subtotal                       : number (entero / flotante) (Opcional / Nullable) 
+  - Descuento                      : number (entero / flotante) (Opcional / Nullable) 
+  - Total                          : number (entero / flotante) (Opcional / Nullable) 
+  - Fecha_Pedido                   : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Pedido_Detalle"
+--------------------------------------------------------------------------------
+Document ID: ID_Pedido_Detalle (o ID autogenerado)
+Campos del Documento:
+  - ID_PedidoDetalle               : number (entero / flotante) (Requerido) 
+  - ID_Pedido                      : number (entero / flotante) (Requerido)  -> [Referencia a Pedido.ID_Pedido]
+  - ID_Variante                    : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Variante_Producto.ID_Variante]
+  - Cantidad                       : number (entero / flotante) (Opcional / Nullable) 
+  - Precio_Original                : number (entero / flotante) (Opcional / Nullable) 
+  - Precio_Unitario                : number (entero / flotante) (Opcional / Nullable) 
+  - ID_Promocion                   : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Promociones.ID_Promocion]
+  - Subtotal                       : number (entero / flotante) (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Producto_Material"
+--------------------------------------------------------------------------------
+Document ID: ID_Producto_Material (o ID autogenerado)
+Campos del Documento:
+  - ID_ProductoMaterial            : number (entero / flotante) (Requerido) 
+  - ID_material                    : number (entero / flotante) (Requerido)  -> [Referencia a Materiales.ID_Material]
+  - Porcentaje                     : number (entero / flotante) (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Productos"
+--------------------------------------------------------------------------------
+Document ID: ID_Productos (o ID autogenerado)
+Campos del Documento:
+  - ID_Producto                    : number (entero / flotante) (Requerido) 
+  - ID_Categoria                   : number (entero / flotante) (Requerido)  -> [Referencia a Categorias_Producto.ID_categoria]
+  - ID_Marca                       : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Marca.ID_Marca]
+  - ID_EstadoProducto              : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Estado_Producto.ID_Estado_Producto]
+  - ID_User                        : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a User.ID_User]
+  - Nombre_Producto                : string                    (Opcional / Nullable) 
+  - Descripcion                    : string                    (Opcional / Nullable) 
+  - Fecha_Creacion                 : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Promociones"
+--------------------------------------------------------------------------------
+Document ID: ID_Promociones (o ID autogenerado)
+Campos del Documento:
+  - ID_Promocion                   : number (entero / flotante) (Requerido) 
+  - ID_Variante                    : number (entero / flotante) (Requerido)  -> [Referencia a Variante_Producto.ID_Variante]
+  - Tipo_Descuento                 : number (entero / flotante) (Opcional / Nullable) 
+  - Fecha_Creacion                 : Timestamp                 (Opcional / Nullable) 
+  - Fecha_Fin                      : Timestamp                 (Opcional / Nullable) 
+  - ID_UserAccion                  : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a User.ID_User]
+  - Activo                         : number (entero / flotante) (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Roles"
+--------------------------------------------------------------------------------
+Document ID: ID_Roles (o ID autogenerado)
+Campos del Documento:
+  - ID_Rol                         : number (entero / flotante) (Requerido) 
+  - Rol                            : string                    (Requerido) 
+  - Fecha_Registro                 : Timestamp                 (Requerido) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Talla"
+--------------------------------------------------------------------------------
+Document ID: ID_Talla (o ID autogenerado)
+Campos del Documento:
+  - ID_Talla                       : number (entero / flotante) (Requerido) 
+  - ID_TipoTalla                   : number (entero / flotante) (Requerido)  -> [Referencia a Tipos_Talla.ID_TipoTalla]
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Tipos_Talla"
+--------------------------------------------------------------------------------
+Document ID: ID_Tipos_Talla (o ID autogenerado)
+Campos del Documento:
+  - ID_TipoTalla                   : number (entero / flotante) (Requerido) 
+  - Nombre_TipoTalla               : string                    (Requerido) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Transacciones_Pago"
+--------------------------------------------------------------------------------
+Document ID: ID_Transacciones_Pago (o ID autogenerado)
+Campos del Documento:
+  - ID_Transaccion                 : number (entero / flotante) (Requerido) 
+  - ID_Pedido                      : number (entero / flotante) (Requerido)  -> [Referencia a Pedido.ID_Pedido]
+  - Metodo_Pago                    : string                    (Opcional / Nullable) 
+  - Monto                          : number (entero / flotante) (Opcional / Nullable) 
+  - Estado_transaccion             : string                    (Opcional / Nullable) 
+  - Referencia_Pago                : string                    (Opcional / Nullable) 
+  - Fecha_Transaccion              : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "User"
+--------------------------------------------------------------------------------
+Document ID: ID_User (o ID autogenerado)
+Campos del Documento:
+  - ID_User                        : number (entero / flotante) (Requerido) 
+  - ID_Rol                         : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Roles.ID_Rol]
+  - ID_EstadoUsuario               : number (entero / flotante) (Requerido)  -> [Referencia a Estado_User.ID_EstadoUsuario]
+  - Usuario                        : string                    (Requerido) 
+  - Password_Hash                  : string                    (Opcional / Nullable) 
+  - DUI                            : string                    (Requerido) 
+  - Telefono                       : string                    (Opcional / Nullable) 
+  - Fecha_Creacion                 : Timestamp                 (Requerido) 
+  - auth_id                        : string (UUID)             (Opcional / Nullable) 
+  - Nombres                        : string                    (Opcional / Nullable) 
+  - Apellidos                      : string                    (Opcional / Nullable) 
+  - Correo                         : string                    (Opcional / Nullable) 
+  - Puesto                         : string                    (Opcional / Nullable) 
+  - Es_Empleado                    : boolean                   (Requerido) 
+  - Fecha_Incorporacion            : Timestamp                 (Opcional / Nullable) 
+
+--------------------------------------------------------------------------------
+COLECCIÓN: "Variante_Producto"
+--------------------------------------------------------------------------------
+Document ID: ID_Variante_Producto (o ID autogenerado)
+Campos del Documento:
+  - ID_Variante                    : number (entero / flotante) (Requerido) 
+  - ID_Producto                    : number (entero / flotante) (Requerido)  -> [Referencia a Productos.ID_Producto]
+  - ID_Talla                       : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Talla.ID_Talla]
+  - ID_Color                       : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Colores.ID_Color]
+  - Precio_Actual                  : number (entero / flotante) (Opcional / Nullable) 
+  - ID_EstadoProducto              : number (entero / flotante) (Opcional / Nullable)  -> [Referencia a Estado_Producto.ID_Estado_Producto]
+
+
+================================================================================
+PARTE 2: SCRIPT DE INICIALIZACIÓN DE COLECCIONES EN FIRESTORE (NODE.JS)
+================================================================================
+Este script utiliza el SDK oficial 'firebase-admin' para inicializar y crear todas las
+colecciones con documentos base o de esquema en tu proyecto de Firebase/Firestore.
+
+Instalación previa requerida:
+  npm install firebase-admin
+
+Código JavaScript (Node.js):
+--------------------------------------------------------------------------------
+const admin = require('firebase-admin');
+
+// 1. Configurar credenciales del Service Account de Firebase
+// Descarga tu clave privada desde la Consola de Firebase:
+// Configuración del proyecto > Cuentas de servicio > Generar nueva clave privada
+const serviceAccount = require('./serviceAccountKey.json');
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+const db = admin.firestore();
+
+// 2. Esquema de todas las colecciones y documentos iniciales
+const coleccionesEsquema = {
+  'Almacenes': {
+    ID_Almacen: 0,
+    Nombre_Almacen: '',
+    Direccion: '',
+  },
+  'Auditoria_Actualizacion_User': {
+    ID_Auditoria: 0,
+    ID_User: 0,
+    ID_UserAccion: 0,
+    ValorAntiguo: '',
+    ValorNuevo: '',
+    Fecha_Registro: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Auditoria_CambioCategoria': {
+    ID_Auditoria: 0,
+    ID_UserAccion: 0,
+    ID_CategoriaAntigua: 0,
+    ID_CategoriaNueva: 0,
+    Fecha_Registro: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Auditoria_CambioEstado_Producto': {
+    ID_Auditoria: 0,
+    ID_Producto: 0,
+    ID_UserAccion: 0,
+    ID_EstadoAnterior: 0,
+    ID_EstadoNuevo: 0,
+    Fecha: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Auditoria_CambioEstado_User': {
+    ID_Auditoria: 0,
+    ID_User: 0,
+    ID_UserAccion: 0,
+    ID_EstadoAnterior: 0,
+    ID_EstadoNuevo: 0,
+    Fecha_Registro: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Auditoria_CambioRol': {
+    ID_Auditoria: 0,
+    ID_User: 0,
+    ID_UserAccion: 0,
+    ID_RolAntiguo: 0,
+    ID_RolNuevo: 0,
+    Fecha_Registro: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Auditoria_Cambio_Estado Pedido': {
+    ID_Auditoria: 0,
+    ID_Pedido: 0,
+    ID_UserAccion: 0,
+    ID_EstadoAnterior: 0,
+    ID_EstadoNuevo: 0,
+    Fecha_Cambio: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Auditoria_Inventario': {
+    ID_Auditoria: 0,
+    ID_Variante: 0,
+    ID_UserAccion: 0,
+    Cantidad_Anterior: 0,
+    Cantidad_Nueva: 0,
+    Tipo_Movimiento: '',
+    Fecha_Accion: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Auditoria_Precio_Variante': {
+    ID_Auditoria: 0,
+    ID_Variante: 0,
+    ID_UserAccion: 0,
+    Precio_Anterior: '',
+    Precio_Nuevo: '',
+    Fecha: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Carrito': {
+    ID_Carrito: 0,
+    ID_User: 0,
+    Fecha_Creacion: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Carrito_Detalle': {
+    ID_CarritoDetalle: 0,
+    ID_Carrito: 0,
+    ID_Variante: 0,
+    Cantidad: '',
+    Fecha_agregado: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Categorias_Producto': {
+    ID_categoria: 0,
+    ID_User: 0,
+    Nombre_Categoria: '',
+    Descripcion: '',
+    Fecha_Creacion: admin.firestore.FieldValue.serverTimestamp(),
+    ID_TipoTalla: 0,
+    ID_CategoriaPadre: 0,
+  },
+  'Colores': {
+    ID_Color: 0,
+    Nombre_Color: '',
+  },
+  'Direcciones': {
+    ID_Direccion: 0,
+    ID_User: 0,
+    Calle: '',
+    Ciudad: '',
+    Departamento: '',
+    Codigo_Postal: 0,
+    Pais: '',
+    Fecha_Creacion: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Estado_Pedido': {
+    ID_EstadoPedido: 0,
+    Estado: '',
+    Descripcion: '',
+  },
+  'Estado_Producto': {
+    ID_Estado_Producto: 0,
+    ID_User: 0,
+    Estado: '',
+    Descripcion: '',
+    Fecha_Creacion: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Estado_User': {
+    ID_EstadoUsuario: 0,
+    Estado: '',
+    Fecha_CreacionEstadoUsuario: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Favoritos': {
+    ID_Favorito: 0,
+    ID_User: 0,
+    ID_Producto: 0,
+    Fecha_Agregado: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Fotos_Productos': {
+    ID_Foto: 0,
+    ID_Producto: 0,
+    ID_User: 0,
+    URL_Foto: '',
+    Orden: '',
+    Fecha_Carga: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Inventario': {
+    ID_Inventario: 0,
+    ID_Variante: 0,
+    ID_Almacen: 0,
+    Cantidad_Disponible: 0,
+    Cantidad_Reservada: 0,
+    Fecha_Actualizacion: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Marca': {
+    ID_Marca: 0,
+    ID_User: 0,
+    Nombre_Marca: '',
+    Fecha_Creacion: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Materiales': {
+    ID_Material: 0,
+    Nombre_Material: '',
+    Descripcion: '',
+  },
+  'Pedido': {
+    ID_Pedido: 0,
+    ID_User: 0,
+    ID_EstadoPedidoo: 0,
+    ID_Direccion: 0,
+    Subtotal: '',
+    Descuento: '',
+    Total: '',
+    Fecha_Pedido: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Pedido_Detalle': {
+    ID_PedidoDetalle: 0,
+    ID_Pedido: 0,
+    ID_Variante: 0,
+    Cantidad: '',
+    Precio_Original: '',
+    Precio_Unitario: '',
+    ID_Promocion: 0,
+    Subtotal: '',
+  },
+  'Producto_Material': {
+    ID_ProductoMaterial: 0,
+    ID_material: 0,
+    Porcentaje: 0,
+  },
+  'Productos': {
+    ID_Producto: 0,
+    ID_Categoria: 0,
+    ID_Marca: 0,
+    ID_EstadoProducto: 0,
+    ID_User: 0,
+    Nombre_Producto: '',
+    Descripcion: '',
+    Fecha_Creacion: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Promociones': {
+    ID_Promocion: 0,
+    ID_Variante: 0,
+    Tipo_Descuento: '',
+    Fecha_Creacion: admin.firestore.FieldValue.serverTimestamp(),
+    Fecha_Fin: admin.firestore.FieldValue.serverTimestamp(),
+    ID_UserAccion: 0,
+    Activo: 0,
+  },
+  'Roles': {
+    ID_Rol: 0,
+    Rol: '',
+    Fecha_Registro: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Talla': {
+    ID_Talla: 0,
+    ID_TipoTalla: 0,
+  },
+  'Tipos_Talla': {
+    ID_TipoTalla: 0,
+    Nombre_TipoTalla: '',
+  },
+  'Transacciones_Pago': {
+    ID_Transaccion: 0,
+    ID_Pedido: 0,
+    Metodo_Pago: '',
+    Monto: '',
+    Estado_transaccion: '',
+    Referencia_Pago: '',
+    Fecha_Transaccion: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'User': {
+    ID_User: 0,
+    ID_Rol: 0,
+    ID_EstadoUsuario: 0,
+    Usuario: '',
+    Password_Hash: '',
+    DUI: '',
+    Telefono: '',
+    Fecha_Creacion: admin.firestore.FieldValue.serverTimestamp(),
+    auth_id: '',
+    Nombres: '',
+    Apellidos: '',
+    Correo: '',
+    Puesto: '',
+    Es_Empleado: false,
+    Fecha_Incorporacion: admin.firestore.FieldValue.serverTimestamp(),
+  },
+  'Variante_Producto': {
+    ID_Variante: 0,
+    ID_Producto: 0,
+    ID_Talla: 0,
+    ID_Color: 0,
+    Precio_Actual: '',
+    ID_EstadoProducto: 0,
+  },
+};
+
+// 3. Función para inicializar y crear las colecciones en Firestore
+async function crearColeccionesFirestore() {
+  console.log('Iniciando creación de colecciones en Firestore...');
+  
+  for (const [nombreColeccion, plantillaDoc] of Object.entries(coleccionesEsquema)) {
+    try {
+      // Creamos un documento inicial de metadatos o estructura en cada colección
+      const docRef = db.collection(nombreColeccion).doc('_schema_init');
+      await docRef.set({
+        ...plantillaDoc,
+        _is_schema_template: true,
+        _creado_en: admin.firestore.FieldValue.serverTimestamp()
+      });
+      console.log(`✅ Colección '${nombreColeccion}' creada exitosamente.`);
+    } catch (error) {
+      console.error(`❌ Error creando colección '${nombreColeccion}':`, error.message);
+    }
+  }
+
+  console.log('¡Todas las colecciones fueron creadas en Firestore!');
+}
+
+crearColeccionesFirestore();
+--------------------------------------------------------------------------------
+
+
+================================================================================
+PARTE 3: SCRIPT DE MIGRACIÓN COMPLETA DIRECTA (SUPABASE -> FIRESTORE)
+================================================================================
+Este script se conecta a tu Supabase actual, extrae todos los registros de cada
+tabla y los inserta automáticamente en las colecciones de Firestore utilizando
+batches de escritura (500 operaciones por lote) para máxima velocidad.
+
+Instalación previa:
+  npm install @supabase/supabase-js firebase-admin
+
+Código JavaScript (migrar_supabase_a_firestore.js):
+--------------------------------------------------------------------------------
+const { createClient } = require('@supabase/supabase-js');
+const admin = require('firebase-admin');
+const serviceAccount = require('./serviceAccountKey.json');
+
+// Conexión a Supabase
+const SUPABASE_URL = 'https://obqarkmuvppaebltfynz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_e6HAWVH3G1wE9OCZw7SaWg_Rt6zIvEo'; // O usar Service Role si hay RLS
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Conexión a Firebase
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+const db = admin.firestore();
+
+// Lista de tablas a migrar
+const tablas = [
+  'Almacenes',
+  'Auditoria_Actualizacion_User',
+  'Auditoria_CambioCategoria',
+  'Auditoria_CambioEstado_Producto',
+  'Auditoria_CambioEstado_User',
+  'Auditoria_CambioRol',
+  'Auditoria_Cambio_Estado Pedido',
+  'Auditoria_Inventario',
+  'Auditoria_Precio_Variante',
+  'Carrito',
+  'Carrito_Detalle',
+  'Categorias_Producto',
+  'Colores',
+  'Direcciones',
+  'Estado_Pedido',
+  'Estado_Producto',
+  'Estado_User',
+  'Favoritos',
+  'Fotos_Productos',
+  'Inventario',
+  'Marca',
+  'Materiales',
+  'Pedido',
+  'Pedido_Detalle',
+  'Producto_Material',
+  'Productos',
+  'Promociones',
+  'Roles',
+  'Talla',
+  'Tipos_Talla',
+  'Transacciones_Pago',
+  'User',
+  'Variante_Producto'
+];
+
+async function migrarTabla(nombreTabla) {
+  console.log(`\n⏳ Migrando tabla '${nombreTabla}'...`);
+  
+  // 1. Obtener registros de Supabase
+  const { data, error } = await supabase.from(nombreTabla).select('*');
+  
+  if (error) {
+    console.error(`❌ Error al leer '${nombreTabla}' en Supabase:`, error.message);
+    return;
+  }
+  
+  if (!data || data.length === 0) {
+    console.log(`ℹ️  La tabla '${nombreTabla}' no contiene registros. Se creará vacía.`);
+    // Crear documento placeholder para que aparezca la colección en la consola
+    await db.collection(nombreTabla).doc('_placeholder').set({
+      _creado_en: admin.firestore.FieldValue.serverTimestamp(),
+      _info: 'Colección inicializada vacía'
+    });
+    return;
+  }
+
+  console.log(`📦 Encontrados ${data.length} registros para '${nombreTabla}'. Insertando en Firestore...`);
+
+  // 2. Insertar en lotes de 500 (límite de Firestore)
+  let batch = db.batch();
+  let contador = 0;
+  let totalInsertados = 0;
+
+  for (const fila of data) {
+    // Buscar la clave primaria común si existe (ej. ID_User, ID_Producto, etc.)
+    const idKey = Object.keys(fila).find(k => k.startsWith('ID_')) || 'id';
+    const docId = fila[idKey] ? String(fila[idKey]) : db.collection(nombreTabla).doc().id;
+    
+    const docRef = db.collection(nombreTabla).doc(docId);
+    
+    // Normalizar fechas a Timestamp de Firestore
+    const docData = { ...fila };
+    for (const [campo, valor] of Object.entries(docData)) {
+      if (typeof valor === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(valor)) {
+        docData[campo] = admin.firestore.Timestamp.fromDate(new Date(valor));
+      }
+    }
+
+    batch.set(docRef, docData);
+    contador++;
+    totalInsertados++;
+
+    if (contador === 500) {
+      await batch.commit();
+      console.log(`   Guardados ${totalInsertados}/${data.length} registros...`);
+      batch = db.batch();
+      contador = 0;
+    }
+  }
+
+  if (contador > 0) {
+    await batch.commit();
+  }
+
+  console.log(`✅ Tabla '${nombreTabla}' migrada con éxito (${totalInsertados} documentos).`);
+}
+
+async function ejecutarMigracionCompleta() {
+  console.log('🚀 INICIANDO MIGRACIÓN COMPLETA: SUPABASE -> FIRESTORE');
+  for (const tabla of tablas) {
+    await migrarTabla(tabla);
+  }
+  console.log('\n🎉 ¡MIGRACIÓN COMPLETADA EXITOSAMENTE!');
+}
+
+ejecutarMigracionCompleta();
+--------------------------------------------------------------------------------
+
+
+================================================================================
+PARTE 4: REGLAS DE SEGURIDAD RECOMENDADAS (firestore.rules)
+================================================================================
+Copia estas reglas en la consola de Firebase (Firestore Database > Reglas) para
+mantener la seguridad equivalente a las tablas de Supabase:
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Función para verificar si el usuario está autenticado
+    function estaAutenticado() {
+      return request.auth != null;
+    }
+
+    // Función para verificar rol de administrador
+    function esAdmin() {
+      return estaAutenticado() && request.auth.token.rol == 'admin';
+    }
+
+    // Catálogo público (Lectura pública, escritura solo administradores)
+    match /Productos/{documento} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+    match /Variante_Producto/{documento} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+    match /Categorias_Producto/{documento} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+    match /Fotos_Productos/{documento} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+    match /Marca/{documento} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+    match /Colores/{documento} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+    match /Talla/{documento} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+    match /Tipos_Talla/{documento} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+
+    // Inventario y Auditorías (Lectura pública/admin, inserción controlada)
+    match /Inventario/{documento} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+    match /Auditoria_Inventario/{documento} {
+      allow read, write: if estaAutenticado();
+    }
+
+    // Usuarios (Cada usuario ve y edita su propia información, admin acceso total)
+    match /User/{userId} {
+      allow read, write: if esAdmin() || (estaAutenticado() && request.auth.uid == resource.data.auth_id);
+    }
+
+    // Carrito y Pedidos personales
+    match /Carrito/{documento} {
+      allow read, write: if estaAutenticado();
+    }
+    match /Carrito_Detalle/{documento} {
+      allow read, write: if estaAutenticado();
+    }
+    match /Pedido/{documento} {
+      allow read, write: if estaAutenticado();
+    }
+    match /Pedido_Detalle/{documento} {
+      allow read, write: if estaAutenticado();
+    }
+
+    // Regla por defecto para el resto de colecciones de auditoría y configuración
+    match /{coleccion}/{documento} {
+      allow read, write: if esAdmin();
+    }
+  }
+}
+================================================================================

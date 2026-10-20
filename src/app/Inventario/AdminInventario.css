@@ -159,12 +159,14 @@
 
 .tabla-productos th:last-child {
     text-align: left;
-    width: 120px;
+    width: 180px;
+    min-width: 180px;
 }
 
 .tabla-productos td:last-child {
     text-align: right;
-    width: 120px;
+    width: 180px;
+    min-width: 180px;
 }
 
 .tabla-productos td:last-child > div {
@@ -385,3 +387,153 @@
     cursor: pointer;
     font-weight: 600;
 }
+
+/* ---------- Tabs de Navegación (Inventario vs Historial) ---------- */
+.admin-tabs {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 24px;
+    border-bottom: 2px solid #ccc6c3;
+}
+
+.admin-tab-btn {
+    background: none;
+    border: none;
+    padding: 10px 4px;
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: #666;
+    cursor: pointer;
+    position: relative;
+    transition: color 0.2s ease;
+}
+
+.admin-tab-btn:hover {
+    color: #1a1a1a;
+}
+
+.admin-tab-btn.activo {
+    font-weight: 700;
+    color: #0f0808;
+    border-bottom: 3px solid #0f0808;
+    margin-bottom: -2px;
+}
+
+/* ---------- Sobrescrituras para tabla de historial ---------- */
+.tabla-historial th:last-child,
+.tabla-historial td:last-child {
+    text-align: left;
+    width: auto;
+}
+
+.tabla-historial td:last-child > div {
+    justify-content: flex-start;
+}
+
+/* ---------- Badges para movimientos de inventario ---------- */
+.badge-ingreso {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #c8e6c9;
+}
+
+.badge-salida {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    background-color: #ffebee;
+    color: #c62828;
+    border: 1px solid #ffcdd2;
+}
+
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 10px;
+}
+
+/* ---------- Badges y acciones de descuento / oferta ---------- */
+.badge-descuento-admin {
+    display: inline-block;
+    background-color: #ffebee;
+    color: #c62828;
+    border: 1px solid #ffcdd2;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.btn-accion-descuento {
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease;
+}
+
+.btn-accion-descuento:hover {
+    transform: scale(1.15);
+}
+
+/* ---------- Botones de acciones en la tabla ---------- */
+.acciones-tabla-wrap {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.btn-accion-tabla {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    max-width: 36px;
+    max-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+    box-sizing: border-box;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.btn-accion-tabla:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    transform: scale(1.1);
+}
+
+.btn-accion-tabla img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    display: block;
+}
+
+.btn-accion-tabla .icono-estado-tabla {
+    font-size: 1.2rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+

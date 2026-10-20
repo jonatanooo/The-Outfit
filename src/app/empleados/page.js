@@ -1,7 +1,17 @@
 "use client"
 import { useEffect, useState } from 'react'
 import SidebarAdmin from '@/components/SidebarAdmin'
-import { supabase } from '@/lib/supabaseClient'
+import { db, auth } from '@/lib/firebaseClient'
+import {
+  collection,
+  getDocs,
+  getDoc,
+  doc,
+  setDoc,
+  updateDoc,
+  query,
+  where
+} from 'firebase/firestore'
 import './Empleados.css'
 
 const PUESTOS = ['Empleado', 'Usuario normal'];
@@ -21,6 +31,28 @@ function formatearFecha(iso) {
 
 const FORM_VACIO = { nombres: '', apellidos: '', correo: '', dui: '', puesto: 'Empleado' };
 
+async function actualizarUser(idUser, campos) {
+  if (idUser == null) return;
+  try {
+    const docRef = doc(db, 'User', String(idUser));
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      await updateDoc(docRef, campos);
+      return;
+    }
+    const opciones = [idUser, String(idUser)];
+    if (!isNaN(Number(idUser))) opciones.push(Number(idUser));
+    const q = query(collection(db, 'User'), where('ID_User', 'in', Array.from(new Set(opciones))));
+    const res = await getDocs(q);
+    if (!res.empty) {
+      await updateDoc(res.docs[0].ref, campos);
+    }
+  } catch (err) {
+    console.error('Error al actualizar usuario:', err);
+    throw err;
+  }
+}
+
 export default function EmpleadosPage() {
   const [empleados, setEmpleados] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -38,18 +70,24 @@ export default function EmpleadosPage() {
 
   async function cargarEmpleados() {
     setCargando(true);
-    const { data, error } = await supabase
-      .from('User')
-      .select('ID_User, Nombres, Apellidos, DUI, Correo, Puesto, ID_EstadoUsuario, Fecha_Incorporacion, Es_Empleado')
-      .order('ID_User');
-
-    if (error) {
-      console.error('Error cargando usuarios:', error.message);
+    try {
+      const snap = await getDocs(collection(db, 'User'));
+      const list = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          ...data,
+          ID_User: data.ID_User ?? d.id,
+          _docId: d.id,
+        };
+      });
+      list.sort((a, b) => (Number(a.ID_User) || 0) - (Number(b.ID_User) || 0));
+      setEmpleados(list);
+    } catch (err) {
+      console.error('Error cargando usuarios desde Firestore:', err);
       setEmpleados([]);
-    } else {
-      setEmpleados(data ?? []);
+    } finally {
+      setCargando(false);
     }
-    setCargando(false);
   }
 
   const filtrados = empleados.filter((e) =>
@@ -101,38 +139,41 @@ export default function EmpleadosPage() {
 
     setGuardando(true);
     
-    // Check DUI
-    const { data: duiRepetido } = await supabase
-      .from('User')
-      .select('ID_User')
-      .eq('DUI', form.dui)
-      .maybeSingle();
+    try {
+      // Check DUI
+      const qDui = query(collection(db, 'User'), where('DUI', '==', form.dui));
+      const snapDui = await getDocs(qDui);
 
-    if (duiRepetido) {
-      setErrorForm('Ese DUI ya está registrado para otro usuario.');
-      setGuardando(false);
-      return;
-    }
+      if (!snapDui.empty) {
+        setErrorForm('Ese DUI ya está registrado para otro usuario.');
+        setGuardando(false);
+        return;
+      }
 
-    const { error: errorInsert } = await supabase.from('User').insert({
-      Nombres: form.nombres.trim(),
-      Apellidos: form.apellidos.trim(),
-      Correo: form.correo.trim(),
-      Usuario: `${form.nombres.trim()} ${form.apellidos.trim()}`,
-      Contrasena: '12345',
-      DUI: form.dui,
-      Puesto: form.puesto,
+      const nuevoId = Date.now();
+      await setDoc(doc(db, 'User', String(nuevoId)), {
+        ID_User: nuevoId,
+        Nombres: form.nombres.trim(),
+        Apellidos: form.apellidos.trim(),
+        Correo: form.correo.trim(),
+        Usuario: `${form.nombres.trim()} ${form.apellidos.trim()}`,
+        Contrasena: '12345',
+        DUI: form.dui,
+        Puesto: form.puesto,
         ID_EstadoUsuario: 1,
-        Es_Empleado: form.puesto === 'Empleado'
-    });
-    setGuardando(false);
+        Es_Empleado: form.puesto === 'Empleado',
+        Fecha_Creacion: new Date().toISOString(),
+        Fecha_Incorporacion: new Date().toISOString()
+      });
 
-    if (errorInsert) {
-      setErrorForm('No se pudo crear: ' + errorInsert.message);
-      return;
+      cerrarModal();
+      cargarEmpleados();
+    } catch (err) {
+      console.error('Error creando usuario en Firestore:', err);
+      setErrorForm('No se pudo crear: ' + err.message);
+    } finally {
+      setGuardando(false);
     }
-    cerrarModal();
-    cargarEmpleados();
   }
 
   async function guardarEdicion() {
@@ -141,61 +182,58 @@ export default function EmpleadosPage() {
 
     setGuardando(true);
 
-    if (form.dui !== empleadoEditando.DUI) {
-      const { data: duiRepetido } = await supabase
-        .from('User')
-        .select('ID_User')
-        .eq('DUI', form.dui)
-        .maybeSingle();
+    try {
+      if (form.dui !== empleadoEditando.DUI) {
+        const qDui = query(collection(db, 'User'), where('DUI', '==', form.dui));
+        const snapDui = await getDocs(qDui);
+        const repetido = snapDui.docs.find((d) => {
+          const data = d.data();
+          const id = data.ID_User ?? d.id;
+          return String(id) !== String(empleadoEditando.ID_User);
+        });
 
-      if (duiRepetido) {
-        setErrorForm('No se puede actualizar. Ese DUI ya está registrado para otro usuario.');
-        setGuardando(false);
-        return;
+        if (repetido) {
+          setErrorForm('No se puede actualizar. Ese DUI ya está registrado para otro usuario.');
+          setGuardando(false);
+          return;
+        }
       }
-    }
 
-    const { error: errorUpdate } = await supabase
-      .from('User')
-      .update({
+      await actualizarUser(empleadoEditando.ID_User, {
         Nombres: form.nombres.trim(),
         Apellidos: form.apellidos.trim(),
         Correo: form.correo.trim(),
         Usuario: `${form.nombres.trim()} ${form.apellidos.trim()}`,
         DUI: form.dui,
         Puesto: form.puesto,
-          Es_Empleado: form.puesto === 'Empleado'
-      })
-        .eq('ID_User', empleadoEditando.ID_User);
-
-    if (errorUpdate) {
-      setErrorForm('No se pudo guardar: ' + errorUpdate.message);
-      setGuardando(false);
-      return;
-    }
-
-    // Insertar en tabla de auditoría (intentar con diferentes nombres comunes por si acaso, o Auditoria genérica)
-    try {
-      const { data: authData } = await supabase.auth.getUser();
-      const adminEmail = authData?.user?.email || 'Admin Desconocido';
-      
-      const datosAnteriores = `Nombre: ${empleadoEditando.Nombres} ${empleadoEditando.Apellidos}, DUI: ${empleadoEditando.DUI}, Puesto: ${empleadoEditando.Puesto}`;
-      const datosNuevos = `Nombre: ${form.nombres} ${form.apellidos}, DUI: ${form.dui}, Puesto: ${form.puesto}`;
-
-      // Insert general en Auditoria (ajusta el nombre de tabla y columnas según tu base de datos)
-      await supabase.from('Auditoria').insert({
-        Usuario_Admin: adminEmail,
-        Accion: 'Edición de Usuario',
-        Dato_Anterior: datosAnteriores,
-        Dato_Nuevo: datosNuevos
+        Es_Empleado: form.puesto === 'Empleado'
       });
-    } catch (err) {
-      console.log('No se pudo guardar en auditoría:', err);
-    }
 
-    setGuardando(false);
-    cerrarModal();
-    cargarEmpleados();
+      // Insertar en tabla de auditoría
+      try {
+        const adminEmail = auth.currentUser?.email || 'Admin Desconocido';
+        const datosAnteriores = `Nombre: ${empleadoEditando.Nombres} ${empleadoEditando.Apellidos}, DUI: ${empleadoEditando.DUI}, Puesto: ${empleadoEditando.Puesto}`;
+        const datosNuevos = `Nombre: ${form.nombres} ${form.apellidos}, DUI: ${form.dui}, Puesto: ${form.puesto}`;
+
+        await setDoc(doc(db, 'Auditoria', String(Date.now())), {
+          Usuario_Admin: adminEmail,
+          Accion: 'Edición de Usuario',
+          Dato_Anterior: datosAnteriores,
+          Dato_Nuevo: datosNuevos,
+          Fecha_Registro: new Date().toISOString()
+        });
+      } catch (errAudit) {
+        console.log('No se pudo guardar en auditoría:', errAudit);
+      }
+
+      cerrarModal();
+      cargarEmpleados();
+    } catch (err) {
+      console.error('Error al editar usuario:', err);
+      setErrorForm('No se pudo guardar: ' + err.message);
+    } finally {
+      setGuardando(false);
+    }
   }
 
   async function alternarEstado(emp) {
@@ -205,23 +243,19 @@ export default function EmpleadosPage() {
 
     if (!confirm(`¿Seguro que deseas ${accion} a ${nombre}?`)) return;
 
-    // Primero verificamos si el estado 2 existe, si no, lo intentamos crear.
-    if (nuevoEstado === 2) {
-       const { data: estadoData } = await supabase.from('Estado_User').select('ID_EstadoUsuario').eq('ID_EstadoUsuario', 2).maybeSingle();
-       if (!estadoData) {
-           await supabase.from('Estado_User').insert([{ ID_EstadoUsuario: 2, Estado: 'Baneado' }]);
-       }
-    }
+    try {
+      if (nuevoEstado === 2) {
+        const estRef = doc(db, 'Estado_User', '2');
+        const snapEst = await getDoc(estRef);
+        if (!snapEst.exists()) {
+          await setDoc(estRef, { ID_EstadoUsuario: 2, Estado: 'Baneado' });
+        }
+      }
 
-    const { error } = await supabase
-      .from('User')
-      .update({ ID_EstadoUsuario: nuevoEstado })
-      .eq('ID_User', emp.ID_User);
-
-    if (error) {
-      alert('No se pudo cambiar el estado: ' + error.message);
-    } else {
+      await actualizarUser(emp.ID_User, { ID_EstadoUsuario: nuevoEstado });
       cargarEmpleados();
+    } catch (error) {
+      alert('No se pudo cambiar el estado: ' + error.message);
     }
   }
 
@@ -390,4 +424,3 @@ export default function EmpleadosPage() {
     </>
   );
 }
-

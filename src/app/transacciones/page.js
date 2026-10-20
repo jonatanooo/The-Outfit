@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import SidebarAdmin from '@/components/SidebarAdmin.jsx';
-import { supabase } from '@/lib/supabaseClient';
+import { db } from '@/lib/firebaseClient';
+import { collection, getDocs, doc, getDoc, updateDoc, query, where } from 'firebase/firestore';
 import './transacciones.css';
 
 function AdminTransacciones() {
@@ -29,11 +30,17 @@ function AdminTransacciones() {
 
     // catalogo de estados para el "guardar cambios"
     async function cargarEstados() {
-        const { data } = await supabase
-            .from('Estado_Pedido')
-            .select('ID_EstadoPedido, Estado, Descripcion')
-            .order('ID_EstadoPedido');
-        setEstadosCatalogo(data ?? []);
+        try {
+            const snap = await getDocs(collection(db, 'Estado_Pedido'));
+            const data = snap.docs.map((d) => ({
+                ...d.data(),
+                ID_EstadoPedido: d.data().ID_EstadoPedido ?? d.id,
+            }));
+            data.sort((a, b) => (Number(a.ID_EstadoPedido) || 0) - (Number(b.ID_EstadoPedido) || 0));
+            setEstadosCatalogo(data);
+        } catch (err) {
+            console.error('Error cargando estados de pedido:', err);
+        }
     }
 
     // trae los pedidos con cliente, estado, pagos, líneas de detalle y dirección.
@@ -41,44 +48,182 @@ function AdminTransacciones() {
         setCargando(true);
         setError('');
 
-        const { data, error: err } = await supabase
-            .from('Pedido')
-            .select(`
-                ID_Pedido,
-                Fecha_Pedido,
-                Total,
-                Subtotal,
-                Descuento,
-                ID_User,
-                ID_Direccion,
-                ID_EstadoPedidoo,
-                Estado_Pedido ( ID_EstadoPedido, Estado, Descripcion ),
-                User ( ID_User, Usuario, Telefono, DUI ),
-                Direcciones ( ID_Direccion, Departamento, Calle ),
-                Transacciones_Pago ( ID_Transaccion, Monto, Metodo_Pago, Fecha_Transaccion, Estado_transaccion ),
-                Pedido_Detalle (
-                    ID_PedidoDetalle,
-                    Cantidad,
-                    Precio_Unitario,
-                    Subtotal,
-                    ID_Variante,
-                    "Variante_Producto" (
-                        ID_Variante,
-                        Productos ( Nombre_Producto, Fotos_Productos ( URL_Foto, Orden ) ),
-                        Talla ( Tipos_Talla ( Nombre_TipoTalla ) )
-                    )
-                )
-            `)
-            .order('Fecha_Pedido', { ascending: false });
+        try {
+            const [
+                pedidosSnap,
+                detallesSnap,
+                transSnap,
+                estadosSnap,
+                userSnap,
+                dirSnap,
+                varSnap,
+                prodSnap,
+                fotosSnap,
+                tallaSnap,
+                tiposTallaSnap
+            ] = await Promise.all([
+                getDocs(collection(db, 'Pedido')),
+                getDocs(collection(db, 'Pedido_Detalle')),
+                getDocs(collection(db, 'Transacciones_Pago')),
+                getDocs(collection(db, 'Estado_Pedido')),
+                getDocs(collection(db, 'User')),
+                getDocs(collection(db, 'Direcciones')),
+                getDocs(collection(db, 'Variante_Producto')),
+                getDocs(collection(db, 'Productos')),
+                getDocs(collection(db, 'Fotos_Productos')),
+                getDocs(collection(db, 'Talla')),
+                getDocs(collection(db, 'Tipos_Talla'))
+            ]);
 
-        if (err) {
-            console.log(' Error al cargar pedidos:', err.message);
+            // 1. Fotos por producto
+            const fotosPorProd = {};
+            fotosSnap.docs.forEach((d) => {
+                const f = d.data();
+                const pid = f.ID_Producto;
+                if (pid != null) {
+                    if (!fotosPorProd[pid]) fotosPorProd[pid] = [];
+                    fotosPorProd[pid].push(f);
+                    if (!fotosPorProd[String(pid)]) fotosPorProd[String(pid)] = fotosPorProd[pid];
+                }
+            });
+
+            // 2. Tipos de Talla y Talla
+            const tiposTallaMap = {};
+            tiposTallaSnap.docs.forEach((d) => {
+                const t = d.data();
+                const id = t.ID_TipoTalla ?? d.id;
+                tiposTallaMap[id] = t;
+                tiposTallaMap[String(id)] = t;
+            });
+
+            const tallaMap = {};
+            tallaSnap.docs.forEach((d) => {
+                const t = d.data();
+                const id = t.ID_Talla ?? d.id;
+                tallaMap[id] = { ...t, Tipos_Talla: tiposTallaMap[t.ID_TipoTalla] || null };
+                tallaMap[String(id)] = tallaMap[id];
+            });
+
+            // 3. Productos y Variantes
+            const prodMap = {};
+            prodSnap.docs.forEach((d) => {
+                const p = d.data();
+                const pid = p.ID_Producto ?? d.id;
+                prodMap[pid] = {
+                    ...p,
+                    Fotos_Productos: fotosPorProd[pid] || fotosPorProd[String(pid)] || []
+                };
+                prodMap[String(pid)] = prodMap[pid];
+            });
+
+            const varMap = {};
+            varSnap.docs.forEach((d) => {
+                const v = d.data();
+                const vid = v.ID_Variante ?? d.id;
+                varMap[vid] = {
+                    ...v,
+                    Productos: prodMap[v.ID_Producto] || prodMap[String(v.ID_Producto)] || null,
+                    Talla: tallaMap[v.ID_Talla] || tallaMap[String(v.ID_Talla)] || null
+                };
+                varMap[String(vid)] = varMap[vid];
+            });
+
+            // 4. Detalles de pedido
+            const detallesPorPedido = {};
+            detallesSnap.docs.forEach((d) => {
+                const det = d.data();
+                const pedId = det.ID_Pedido;
+                if (pedId != null) {
+                    const item = {
+                        ...det,
+                        ID_PedidoDetalle: det.ID_PedidoDetalle ?? d.id,
+                        Variante_Producto: varMap[det.ID_Variante] || varMap[String(det.ID_Variante)] || null
+                    };
+                    if (!detallesPorPedido[pedId]) detallesPorPedido[pedId] = [];
+                    detallesPorPedido[pedId].push(item);
+                    if (!detallesPorPedido[String(pedId)]) detallesPorPedido[String(pedId)] = detallesPorPedido[pedId];
+                }
+            });
+
+            // 5. Transacciones de pago
+            const transPorPedido = {};
+            transSnap.docs.forEach((d) => {
+                const t = d.data();
+                const pedId = t.ID_Pedido;
+                if (pedId != null) {
+                    if (!transPorPedido[pedId]) transPorPedido[pedId] = [];
+                    transPorPedido[pedId].push(t);
+                    if (!transPorPedido[String(pedId)]) transPorPedido[String(pedId)] = transPorPedido[pedId];
+                }
+            });
+
+            // 6. Estados, Usuarios, Direcciones
+            const estadosMap = {};
+            estadosSnap.docs.forEach((d) => {
+                const e = d.data();
+                const id = e.ID_EstadoPedido ?? d.id;
+                estadosMap[id] = e;
+                estadosMap[String(id)] = e;
+            });
+
+            const userMap = {};
+            userSnap.docs.forEach((d) => {
+                const u = d.data();
+                const id = u.ID_User ?? d.id;
+                userMap[id] = u;
+                userMap[String(id)] = u;
+            });
+
+            const dirMap = {};
+            dirSnap.docs.forEach((d) => {
+                const dir = d.data();
+                const id = dir.ID_Direccion ?? d.id;
+                dirMap[id] = dir;
+                dirMap[String(id)] = dir;
+            });
+
+            // 7. Ensamblar Pedidos
+            const pedidosLista = pedidosSnap.docs.map((d) => {
+                const p = d.data();
+                const pid = p.ID_Pedido ?? d.id;
+                let fechaIso = p.Fecha_Pedido;
+                if (fechaIso && typeof fechaIso.toDate === 'function') {
+                    fechaIso = fechaIso.toDate().toISOString();
+                }
+                const idEstado = p.ID_EstadoPedidoo ?? p.ID_EstadoPedido;
+                return {
+                    ...p,
+                    _docId: d.id,
+                    ID_Pedido: pid,
+                    Fecha_Pedido: fechaIso,
+                    Total: Number(p.Total ?? 0),
+                    Subtotal: Number(p.Subtotal ?? 0),
+                    Descuento: Number(p.Descuento ?? 0),
+                    ID_User: p.ID_User,
+                    ID_Direccion: p.ID_Direccion,
+                    ID_EstadoPedidoo: idEstado,
+                    Estado_Pedido: estadosMap[idEstado] || estadosMap[String(idEstado)] || null,
+                    User: userMap[p.ID_User] || userMap[String(p.ID_User)] || null,
+                    Direcciones: dirMap[p.ID_Direccion] || dirMap[String(p.ID_Direccion)] || null,
+                    Transacciones_Pago: transPorPedido[pid] || transPorPedido[String(pid)] || [],
+                    Pedido_Detalle: detallesPorPedido[pid] || detallesPorPedido[String(pid)] || []
+                };
+            });
+
+            pedidosLista.sort((a, b) => {
+                const fa = a.Fecha_Pedido ? new Date(a.Fecha_Pedido).getTime() : 0;
+                const fb = b.Fecha_Pedido ? new Date(b.Fecha_Pedido).getTime() : 0;
+                return fb - fa;
+            });
+
+            setPedidos(pedidosLista);
+        } catch (err) {
+            console.error('Error al cargar pedidos desde Firestore:', err);
             setError(err.message);
             setPedidos([]);
-        } else {
-            setPedidos(data ?? []);
+        } finally {
+            setCargando(false);
         }
-        setCargando(false);
     }
 
     // normaliza un pedido a un formato único para la vista
@@ -195,37 +340,36 @@ function AdminTransacciones() {
         if (!detalle || !nuevoEstado) return;
         setGuardando(true);
 
-        const { data: filasActualizadas, error: err } = await supabase
-            .from('Pedido')
-            .update({ ID_EstadoPedidoo: parseInt(nuevoEstado, 10) })
-            .eq('ID_Pedido', detalle.id)
-            .select('ID_Pedido');
+        try {
+            const idEstadoNum = parseInt(nuevoEstado, 10);
+            const refDirecta = doc(db, 'Pedido', String(detalle.id));
+            const snapDirecta = await getDoc(refDirecta);
+            if (snapDirecta.exists()) {
+                await updateDoc(refDirecta, { ID_EstadoPedidoo: idEstadoNum });
+            } else {
+                const q = query(collection(db, 'Pedido'), where('ID_Pedido', 'in', [detalle.id, Number(detalle.id), String(detalle.id)]));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                    await updateDoc(snap.docs[0].ref, { ID_EstadoPedidoo: idEstadoNum });
+                }
+            }
 
-        setGuardando(false);
+            await cargarPedidos();
 
-        if (err) {
+            // refresca el modal con el nuevo estado
+            const est = estadosCatalogo.find((e) => Number(e.ID_EstadoPedido) === idEstadoNum);
+            setDetalle((d) => d && {
+                ...d,
+                idEstado: idEstadoNum,
+                estado: est?.Estado ?? d.estado,
+                estadoDesc: est?.Descripcion ?? d.estadoDesc,
+            });
+        } catch (err) {
+            console.error('Error al actualizar estado:', err);
             alert('No se pudo actualizar el estado: ' + err.message);
-            return;
+        } finally {
+            setGuardando(false);
         }
-
-        if (!filasActualizadas || filasActualizadas.length === 0) {
-            alert(
-                'El estado no se guardó: la tabla "Pedido" no tiene política RLS de UPDATE ' +
-                'para la clave pública. Crea la política en Supabase.'
-            );
-            return;
-        }
-
-        await cargarPedidos();
-
-        // refresca el modal con el nuevo estado
-        const est = estadosCatalogo.find((e) => e.ID_EstadoPedido === parseInt(nuevoEstado, 10));
-        setDetalle((d) => d && {
-            ...d,
-            idEstado: parseInt(nuevoEstado, 10),
-            estado: est?.Estado ?? d.estado,
-            estadoDesc: est?.Descripcion ?? d.estadoDesc,
-        });
     }
 
     

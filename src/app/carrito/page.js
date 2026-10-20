@@ -9,7 +9,7 @@ import './carrito.css'
 
 export default function CarritoPage() {
   const router = useRouter();
-  const { items, cargado, cambiarCantidad, subtotal } = useCarrito();
+  const { items, cargado, cambiarCantidad, subtotal, totalAhorro } = useCarrito();
   const { esFavorito, alternarFavorito } = useFavoritos();
 
   function restar(item) {
@@ -56,8 +56,22 @@ export default function CarritoPage() {
                     <div className="carrito-info">
                       <div>
                         <p className="carrito-nombre">{item.nombre}</p>
-                          <p className="carrito-marca">{item.marca || '\u00A0'}</p>
-                        <p className="carrito-precio">${item.precio.toFixed(2)}</p>
+                        <p className="carrito-marca">{item.marca || 'The Outfit'}</p>
+                        {item.enOferta ? (
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline', margin: '4px 0' }}>
+                            <span style={{ textDecoration: 'line-through', color: '#888', fontSize: '0.85rem' }}>
+                              ${item.precioOriginal ? Number(item.precioOriginal).toFixed(2) : ''}
+                            </span>
+                            <span style={{ color: '#c62828', fontWeight: 'bold' }}>
+                              ${item.precio.toFixed(2)}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', backgroundColor: '#ffebee', color: '#c62828', padding: '1px 5px', borderRadius: '4px', fontWeight: 'bold' }}>
+                              -{item.porcentajeDescuento}%
+                            </span>
+                          </div>
+                        ) : (
+                          <p className="carrito-precio">${item.precio.toFixed(2)}</p>
+                        )}
                         <p className="carrito-detalle">
                           TALLA {item.talla || 'ÚNICA'} | #{item.idVariante}
                         </p>
@@ -91,6 +105,11 @@ export default function CarritoPage() {
               <div className="carrito-resumen-barra">
                 <div>
                   <span className="carrito-resumen-total">TOTAL ${subtotal.toFixed(2)}</span>
+                  {totalAhorro > 0 && (
+                    <span className="carrito-resumen-ahorro">
+                      (Ahorraste ${totalAhorro.toFixed(2)})
+                    </span>
+                  )}
                   <span className="carrito-resumen-iva">(IVA INCLUIDO)</span>
                 </div>
                 <button type="button" className="carrito-proceder" onClick={() => router.push('/checkout')}>

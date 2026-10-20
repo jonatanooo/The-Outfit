@@ -9,8 +9,9 @@ import CarruselPrendas from '@/components/CarruselPrenda'
 import { useProducto } from '@/lib/productos'
 
 export default function PaginaPrenda() {
-    const { id } = useParams()
-    const idProducto = Number(id)
+    const params = useParams()
+    const id = params?.id
+    const idProducto = (id && !isNaN(Number(id))) ? Number(id) : id
     const { producto } = useProducto(idProducto)
 
     return(

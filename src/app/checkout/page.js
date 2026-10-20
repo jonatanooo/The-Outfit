@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { supabase } from '@/lib/supabaseClient'
+import { db } from '@/lib/firebaseClient'
+import { collection, doc, getDocs, setDoc, updateDoc, query, where, limit } from 'firebase/firestore'
 import { obtenerIdUsuario } from '@/lib/usuario'
 import { useCarrito } from '@/lib/CarritoContext'
 import './checkout.css'
@@ -35,7 +36,7 @@ function textoDireccion(dir) {
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, cargado, subtotal, vaciarCarrito } = useCarrito();
+  const { items, cargado, subtotal, subtotalOriginal, totalAhorro, vaciarCarrito } = useCarrito();
 
   const [idUsuario, setIdUsuario] = useState(null);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
@@ -82,14 +83,24 @@ export default function CheckoutPage() {
 
     async function cargarDirecciones() {
       setCargandoDirecciones(true);
-      const { data, error } = await supabase
-        .from('Direcciones')
-        .select('ID_Direccion, Departamento, Calle')
-        .eq('ID_User', idUsuario);
+      try {
+        const opcionesUser = [idUsuario, String(idUsuario)];
+        if (!isNaN(Number(idUsuario))) opcionesUser.push(Number(idUsuario));
+        const qDir = query(collection(db, 'Direcciones'), where('ID_User', 'in', Array.from(new Set(opcionesUser))));
+        const snap = await getDocs(qDir);
+        const list = snap.docs.map((d) => ({
+          ...d.data(),
+          ID_Direccion: d.data().ID_Direccion ?? d.id,
+          _docId: d.id
+        }));
 
-      if (!activo) return;
-      if (!error) setDirecciones(data ?? []);
-      setCargandoDirecciones(false);
+        if (!activo) return;
+        setDirecciones(list);
+      } catch (err) {
+        console.error('Error al cargar direcciones desde Firestore:', err);
+      } finally {
+        if (activo) setCargandoDirecciones(false);
+      }
     }
 
     cargarDirecciones();
@@ -104,114 +115,124 @@ export default function CheckoutPage() {
     setGuardandoDireccion(true);
     setErrorDireccion('');
 
-    const { data, error } = await supabase
-      .from('Direcciones')
-      .insert({ ID_User: idUsuario, Calle: nuevaCalle.trim(), Departamento: nuevoDepartamento.trim() })
-      .select('ID_Direccion, Departamento, Calle')
-      .single();
+    try {
+      const nuevoId = Date.now();
+      const nuevaDir = {
+        ID_Direccion: nuevoId,
+        ID_User: idUsuario,
+        Calle: nuevaCalle.trim(),
+        Departamento: nuevoDepartamento.trim(),
+        Fecha_Creacion: new Date().toISOString()
+      };
+      await setDoc(doc(db, 'Direcciones', String(nuevoId)), nuevaDir);
 
-    setGuardandoDireccion(false);
-
-    if (error) {
-      setErrorDireccion('No se pudo guardar la dirección: ' + error.message);
-      return;
+      setDirecciones((prev) => [...prev, nuevaDir]);
+      setMetodoEntrega('domicilio');
+      setIdDireccionSeleccionada(nuevoId);
+      setMostrarFormDireccion(false);
+      setNuevaCalle('');
+      setNuevoDepartamento('');
+    } catch (err) {
+      console.error('Error al guardar dirección en Firestore:', err);
+      setErrorDireccion('No se pudo guardar la dirección: ' + err.message);
+    } finally {
+      setGuardandoDireccion(false);
     }
-
-    setDirecciones((prev) => [...prev, data]);
-    setMetodoEntrega('domicilio');
-    setIdDireccionSeleccionada(data.ID_Direccion);
-    setMostrarFormDireccion(false);
-    setNuevaCalle('');
-    setNuevoDepartamento('');
   }
 
   async function comprar(metodoPago) {
     setProcesandoCompra(true);
     setErrorCompra('');
 
-    const { data: estado } = await supabase
-      .from('Estado_Pedido')
-      .select('ID_EstadoPedido')
-      .ilike('Estado', '%pendiente%')
-      .limit(1)
-      .maybeSingle();
+    try {
+      // 1. Obtener ID de estado pendiente
+      let idEstado = 1;
+      const qEstado = query(collection(db, 'Estado_Pedido'), where('Estado', '==', 'Pendiente'), limit(1));
+      const snapEstado = await getDocs(qEstado);
+      if (!snapEstado.empty) {
+        idEstado = snapEstado.docs[0].data().ID_EstadoPedido ?? 1;
+      }
 
-    const { data: pedido, error: errorPedido } = await supabase
-      .from('Pedido')
-      .insert({
+      // 2. Crear Pedido
+      const idPedido = Date.now();
+      const nuevoPedido = {
+        ID_Pedido: idPedido,
         ID_User: idUsuario,
         ID_Direccion: metodoEntrega === 'domicilio' ? idDireccionSeleccionada : null,
         Fecha_Pedido: new Date().toISOString(),
-        Subtotal: subtotal,
-        Descuento: 0,
+        Subtotal: subtotalOriginal,
+        Descuento: totalAhorro,
         Total: subtotal,
-        ID_EstadoPedidoo: estado?.ID_EstadoPedido ?? null,
-      })
-      .select('ID_Pedido')
-      .single();
+        ID_EstadoPedidoo: idEstado
+      };
+      await setDoc(doc(db, 'Pedido', String(idPedido)), nuevoPedido);
 
-    if (errorPedido) {
-      setErrorCompra('No se pudo crear el pedido: ' + errorPedido.message);
+      // 3. Crear detalles de pedido y descontar inventario
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const idDetalle = Date.now() + i;
+        await setDoc(doc(db, 'Pedido_Detalle', String(idDetalle)), {
+          ID_PedidoDetalle: idDetalle,
+          ID_Pedido: idPedido,
+          ID_Variante: item.idVariante,
+          Cantidad: item.cantidad,
+          Precio_Unitario: item.precio,
+          Subtotal: item.precio * item.cantidad
+        });
+
+        // Descontar inventario para cada variante
+        try {
+          const qInv = query(
+            collection(db, 'Inventario'),
+            where('ID_Variante', 'in', [item.idVariante, Number(item.idVariante), String(item.idVariante)])
+          );
+          const snapInv = await getDocs(qInv);
+          if (!snapInv.empty) {
+            const invDoc = snapInv.docs[0];
+            const actual = Number(invDoc.data().Cantidad_Disponible ?? 0);
+            const nuevaCantidad = Math.max(0, actual - Number(item.cantidad ?? 1));
+            await updateDoc(invDoc.ref, {
+              Cantidad_Disponible: nuevaCantidad,
+              Fecha_Actualizacion: new Date().toISOString()
+            });
+          }
+        } catch (errInv) {
+          console.error('Error al descontar inventario:', errInv);
+        }
+      }
+
+      // 4. Registrar Transacción de Pago
+      const idTrans = Date.now() + 50;
+      await setDoc(doc(db, 'Transacciones_Pago', String(idTrans)), {
+        ID_Transaccion: idTrans,
+        ID_Pedido: idPedido,
+        Monto: subtotal,
+        Metodo_Pago: metodoPago,
+        Fecha_Transaccion: new Date().toISOString(),
+        Estado_transaccion: 'Aprobado'
+      });
+
+      const direccionElegida = direcciones.find((d) => d.ID_Direccion === idDireccionSeleccionada);
+
+      setPedidoResumen({
+        id: idPedido,
+        items: [...items],
+        subtotalOriginal,
+        totalAhorro,
+        total: subtotal,
+        entrega: metodoEntrega === 'tienda' ? DIRECCION_TIENDA : textoDireccion(direccionElegida),
+        metodoEntrega,
+        pago: metodoPago,
+      });
+
+      vaciarCarrito();
+      setPaso(3);
+    } catch (err) {
+      console.error('Error en proceso de compra:', err);
+      setErrorCompra('Hubo un error al procesar la compra: ' + err.message);
+    } finally {
       setProcesandoCompra(false);
-      return;
     }
-
-    const { error: errorDetalle } = await supabase.from('Pedido_Detalle').insert(
-      items.map((item) => ({
-        ID_Pedido: pedido.ID_Pedido,
-        ID_Variante: item.idVariante,
-        Cantidad: item.cantidad,
-        Precio_Unitario: item.precio,
-        Subtotal: item.precio * item.cantidad,
-      }))
-    );
-
-    if (errorDetalle) {
-      setErrorCompra('No se pudo registrar el detalle del pedido: ' + errorDetalle.message);
-      setProcesandoCompra(false);
-      return;
-    }
-
-    // Descuenta el stock recién vendido antes de dar la compra por aprobada
-    // (la función valida que alcance el stock y aborta si no).
-    const { error: errorStock } = await supabase.rpc('descontar_inventario_pedido', {
-      p_id_pedido: pedido.ID_Pedido,
-    });
-
-    if (errorStock) {
-      setErrorCompra('No se pudo descontar el stock: ' + errorStock.message);
-      setProcesandoCompra(false);
-      return;
-    }
-
-    const { error: errorPago } = await supabase.from('Transacciones_Pago').insert({
-      ID_Pedido: pedido.ID_Pedido,
-      Monto: subtotal,
-      Metodo_Pago: metodoPago,
-      Fecha_Transaccion: new Date().toISOString(),
-      Estado_transaccion: 'Aprobado',
-    });
-
-    if (errorPago) {
-      setErrorCompra('No se pudo registrar el pago: ' + errorPago.message);
-      setProcesandoCompra(false);
-      return;
-    }
-
-    const direccionElegida = direcciones.find((d) => d.ID_Direccion === idDireccionSeleccionada);
-
-    setPedidoResumen({
-      id: pedido.ID_Pedido,
-      items: [...items],
-      total: subtotal,
-      entrega: metodoEntrega === 'tienda' ? DIRECCION_TIENDA : textoDireccion(direccionElegida),
-      metodoEntrega,
-      pago: metodoPago,
-    });
-
-    vaciarCarrito();
-    setProcesandoCompra(false);
-    setPaso(3);
   }
 
   function atras() {
@@ -243,16 +264,37 @@ export default function CheckoutPage() {
             <p className="checkout-pedido-numero">Pedido #{pedidoResumen.id}</p>
 
             <div className="checkout-resumen-items">
-              {pedidoResumen.items.map((item) => (
-                <div className="checkout-item-mini" key={item.idVariante}>
-                  {item.imagen ? <img src={item.imagen} alt={item.nombre} /> : <div className="checkout-item-mini-sin-imagen" />}
-                  <div>
-                    <strong>{item.nombre}</strong>
-                    <span>TALLA {item.talla || 'ÚNICA'} · x{item.cantidad}</span>
+              {pedidoResumen.items.map((item) => {
+                const precioOrig = Number(item.precioOriginal ?? item.precio);
+                const precioReal = Number(item.precio);
+                const tieneDesc = Boolean(item.enOferta || precioOrig > precioReal);
+                return (
+                  <div className="checkout-item-mini" key={item.idVariante}>
+                    {item.imagen ? <img src={item.imagen} alt={item.nombre} /> : <div className="checkout-item-mini-sin-imagen" />}
+                    <div>
+                      <strong>{item.nombre}</strong>
+                      <span>TALLA {item.talla || 'ÚNICA'} · x{item.cantidad}</span>
+                      {tieneDesc && item.porcentajeDescuento > 0 && (
+                        <span className="checkout-item-mini-badge">-{item.porcentajeDescuento}%</span>
+                      )}
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      {tieneDesc ? (
+                        <>
+                          <div style={{ textDecoration: 'line-through', color: '#999', fontSize: '0.8rem' }}>
+                            ${(precioOrig * item.cantidad).toFixed(2)}
+                          </div>
+                          <span className="checkout-item-mini-precio" style={{ color: '#d32f2f', fontWeight: 600 }}>
+                            ${(precioReal * item.cantidad).toFixed(2)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="checkout-item-mini-precio">${(precioReal * item.cantidad).toFixed(2)}</span>
+                      )}
+                    </div>
                   </div>
-                  <span className="checkout-item-mini-precio">${(item.precio * item.cantidad).toFixed(2)}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="checkout-resumen-linea">
@@ -263,6 +305,18 @@ export default function CheckoutPage() {
               <span>MÉTODO DE PAGO</span>
               <span>{pedidoResumen.pago}</span>
             </div>
+            {pedidoResumen.totalAhorro > 0 && (
+              <>
+                <div className="checkout-resumen-linea">
+                  <span>SUBTOTAL ORIGINAL</span>
+                  <span>${pedidoResumen.subtotalOriginal.toFixed(2)}</span>
+                </div>
+                <div className="checkout-resumen-linea checkout-linea-ahorro">
+                  <span>AHORRO EN TU COMPRA</span>
+                  <span>-${pedidoResumen.totalAhorro.toFixed(2)}</span>
+                </div>
+              </>
+            )}
             <div className="checkout-resumen-linea checkout-resumen-total-linea">
               <span>TOTAL</span>
               <span>${pedidoResumen.total.toFixed(2)}</span>
@@ -384,24 +438,55 @@ export default function CheckoutPage() {
               <div className="checkout-box checkout-resumen-lateral">
                 <h4>RESUMEN</h4>
                 <div className="checkout-resumen-items">
-                  {items.map((item) => (
-                    <div className="checkout-item-mini" key={item.idVariante}>
-                      {item.imagen ? <img src={item.imagen} alt={item.nombre} /> : <div className="checkout-item-mini-sin-imagen" />}
-                      <div>
-                        <strong>{item.nombre}</strong>
-                        <span>TALLA {item.talla || 'ÚNICA'} · x{item.cantidad}</span>
+                  {items.map((item) => {
+                    const precioOrig = Number(item.precioOriginal ?? item.precio);
+                    const precioReal = Number(item.precio);
+                    const tieneDesc = Boolean(item.enOferta || precioOrig > precioReal);
+                    return (
+                      <div className="checkout-item-mini" key={item.idVariante}>
+                        {item.imagen ? <img src={item.imagen} alt={item.nombre} /> : <div className="checkout-item-mini-sin-imagen" />}
+                        <div>
+                          <strong>{item.nombre}</strong>
+                          <span>TALLA {item.talla || 'ÚNICA'} · x{item.cantidad}</span>
+                          {tieneDesc && item.porcentajeDescuento > 0 && (
+                            <span className="checkout-item-mini-badge">-{item.porcentajeDescuento}%</span>
+                          )}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          {tieneDesc ? (
+                            <>
+                              <div style={{ textDecoration: 'line-through', color: '#999', fontSize: '0.8rem' }}>
+                                ${(precioOrig * item.cantidad).toFixed(2)}
+                              </div>
+                              <span className="checkout-item-mini-precio" style={{ color: '#d32f2f', fontWeight: 600 }}>
+                                ${(precioReal * item.cantidad).toFixed(2)}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="checkout-item-mini-precio">${(precioReal * item.cantidad).toFixed(2)}</span>
+                          )}
+                        </div>
                       </div>
-                      <span className="checkout-item-mini-precio">${(item.precio * item.cantidad).toFixed(2)}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div className="checkout-resumen-linea">
                   <span>SUBTOTAL</span>
-                  <span>${subtotal.toFixed(2)}</span>
+                  <span>${subtotalOriginal.toFixed(2)}</span>
                 </div>
+                {totalAhorro > 0 && (
+                  <div className="checkout-resumen-linea checkout-linea-ahorro">
+                    <span>AHORRO</span>
+                    <span>-${totalAhorro.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="checkout-resumen-linea">
                   <span>GASTOS DE ENVÍO</span>
                   <span>GRATIS</span>
+                </div>
+                <div className="checkout-resumen-linea checkout-resumen-total-linea">
+                  <span>TOTAL A PAGAR</span>
+                  <span>${subtotal.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -412,6 +497,11 @@ export default function CheckoutPage() {
               </button>
               <div className="checkout-total-inferior">
                 <strong>TOTAL ${subtotal.toFixed(2)}</strong>
+                {totalAhorro > 0 && (
+                  <span style={{ color: '#81c784', fontWeight: 600, fontSize: '0.75rem', marginTop: '2px' }}>
+                    Ahorro: -${totalAhorro.toFixed(2)}
+                  </span>
+                )}
                 <span>(IVA INCLUIDO)</span>
               </div>
               {paso === 1 ? (

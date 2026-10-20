@@ -1,7 +1,9 @@
 "use client";
 import { forwardRef, useImperativeHandle, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { auth, db } from '@/lib/firebaseClient';
+import { signOut, updateProfile } from 'firebase/auth';
+import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import './PerfilPanel.css';
 
 // El padre (Header) llama a ref.current.refrescar() justo antes de abrir el panel,
@@ -16,8 +18,8 @@ const PerfilPanel = forwardRef(function PerfilPanel({ abierto, usuario, onClose,
     useImperativeHandle(ref, () => ({
         refrescar() {
             if (!usuario) return;
-            setNombre(usuario.user_metadata?.nombre || '');
-            setTelefono(usuario.user_metadata?.telefono || '');
+            setNombre(usuario.displayName || usuario.Nombres || usuario.user_metadata?.nombre || '');
+            setTelefono(usuario.Telefono || usuario.phoneNumber || usuario.user_metadata?.telefono || '');
             setMensaje(null);
         },
     }), [usuario]);
@@ -27,20 +29,38 @@ const PerfilPanel = forwardRef(function PerfilPanel({ abierto, usuario, onClose,
         setGuardando(true);
         setMensaje(null);
 
-        const { error } = await supabase.auth.updateUser({
-            data: { nombre, telefono },
-        });
+        try {
+            if (auth.currentUser) {
+                await updateProfile(auth.currentUser, { displayName: nombre });
 
-        setGuardando(false);
-        if (error) {
-            setMensaje({ tipo: 'error', texto: error.message || 'No se pudo guardar el cambio.' });
-        } else {
+                // Actualizar en Firestore colección User
+                try {
+                    await updateDoc(doc(db, 'User', auth.currentUser.uid), {
+                        Nombres: nombre,
+                        Telefono: telefono,
+                    });
+                } catch (errDoc) {
+                    const q = query(collection(db, 'User'), where('auth_id', '==', auth.currentUser.uid));
+                    const snap = await getDocs(q);
+                    if (!snap.empty) {
+                        await updateDoc(doc(db, 'User', snap.docs[0].id), {
+                            Nombres: nombre,
+                            Telefono: telefono,
+                        });
+                    }
+                }
+            }
             setMensaje({ tipo: 'ok', texto: 'Perfil actualizado.' });
+        } catch (error) {
+            console.error('Error actualizando perfil:', error);
+            setMensaje({ tipo: 'error', texto: error.message || 'No se pudo guardar el cambio.' });
+        } finally {
+            setGuardando(false);
         }
     };
 
     const handleCerrarSesion = async () => {
-        await supabase.auth.signOut();
+        await signOut(auth);
         onSesionCerrada?.();
         onClose();
         router.push('/login');

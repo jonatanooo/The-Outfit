@@ -70,8 +70,18 @@ export function CarritoProvider({ children }) {
   }
 
   const subtotal = useMemo(
-    () => items.reduce((suma, i) => suma + i.precio * i.cantidad, 0),
+    () => items.reduce((suma, i) => suma + Number(i.precio ?? 0) * i.cantidad, 0),
     [items]
+  );
+
+  const subtotalOriginal = useMemo(
+    () => items.reduce((suma, i) => suma + Number(i.precioOriginal ?? i.precio ?? 0) * i.cantidad, 0),
+    [items]
+  );
+
+  const totalAhorro = useMemo(
+    () => Math.max(0, Math.round((subtotalOriginal - subtotal) * 100) / 100),
+    [subtotalOriginal, subtotal]
   );
 
   const totalItems = useMemo(
@@ -87,6 +97,8 @@ export function CarritoProvider({ children }) {
     quitarDelCarrito,
     vaciarCarrito,
     subtotal,
+    subtotalOriginal,
+    totalAhorro,
     totalItems,
   };
 

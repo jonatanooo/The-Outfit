@@ -23,6 +23,10 @@
 # misc
 .DS_Store
 *.pem
+*adminsdk*.json
+serviceAccountKey*.json
+service-account*.json
+serviceAccountKey.json
 
 # debug
 npm-debug.log*

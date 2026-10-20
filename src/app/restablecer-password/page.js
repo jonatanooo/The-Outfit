@@ -2,27 +2,34 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { auth } from '@/lib/firebaseClient';
+import { confirmPasswordReset, verifyPasswordResetCode, updatePassword } from 'firebase/auth';
 
 export default function RestablecerPasswordPage() {
   const router = useRouter();
   const [listo, setListo] = useState(false);
+  const [oobCode, setOobCode] = useState(null);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [ok, setOk] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // El enlace del correo crea una sesión de recuperación automáticamente al cargar la página
   useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') setListo(true);
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setListo(true);
-    });
-
-    return () => listener.subscription.unsubscribe();
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('oobCode');
+      if (code) {
+        setOobCode(code);
+        verifyPasswordResetCode(auth, code)
+          .then(() => setListo(true))
+          .catch((err) => {
+            console.error('Código inválido:', err);
+            setError('El enlace para restablecer la contraseña es inválido o ya expiró.');
+          });
+      } else if (auth.currentUser) {
+        setListo(true);
+      }
+    }
   }, []);
 
   const handleSubmit = async (e) => {
@@ -35,14 +42,21 @@ export default function RestablecerPasswordPage() {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
-    setLoading(false);
-
-    if (error) {
-      setError(error.message);
-    } else {
+    try {
+      if (oobCode) {
+        await confirmPasswordReset(auth, oobCode, password);
+      } else if (auth.currentUser) {
+        await updatePassword(auth.currentUser, password);
+      } else {
+        throw new Error('No se encontró el código de verificación.');
+      }
       setOk(true);
       setTimeout(() => router.push('/login'), 2000);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Error al actualizar la contraseña');
+    } finally {
+      setLoading(false);
     }
   };
 

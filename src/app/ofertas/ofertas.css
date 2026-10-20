@@ -1,0 +1,117 @@
+.ofertas-banner {
+    position: relative;
+    width: 100%;
+    min-height: 260px;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2c1b18 50%, #111111 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    color: #ffffff;
+    padding: 40px 20px;
+    box-sizing: border-box;
+}
+
+.ofertas-badge-top {
+    background-color: #c62828;
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 9999px;
+    margin-bottom: 14px;
+    display: inline-block;
+}
+
+.ofertas-titulo {
+    font-family: "Instrument Serif", serif;
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    margin: 0;
+    font-weight: 400;
+    letter-spacing: 1px;
+}
+
+.ofertas-subtitulo {
+    font-family: "DM Sans", sans-serif;
+    font-size: clamp(0.95rem, 1.2vw, 1.15rem);
+    color: #ddd;
+    margin-top: 10px;
+    max-width: 600px;
+    line-height: 1.5;
+}
+
+.ofertas-filtros-bar {
+    max-width: 1200px;
+    margin: 30px auto 10px;
+    padding: 0 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 16px;
+}
+
+.ofertas-pills {
+    display: flex;
+    gap: 10px;
+}
+
+.ofertas-pill-btn {
+    background: none;
+    border: 1px solid #ccc;
+    padding: 8px 18px;
+    border-radius: 9999px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-family: "DM Sans", sans-serif;
+    color: #333;
+    transition: all 0.2s ease;
+}
+
+.ofertas-pill-btn:hover {
+    border-color: #111;
+    color: #111;
+}
+
+.ofertas-pill-btn.activo {
+    background-color: #111;
+    border-color: #111;
+    color: #fff;
+    font-weight: 600;
+}
+
+.ofertas-orden-select {
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 0.9rem;
+    font-family: "DM Sans", sans-serif;
+    background-color: #fff;
+    cursor: pointer;
+}
+
+.ofertas-vacio {
+    text-align: center;
+    padding: 80px 20px;
+    color: #666;
+}
+
+.ofertas-vacio h2 {
+    font-family: "Instrument Serif", serif;
+    font-size: 2.2rem;
+    color: #222;
+    margin-bottom: 10px;
+}
+
+.ofertas-vacio p {
+    font-size: 1rem;
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+

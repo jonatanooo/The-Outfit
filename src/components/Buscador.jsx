@@ -2,7 +2,8 @@
 import './Buscador.css'
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { db } from '@/lib/firebaseClient';
+import { collection, getDocs } from 'firebase/firestore';
 
 function Buscador({ onClose }) {
     const [texto, setTexto] = useState('')
@@ -16,7 +17,7 @@ function Buscador({ onClose }) {
         inputRef.current?.focus()
     }, [])
 
-    // busca coincidencias en Supabase mientras el usuario escribe (con debounce)
+    // busca coincidencias en Firestore mientras el usuario escribe (con debounce)
     useEffect(() => {
         const termino = texto.trim()
         const timeoutId = setTimeout(async () => {
@@ -27,14 +28,55 @@ function Buscador({ onClose }) {
             }
 
             setBuscando(true)
-            const { data, error } = await supabase
-                .from('Productos')
-                .select('ID_Producto, Nombre_Producto, Fotos_Productos ( URL_Foto, Orden )')
-                .ilike('Nombre_Producto', `%${termino}%`)
-                .limit(8)
+            try {
+                const [prodSnap, fotosSnap] = await Promise.all([
+                    getDocs(collection(db, 'Productos')),
+                    getDocs(collection(db, 'Fotos_Productos'))
+                ])
 
-            if (!error) setSugerencias(data ?? [])
-            setBuscando(false)
+                const queryL = termino.toLowerCase()
+                const filtrados = prodSnap.docs
+                    .map((d) => {
+                        const data = d.data()
+                        return {
+                            ...data,
+                            ID_Producto: data.ID_Producto ?? d.id
+                        }
+                    })
+                    .filter((p) => (Number(p.ID_EstadoProducto) ?? 1) !== 2 && (p.Nombre_Producto || '').toLowerCase().includes(queryL))
+                    .slice(0, 8)
+
+                if (filtrados.length === 0) {
+                    setSugerencias([])
+                    setBuscando(false)
+                    return
+                }
+
+                const fotosPorProd = {}
+                fotosSnap.docs.forEach((d) => {
+                    const f = d.data()
+                    const pid = f.ID_Producto
+                    if (pid != null) {
+                        if (!fotosPorProd[pid]) fotosPorProd[pid] = []
+                        fotosPorProd[pid].push(f)
+                        if (!fotosPorProd[String(pid)]) fotosPorProd[String(pid)] = fotosPorProd[pid]
+                    }
+                })
+
+                const resultados = filtrados.map((p) => ({
+                    ...p,
+                    Fotos_Productos: (fotosPorProd[p.ID_Producto] || fotosPorProd[String(p.ID_Producto)] || []).sort(
+                        (a, b) => (Number(a.Orden) ?? 0) - (Number(b.Orden) ?? 0)
+                    )
+                }))
+
+                setSugerencias(resultados)
+            } catch (err) {
+                console.error('Error buscando prendas en Firestore:', err)
+                setSugerencias([])
+            } finally {
+                setBuscando(false)
+            }
         }, 300)
 
         return () => clearTimeout(timeoutId)

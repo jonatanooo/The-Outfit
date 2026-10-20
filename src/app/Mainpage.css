@@ -28,7 +28,9 @@
 {
     background-color: white;
     /* tamaño de espacio de la zona nuevos ingresos */
-    height: clamp(69em, 93vw, 73em);
+    min-height: clamp(69em, 93vw, 73em);
+    height: auto;
+    padding-bottom: 3em;
 }
 
 .nuevosingresos h2

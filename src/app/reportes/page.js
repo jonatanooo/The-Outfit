@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { db, auth } from '@/lib/firebaseClient';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import SidebarAdmin from '@/components/SidebarAdmin';
 import RevenueChart from '@/components/RevenueChart';
 import './Reportes.css';
@@ -30,8 +32,6 @@ function formatoMoneda(valor) {
     return `$${(valor ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// variacion porcentual entre el periodo actual y el anterior, con casos especiales
-// cuando el periodo anterior no tuvo actividad (division por cero)
 function calcularVariacion(actual, anterior) {
     if (anterior === 0) {
         if (actual === 0) return { texto: 'Sin cambios', tono: 'neutro' };
@@ -59,71 +59,188 @@ export default function ReportesPage() {
         setCargando(true);
         setError('');
 
-        const [{ data: dataPedidos, error: errPedidos }, { data: dataProductos, error: errProductos }] = await Promise.all([
-            supabase
-                .from('Pedido')
-                .select(`
-                    ID_Pedido,
-                    Fecha_Pedido,
-                    Total,
-                    ID_EstadoPedidoo,
-                    Pedido_Detalle (
-                        ID_PedidoDetalle,
-                        Cantidad,
-                        Precio_Unitario,
-                        Subtotal,
-                        ID_Variante,
-                        "Variante_Producto" (
-                            ID_Producto,
-                            Productos ( ID_Producto, Nombre_Producto )
-                        )
-                    )
-                `)
-                .order('Fecha_Pedido', { ascending: true }),
-            supabase
-                .from('Productos')
-                .select(`
-                    ID_Producto,
-                    Nombre_Producto,
-                    ID_EstadoProducto,
-                    Estado_Producto ( Estado ),
-                    "Variante_Producto" ( ID_Variante, Inventario ( Cantidad_Disponible ) )
-                `),
-        ]);
+        try {
+            const [
+                pedidosSnap,
+                detallesSnap,
+                varSnap,
+                prodSnap,
+                invSnap,
+                estadoProdSnap
+            ] = await Promise.all([
+                getDocs(collection(db, 'Pedido')),
+                getDocs(collection(db, 'Pedido_Detalle')),
+                getDocs(collection(db, 'Variante_Producto')),
+                getDocs(collection(db, 'Productos')),
+                getDocs(collection(db, 'Inventario')),
+                getDocs(collection(db, 'Estado_Producto'))
+            ]);
 
-        if (errPedidos || errProductos) {
-            console.log('Error al cargar reportes:', errPedidos?.message, errProductos?.message);
-            setError((errPedidos || errProductos).message);
+            // 1. Indexar productos y estados
+            const prodMap = {};
+            prodSnap.docs.forEach((d) => {
+                const data = d.data();
+                const pid = data.ID_Producto ?? d.id;
+                prodMap[pid] = { ...data, ID_Producto: pid };
+                prodMap[String(pid)] = prodMap[pid];
+            });
+
+            const estadoProdMap = {};
+            estadoProdSnap.docs.forEach((d) => {
+                const data = d.data();
+                const eid = data.ID_Estado_Producto ?? d.id;
+                estadoProdMap[eid] = data;
+                estadoProdMap[String(eid)] = data;
+            });
+
+            // 2. Indexar inventario por variante
+            const invPorVariante = {};
+            invSnap.docs.forEach((d) => {
+                const data = d.data();
+                const vid = data.ID_Variante;
+                if (vid != null) {
+                    const cant = Number(data.Cantidad_Disponible ?? 0);
+                    if (!invPorVariante[vid]) invPorVariante[vid] = { Cantidad_Disponible: 0 };
+                    invPorVariante[vid].Cantidad_Disponible += cant;
+                    invPorVariante[String(vid)] = invPorVariante[vid];
+                }
+            });
+
+            // 3. Indexar variantes
+            const varMap = {};
+            const variantesPorProd = {};
+            varSnap.docs.forEach((d) => {
+                const v = d.data();
+                const vid = v.ID_Variante ?? d.id;
+                const pid = v.ID_Producto;
+                const invObj = invPorVariante[vid] || invPorVariante[String(vid)] || { Cantidad_Disponible: 0 };
+                const varObj = {
+                    ...v,
+                    ID_Variante: vid,
+                    ID_Producto: pid,
+                    Productos: prodMap[pid] || prodMap[String(pid)] || null,
+                    Inventario: invObj
+                };
+                varMap[vid] = varObj;
+                varMap[String(vid)] = varObj;
+
+                if (pid != null) {
+                    if (!variantesPorProd[pid]) variantesPorProd[pid] = [];
+                    variantesPorProd[pid].push(varObj);
+                    if (!variantesPorProd[String(pid)]) variantesPorProd[String(pid)] = variantesPorProd[pid];
+                }
+            });
+
+            // 4. Indexar detalles por pedido
+            const detallesPorPedido = {};
+            detallesSnap.docs.forEach((d) => {
+                const det = d.data();
+                const pedId = det.ID_Pedido;
+                if (pedId != null) {
+                    const detObj = {
+                        ...det,
+                        ID_PedidoDetalle: det.ID_PedidoDetalle ?? d.id,
+                        Variante_Producto: varMap[det.ID_Variante] || varMap[String(det.ID_Variante)] || null
+                    };
+                    if (!detallesPorPedido[pedId]) detallesPorPedido[pedId] = [];
+                    detallesPorPedido[pedId].push(detObj);
+                    if (!detallesPorPedido[String(pedId)]) detallesPorPedido[String(pedId)] = detallesPorPedido[pedId];
+                }
+            });
+
+            // 5. Ensamblar lista de pedidos
+            const listaPedidos = pedidosSnap.docs.map((d) => {
+                const p = d.data();
+                const pid = p.ID_Pedido ?? d.id;
+                let fechaIso = p.Fecha_Pedido;
+                if (fechaIso && typeof fechaIso.toDate === 'function') {
+                    fechaIso = fechaIso.toDate().toISOString();
+                }
+                return {
+                    ...p,
+                    ID_Pedido: pid,
+                    Fecha_Pedido: fechaIso,
+                    Total: Number(p.Total ?? 0),
+                    Pedido_Detalle: detallesPorPedido[pid] || detallesPorPedido[String(pid)] || []
+                };
+            });
+
+            // 6. Ensamblar lista de productos
+            const listaProductos = prodSnap.docs.map((d) => {
+                const p = d.data();
+                const pid = p.ID_Producto ?? d.id;
+                return {
+                    ...p,
+                    ID_Producto: pid,
+                    Estado_Producto: estadoProdMap[p.ID_EstadoProducto] || null,
+                    Variante_Producto: variantesPorProd[pid] || variantesPorProd[String(pid)] || []
+                };
+            });
+
+            setPedidos(listaPedidos);
+            setProductos(listaProductos);
+        } catch (err) {
+            console.error('Error al cargar reportes desde Firestore:', err);
+            setError(err.message);
             setPedidos([]);
             setProductos([]);
-        } else {
-            setPedidos(dataPedidos ?? []);
-            setProductos(dataProductos ?? []);
+        } finally {
+            setCargando(false);
         }
-        setCargando(false);
     }
 
     useEffect(() => {
-        const verificarUsuario = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (!user) {
                 router.push('/login');
                 return;
             }
 
-            const rol = user.app_metadata?.rol || 'usuario';
-            if (rol !== 'admin') {
+            try {
+                let rol = 'usuario';
+
+                const docRef = doc(db, 'User', user.uid);
+                const docSnap = await getDoc(docRef);
+                let userData = docSnap.exists() ? docSnap.data() : null;
+
+                if (!userData) {
+                    const q = query(collection(db, 'User'), where('auth_id', '==', user.uid));
+                    const snap = await getDocs(q);
+                    if (!snap.empty) {
+                        userData = snap.docs[0].data();
+                    } else if (user.email) {
+                        const qE = query(collection(db, 'User'), where('Correo', '==', user.email));
+                        const snapE = await getDocs(qE);
+                        if (!snapE.empty) userData = snapE.docs[0].data();
+                    }
+                }
+
+                if (userData) {
+                    const puesto = (userData.Puesto || '').toLowerCase();
+                    const rolCampo = (userData.Rol || '').toLowerCase();
+                    if (puesto === 'admin' || rolCampo === 'admin' || userData.ID_Rol === 1 || userData.ID_Rol === '1') {
+                        rol = 'admin';
+                    }
+                }
+
+                const tokenResult = await user.getIdTokenResult().catch(() => null);
+                if (tokenResult?.claims?.rol === 'admin' || tokenResult?.claims?.admin) rol = 'admin';
+
+                if (rol !== 'admin') {
+                    router.push('/');
+                    return;
+                }
+
+                setUsuario(user);
+                setVerificando(false);
+                await cargarDatos();
+            } catch (err) {
+                console.error('Error verificando usuario en reportes:', err);
                 router.push('/');
-                return;
             }
+        });
 
-            setUsuario(user);
-            setVerificando(false);
-            await cargarDatos();
-        };
-
-        verificarUsuario();
+        return () => unsubscribe();
     }, [router]);
 
     // --- calculos derivados (ingresos, pedidos, ticket promedio, serie diaria, top productos) ---
@@ -203,13 +320,13 @@ export default function ReportesPage() {
         let stockBajo = 0;
         productos.forEach((p) => {
             const estado = (p.Estado_Producto?.Estado ?? '').toLowerCase();
-            const esInactivo = estado.includes('inactivo');
+            const esInactivo = estado.includes('inactivo') || Number(p.ID_EstadoProducto) === 2;
             if (esInactivo) return;
             productosActivos += 1;
 
             const variantes = p['Variante Producto'] ?? p.Variante_Producto ?? [];
             const stockTotal = variantes.reduce(
-                (s, v) => s + Number(v.Inventario?.Cantidad_Disponible ?? 0),
+                (s, v) => s + Number(v.Inventario?.Cantidad_Disponible ?? v.Inventario?.[0]?.Cantidad_Disponible ?? 0),
                 0
             );
             if (stockTotal < UMBRAL_STOCK_BAJO) stockBajo += 1;

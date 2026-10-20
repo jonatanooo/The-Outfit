@@ -47,3 +47,41 @@ body {
     margin-bottom: 0.5em;
     border-radius: 4px;
 }
+
+/* OFERTAS Y DESCUENTOS EN TARJETAS */
+.badge-oferta-card {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background-color: #c62828;
+    color: #ffffff !important;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 6px;
+    border-radius: 4px;
+    z-index: 2;
+}
+
+.prenda-precios-oferta {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin: 0;
+}
+
+.prenda-precio-original-tachado {
+    font-family: "DM Sans", sans-serif;
+    text-decoration: line-through;
+    color: #888;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.prenda-precio-oferta {
+    font-family: "DM Sans", sans-serif;
+    color: #c62828;
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin: 0;
+}
+

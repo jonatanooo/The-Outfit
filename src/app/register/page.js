@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabaseClient';
+import { auth, db } from '@/lib/firebaseClient';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import Footer from '@/components/Footer';
 
 /* ---------- Iconos de redes sociales  */
@@ -115,34 +117,55 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: form.correo,
-        password: form.password,
-        options: {
-          data: {
-            nombre: form.nombre,
-            telefono: form.telefono,
-            dui: form.dui,
-          },
-        },
+      const userCredential = await createUserWithEmailAndPassword(auth, form.correo, form.password);
+      const user = userCredential.user;
+
+      await updateProfile(user, {
+        displayName: form.nombre
       });
 
-      if (error) throw error;
-
-      // Por seguridad (evitar enumeración de correos), Supabase responde "éxito" sin
-      // avisar cuando el correo ya tiene una cuenta confirmada: devuelve un usuario
-      // con identities vacío en vez de un error. Si no lo detectamos, el formulario
-      // muestra "¡Cuenta creada!" aunque no haya pasado nada.
-      if (data.user && data.user.identities?.length === 0) {
-        setErrores({ general: 'Ya existe una cuenta con este correo. Iniciá sesión o restablecé tu contraseña.' });
-        return;
+      // Generar nuevo ID_User autoincremental o basado en tiempo
+      let nuevoIdUser = Date.now();
+      try {
+        const qMax = query(collection(db, 'User'), orderBy('ID_User', 'desc'), limit(1));
+        const snap = await getDocs(qMax);
+        if (!snap.empty) {
+          const maxVal = Number(snap.docs[0].data().ID_User);
+          if (!isNaN(maxVal)) nuevoIdUser = maxVal + 1;
+        }
+      } catch (e) {
+        // Fallback al valor generado por Date.now()
       }
 
-      alert('¡Cuenta creada! Revisa tu correo para confirmar.');
+      // Guardar el perfil en la colección User de Firestore usando doc id = user.uid
+      await setDoc(doc(db, 'User', user.uid), {
+        ID_User: nuevoIdUser,
+        auth_id: user.uid,
+        Nombres: form.nombre,
+        Apellidos: '',
+        Usuario: form.nombre.toLowerCase().replace(/\s+/g, '_'),
+        Correo: form.correo,
+        Telefono: form.telefono,
+        DUI: form.dui,
+        ID_Rol: 3, // Rol cliente
+        ID_EstadoUsuario: 1, // Activo
+        Es_Empleado: false,
+        Fecha_Creacion: new Date().toISOString(),
+      });
+
+      alert('¡Cuenta creada con éxito! Ahora puedes iniciar sesión.');
       router.push('/login');
     } catch (error) {
       console.error(error);
-      setErrores({ general: error.message });
+      if (error.code === 'auth/email-already-in-use') {
+        setErrores({ general: 'Ya existe una cuenta con este correo. Iniciá sesión o restablecé tu contraseña.' });
+      } else if (error.code === 'auth/weak-password') {
+        setErrores({ password: 'La contraseña debe tener al menos 6 caracteres.' });
+      } else if (error.code === 'auth/configuration-not-found') {
+        setErrores({ general: 'La autenticación aún no ha sido habilitada en Firebase Console. Ve a Firebase Console > Authentication > Comenzar > Métodos de acceso y activa "Correo electrónico/Contraseña".' });
+      } else {
+        setErrores({ general: error.message || 'Error al crear la cuenta' });
+      }
     } finally {
       setLoading(false);
     }

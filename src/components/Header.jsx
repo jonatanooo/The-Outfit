@@ -3,7 +3,9 @@ import './Header.css'
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabaseClient';
+import { db, auth } from '@/lib/firebaseClient';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import PerfilPanel from './PerfilPanel';
 import Buscador from './Buscador';
 import { useCarrito } from '@/lib/CarritoContext';
@@ -19,58 +21,65 @@ function Header ({ siempreSolido = false }) {
     const [categorias, setCategorias] = useState([
         {id: 'mujer', label: 'MUJERES ', href: '', subcategorias: [{label: 'Ver Todo', href: '/productos'}]},
         {id: 'hombre', label: 'HOMBRES', href: '', subcategorias: [{label: 'Ver Todo', href: '/productos-hombre'}]},
-        {id: 'summer', label: 'SUMMER COLLECTION', href: ''}
+        {id: 'ofertas', label: 'OFERTAS', href: '/ofertas'}
     ]);
 
     useEffect(() => {
         async function cargarCategoriasMenu() {
-            const { data, error } = await supabase
-                .from("Categorias_Producto")
-                .select("ID_CategoriaPadre, Nombre_Categoria")
-                .in("ID_CategoriaPadre", [56, 57]);
+            try {
+                const qCat = query(
+                    collection(db, "Categorias_Producto"),
+                    where("ID_CategoriaPadre", "in", [56, 57, "56", "57"])
+                );
+                const snap = await getDocs(qCat);
+                const data = snap.docs.map(d => d.data());
 
-            if (error || !data) {
+                const subMujer = data
+                    .filter(c => Number(c.ID_CategoriaPadre) === 56)
+                    .map(c => ({
+                        label: c.Nombre_Categoria,
+                        href: `/productos?categoria=${encodeURIComponent(c.Nombre_Categoria)}`
+                    }));
+                const subHombre = data
+                    .filter(c => Number(c.ID_CategoriaPadre) === 57)
+                    .map(c => ({
+                        label: c.Nombre_Categoria,
+                        href: `/productos-hombre?categoria=${encodeURIComponent(c.Nombre_Categoria)}`
+                    }));
+
+                setCategorias([
+                    {
+                        id: 'mujer',
+                        label: 'MUJERES ',
+                        href: '',
+                        subcategorias: [
+                            { label: 'Ver Todo', href: '/productos' },
+                            ...subMujer
+                        ]
+                    },
+                    {
+                        id: 'hombre',
+                        label: 'HOMBRES',
+                        href: '',
+                        subcategorias: [
+                            { label: 'Ver Todo', href: '/productos-hombre' },
+                            ...subHombre
+                        ]
+                    },
+                    {
+                        id: 'ofertas',
+                        label: 'OFERTAS',
+                        href: '/ofertas'
+                    }
+                ]);
+            } catch (error) {
                 console.error("Error cargando categorias del header:", error);
-                return;
             }
-
-            const subMujer = data.filter(c => c.ID_CategoriaPadre === 56).map(c => ({
-                label: c.Nombre_Categoria,
-                href: `/productos?categoria=${encodeURIComponent(c.Nombre_Categoria)}`
-            }));
-            const subHombre = data.filter(c => c.ID_CategoriaPadre === 57).map(c => ({
-                label: c.Nombre_Categoria,
-                href: `/productos-hombre?categoria=${encodeURIComponent(c.Nombre_Categoria)}`
-            }));
-
-            setCategorias([
-                {
-                    id: 'mujer',
-                    label: 'MUJERES ',
-                    href: '',
-                    subcategorias: [
-                        { label: 'Ver Todo', href: '/productos' },
-                        ...subMujer
-                    ]
-                },
-                {
-                    id: 'hombre',
-                    label: 'HOMBRES',
-                    href: '',
-                    subcategorias: [
-                        { label: 'Ver Todo', href: '/productos-hombre' },
-                        ...subHombre
-                    ]
-                },
-                {
-                    id: 'summer',
-                    label: 'SUMMER COLLECTION',
-                    href: ''
-                }
-            ]);
         }
+
         cargarCategoriasMenu();
     }, []);
+
     // empieza en null porque cuando abrimos el menu, ninguna categoria esta activalueg
     const[categoriaActiva, setCategoriaActiva] = useState(null)
     const [usuario, setUsuario] = useState(null)
@@ -133,28 +142,63 @@ function Header ({ siempreSolido = false }) {
     // guarda el usuario logueado (o null) para mostrar el botón de perfil/cerrar sesión
     useEffect(() => {
         const verificarBaneo = async (userObj) => {
-            if (!userObj) return false;
-            const { data } = await supabase.from('User').select('ID_EstadoUsuario').eq('Correo', userObj.email).maybeSingle();
-            if (data && data.ID_EstadoUsuario === 2) {
-                alert('Tu cuenta fue baneada. No tienes acceso al sitio.');
-                await supabase.auth.signOut();
-                router.push('/login');
-                return true;
+            if (!userObj || !userObj.email) return false;
+            try {
+                const qUser = query(collection(db, 'User'), where('Correo', '==', userObj.email));
+                const snapUser = await getDocs(qUser);
+                if (!snapUser.empty) {
+                    const uData = snapUser.docs[0].data();
+                    if (Number(uData.ID_EstadoUsuario) === 2 || uData.ID_EstadoUsuario === 2) {
+                        alert('Tu cuenta fue baneada. No tienes acceso al sitio.');
+                        await signOut(auth);
+                        router.push('/login');
+                        return true;
+                    }
+                }
+            } catch (err) {
+                console.error('Error al verificar baneo:', err);
             }
             return false;
         };
 
-        supabase.auth.getUser().then(async ({ data: { user } }) => {
-            const baneado = await verificarBaneo(user);
-            if (!baneado) setUsuario(user);
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            if (currentUser) {
+                const baneado = await verificarBaneo(currentUser);
+                if (!baneado) {
+                    let esAdmin = false;
+                    try {
+                        const tokenResult = await currentUser.getIdTokenResult(true).catch(() => null);
+                        esAdmin = tokenResult?.claims?.rol === 'admin' || tokenResult?.claims?.role === 'admin';
+
+                        if (!esAdmin) {
+                            const qUser = query(collection(db, 'User'), where('Correo', '==', currentUser.email));
+                            const snapUser = await getDocs(qUser);
+                            if (!snapUser.empty) {
+                                const uData = snapUser.docs[0].data();
+                                if (Number(uData.ID_Rol) === 1 || (uData.Puesto || '').toLowerCase() === 'administrador') {
+                                    esAdmin = true;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Error resolviendo rol de usuario:', e);
+                    }
+
+                    const enriched = {
+                        ...currentUser,
+                        esAdmin,
+                        app_metadata: { rol: esAdmin ? 'admin' : 'authenticated' }
+                    };
+                    setUsuario(enriched);
+                } else {
+                    setUsuario(null);
+                }
+            } else {
+                setUsuario(null);
+            }
         });
 
-        const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            const baneado = await verificarBaneo(session?.user);
-            if (!baneado) setUsuario(session?.user ?? null);
-        });
-
-        return () => listener.subscription.unsubscribe();
+        return () => unsubscribe();
     }, [router]);
 
     const handleClickPerfil = () => {
@@ -168,7 +212,8 @@ function Header ({ siempreSolido = false }) {
 
     // 🔓 FUNCIÓN PARA CERRAR SESIÓN
     const handleCerrarSesion = async () => {
-        await supabase.auth.signOut();
+        await signOut(auth);
+        setUsuario(null);
         router.push('/login');
     };
 
@@ -189,7 +234,7 @@ function Header ({ siempreSolido = false }) {
                     <img src="/ICONOS/Menu.png" alt="Menú" id="menubtn" className="menuicon"/>
                 </button>
             </div> 
-                <a href="/" className="Logo">THE OUTFIT</a>
+                <Link href="/" className="Logo">THE OUTFIT</Link>
 
                 <div className="nav-right">
 
@@ -248,10 +293,16 @@ function Header ({ siempreSolido = false }) {
                         {/* de la constante categoria creo un map con una variable inventada 'categoria', en el cual con ella pondria los atributos como id etc */}
                         {categorias.map((categoria) => (
                             <li key={categoria.id}>
-                                <a href={categoria.href} className ="part1"
-                                    // el onClick remplaza el addEventListener('click') y !menuAbierto es el toggle, si estaba true pasa a false y viceversa
-                                    onClick = {(event) => {{event.preventDefault(); setMenuAbierto(false)} 
-                                    setCategoriaActiva(categoria.id)}}
+                                <a href={categoria.href || '#'} className={`part1 ${categoria.id === 'ofertas' ? 'part1-ofertas' : ''}`}
+                                    onClick = {(event) => {
+                                        event.preventDefault();
+                                        setMenuAbierto(false);
+                                        if (categoria.href) {
+                                            router.push(categoria.href);
+                                        } else {
+                                            setCategoriaActiva(categoria.id);
+                                        }
+                                    }}
                                     aria-label ="Abrir menú" >{categoria.label}</a>
                             </li>
                         ))}

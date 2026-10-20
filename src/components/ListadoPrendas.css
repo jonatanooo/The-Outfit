@@ -41,40 +41,78 @@
 .prenda-info
 {
     display: flex;
+    justify-content: space-between;
     align-items: flex-start;
-    gap: 5em;
+    gap: 0.5em;
+    margin-top: 0.5em;
+    margin-bottom: 1em;
 }
 
 .prenda-nombre
 {
     font-family: "DM Sans", sans-serif;
-    font-weight: 400;
-    font-size: clamp(1rem, 1vw, 2rem);
-    /* si algun dia da problemas cambiarlo */
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin: 0 0 0.3em;
     height: auto;
-    min-height: 2.5em;
+    min-height: auto;
 }
 
 .prenda-marca
 {
     font-family: "DM Sans", sans-serif;
-    font-weight: 400;
-    font-size: clamp(1rem, 1vw, 1.2rem);
-    opacity: 70%;
-    /* si algun dia da problemas cambiarlo */
+    font-size: 0.9rem;
+    opacity: 0.7;
+    margin: 0.2em 0;
     height: auto;
-    min-height: 1.5em;
+    min-height: auto;
 }
 
 .prenda-precio
 {
     font-family: "DM Sans", sans-serif;
-    font-weight: 400;
-    font-size: clamp(1rem, 1vw, 2rem);
+    font-size: 0.85rem;
     margin: 0;
-    /* si algun dia da problemas cambiarlo */
+    color: #333;
     height: auto;
-    min-height: 1.5em;
+    min-height: auto;
+}
+
+.prenda-precios-oferta {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin: 0;
+}
+
+.prenda-precio-original-tachado {
+    font-family: "DM Sans", sans-serif;
+    text-decoration: line-through;
+    color: #888;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.prenda-precio-oferta {
+    font-family: "DM Sans", sans-serif;
+    color: #c62828;
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.badge-oferta-card {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background-color: #c62828;
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 6px;
+    border-radius: 4px;
+    z-index: 2;
 }
 
 .seccion-listado {
