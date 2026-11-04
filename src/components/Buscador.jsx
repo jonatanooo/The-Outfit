@@ -65,9 +65,13 @@ function Buscador({ onClose }) {
 
                 const resultados = filtrados.map((p) => ({
                     ...p,
-                    Fotos_Productos: (fotosPorProd[p.ID_Producto] || fotosPorProd[String(p.ID_Producto)] || []).sort(
-                        (a, b) => (Number(a.Orden) ?? 0) - (Number(b.Orden) ?? 0)
-                    )
+                    Fotos_Productos: (fotosPorProd[p.ID_Producto] || fotosPorProd[String(p.ID_Producto)] || []).sort((a, b) => {
+                        if (a.Es_Principal && !b.Es_Principal) return -1;
+                        if (!a.Es_Principal && b.Es_Principal) return 1;
+                        const ordenA = a.Orden != null && !isNaN(Number(a.Orden)) ? Number(a.Orden) : 999999;
+                        const ordenB = b.Orden != null && !isNaN(Number(b.Orden)) ? Number(b.Orden) : 999999;
+                        return ordenA - ordenB;
+                    })
                 }))
 
                 setSugerencias(resultados)
@@ -113,8 +117,8 @@ function Buscador({ onClose }) {
                         )}
 
                         {!buscando && sugerencias.map((producto) => {
-                            const fotos = [...(producto.Fotos_Productos ?? [])].sort((a, b) => (a.Orden ?? 0) - (b.Orden ?? 0))
-                            const foto = fotos[0]
+                            const fotos = producto.Fotos_Productos ?? []
+                            const urlFoto = producto.Imagen_Principal || fotos.find((f) => f.Es_Principal)?.URL_Foto || fotos[0]?.URL_Foto || null
                             return (
                                 <button
                                     key={producto.ID_Producto}
@@ -122,8 +126,8 @@ function Buscador({ onClose }) {
                                     className="buscador-sugerencia"
                                     onClick={() => irALaPrenda(producto.ID_Producto)}
                                 >
-                                    {foto ? (
-                                        <img src={foto.URL_Foto} alt="" className="buscador-sugerencia-foto" />
+                                    {urlFoto ? (
+                                        <img src={urlFoto} alt="" className="buscador-sugerencia-foto" />
                                     ) : (
                                         <div className="buscador-sugerencia-sinfoto" />
                                     )}

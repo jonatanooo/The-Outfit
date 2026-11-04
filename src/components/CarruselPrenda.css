@@ -1,18 +1,23 @@
-.prenda-card
+.carrusel-wrap .prenda-card
 {
     width: 100%;
-    max-width: 280px;
+    max-width: none;
     margin: 0 auto 1em auto;
+    display: flex;
+    flex-direction: column;
 }
 
-.prenda-imagen-wrap {
+.carrusel-wrap .prenda-imagen-wrap {
     position: relative;
     width: 100%;
+    aspect-ratio: 3 / 4;
+    height: auto;
     overflow: hidden;
-    height: 25em;
+    border-radius: 4px;
+    margin-bottom: 0.8em;
 }
 
-.prenda-imagen 
+.carrusel-wrap .prenda-imagen 
 {
     width: 100%;
     height: 100%;
@@ -39,13 +44,13 @@
     height: 2em;
 }
 
-.prenda-info
+.carrusel-wrap .prenda-info
 {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     gap: 0.5em;
-    margin-top: 0.5em;
+    margin-top: 0;
     margin-bottom: 1em;
 }
 
@@ -125,20 +130,22 @@
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: clamp(12px, 3vw, 40px);
+    gap: clamp(12px, 2.5vw, 36px);
     width: 100%;
-    max-width: 1200px;
+    max-width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding: 0 16px;
+    padding: 0 2em;
     box-sizing: border-box;
     position: relative;
 }
 
+/* El ancho de 1 tarjeta en Favoritos (4 columnas, padding 4em*2=8em, gap 2em*3=6em) es (100vw - 14em) / 4.
+   Para mostrar 3 tarjetas con esa misma medida exacta más su padding (1em a cada lado = 2em por item, 6em en total): */
 .carrusel-viewport {
     overflow: hidden;
     width: 100%;
-    max-width: 960px;
+    max-width: calc(3 * ((100vw - 14em) / 4) + 6em);
     position: relative;
     user-select: none;
 }
@@ -154,7 +161,7 @@
     flex: 0 0 calc(100% / var(--items-visibles, 3));
     max-width: calc(100% / var(--items-visibles, 3));
     box-sizing: border-box;
-    padding: 0 14px;
+    padding: 0 1em;
 }
 
 .buttons-move-card img {
@@ -228,15 +235,15 @@
     .carrusel-wrap {
         --items-visibles: 2;
         gap: clamp(10px, 2.5vw, 24px);
-        padding: 0 12px;
+        padding: 0 1.5em;
     }
 
     .carrusel-viewport {
-        max-width: 660px;
+        max-width: 100%;
     }
 
     .carrusel-item {
-        padding: 0 10px;
+        padding: 0 0.8em;
     }
 }
 
@@ -244,15 +251,15 @@
     .carrusel-wrap {
         --items-visibles: 1;
         gap: 8px;
-        padding: 0 6px;
+        padding: 0 1em;
     }
 
     .carrusel-viewport {
-        max-width: 320px;
+        max-width: 100%;
     }
 
     .carrusel-item {
-        padding: 0 4px;
+        padding: 0 0.4em;
     }
 
     .buttons-move-card {

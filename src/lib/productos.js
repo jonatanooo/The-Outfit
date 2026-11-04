@@ -19,7 +19,18 @@ export const ID_CATEGORIA_HOMBRE = 57;
 // Convierte un objeto de "Productos" (con sus relaciones ensambladas) al formato plano
 // {id, nombre, marca, descripcion, imagen, fotos, precio, idGenero, enOferta, precioOriginal, precioFinal, porcentajeDescuento} que usan las tarjetas del catálogo.
 export function normalizarProducto(p) {
-  const fotos = [...(p.Fotos_Productos ?? [])].sort((a, b) => (Number(a.Orden) ?? 0) - (Number(b.Orden) ?? 0));
+  const urlPrincipalProducto = p.Imagen_Principal || null;
+  const fotos = [...(p.Fotos_Productos ?? [])].sort((a, b) => {
+    if (urlPrincipalProducto) {
+      if (a.URL_Foto === urlPrincipalProducto && b.URL_Foto !== urlPrincipalProducto) return -1;
+      if (a.URL_Foto !== urlPrincipalProducto && b.URL_Foto === urlPrincipalProducto) return 1;
+    }
+    if (a.Es_Principal && !b.Es_Principal) return -1;
+    if (!a.Es_Principal && b.Es_Principal) return 1;
+    const ordenA = a.Orden != null && !isNaN(Number(a.Orden)) ? Number(a.Orden) : 999999;
+    const ordenB = b.Orden != null && !isNaN(Number(b.Orden)) ? Number(b.Orden) : 999999;
+    return ordenA - ordenB;
+  });
 
   // Sin dato, el producto/variante se considera activo (1).
   const variantesActivas = (p.Variante_Producto ?? []).filter((v) => {
@@ -57,8 +68,8 @@ export function normalizarProducto(p) {
     nombre: p.Nombre_Producto || '',
     marca: (p.Marca?.Nombre_Marca && String(p.Marca.Nombre_Marca).trim()) ? String(p.Marca.Nombre_Marca).trim() : 'The Outfit',
     descripcion: p.Descripcion || '',
-    // La imagen principal es la 5ta foto (índice 4) o la primera como respaldo.
-    imagen: fotos[4]?.URL_Foto ?? fotos[0]?.URL_Foto ?? null,
+    // La imagen principal es Imagen_Principal, la marcada como Es_Principal o la primera según su Orden (índice 0).
+    imagen: urlPrincipalProducto ?? fotos.find((f) => f.Es_Principal)?.URL_Foto ?? fotos[0]?.URL_Foto ?? null,
     fotos: fotos.map((f) => f.URL_Foto).filter(Boolean),
     precio: precioFinal,
     precioOriginal: precioBase,
@@ -436,7 +447,33 @@ export function useTallasProducto(idProducto) {
           .map((v) => normalizarTalla(v, tallaMap, tiposTallaMap, inventarioMap, prodData))
           .filter((t) => t && t.nombre);
 
-        setTallas(tallasNormalizadas);
+        // Evitar que se repitan tallas con el mismo nombre en la misma prenda,
+        // priorizando la variante disponible con mayor stock.
+        const porNombre = new Map();
+        for (const t of tallasNormalizadas) {
+          const clave = t.nombre.trim().toUpperCase();
+          const existente = porNombre.get(clave);
+          if (!existente) {
+            porNombre.set(clave, { ...t, nombre: clave });
+          } else if (
+            (t.disponible && !existente.disponible) ||
+            (t.disponible === existente.disponible && t.stock > existente.stock)
+          ) {
+            porNombre.set(clave, { ...t, nombre: clave });
+          }
+        }
+
+        const ordenTallas = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+        const tallasUnicas = Array.from(porNombre.values()).sort((a, b) => {
+          const idxA = ordenTallas.indexOf(a.nombre);
+          const idxB = ordenTallas.indexOf(b.nombre);
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+          if (idxA !== -1) return -1;
+          if (idxB !== -1) return 1;
+          return a.nombre.localeCompare(b.nombre);
+        });
+
+        setTallas(tallasUnicas);
       } catch (error) {
         console.error('Error cargando tallas desde Firestore:', error);
         if (activo) setTallas([]);

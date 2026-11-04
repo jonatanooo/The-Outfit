@@ -35,20 +35,24 @@ function useItemsVisibles() {
 }
 
 // Carrusel con animación de desplazamiento suave y ajuste responsivo (1 a 3 prendas)
-function CarruselPrendas({ idGenero } = {}) {
-  const { productos: prendas, cargando } = useProductosCatalogo(idGenero);
+function CarruselPrendas({ idGenero, idExcluir } = {}) {
+  const { productos: productosCatalogo, cargando } = useProductosCatalogo(idGenero);
   const { esFavorito, alternarFavorito } = useFavoritos();
   const itemsVisibles = useItemsVisibles();
 
+  const prendas = idExcluir != null && idExcluir !== ''
+    ? (productosCatalogo || []).filter((p) => String(p.id) !== String(idExcluir))
+    : (productosCatalogo || []);
+
   const [indice, setIndice] = useState(0);
 
-  const total = prendas?.length || 0;
+  const total = prendas.length;
   const maxIndice = Math.max(0, total - itemsVisibles);
 
-  // Asegurar que el índice no supere el máximo si cambia la cantidad de items visibles
+  // Asegurar que el índice no supere el máximo si cambia la cantidad de items visibles o la lista de prendas
   useEffect(() => {
-    setIndice((prev) => Math.min(prev, Math.max(0, (prendas?.length || 0) - itemsVisibles)));
-  }, [itemsVisibles, prendas?.length]);
+    setIndice((prev) => Math.min(prev, Math.max(0, prendas.length - itemsVisibles)));
+  }, [itemsVisibles, prendas.length, idExcluir]);
 
   const siguiente = () => {
     setIndice((prev) => (prev < maxIndice ? prev + 1 : prev));
