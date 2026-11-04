@@ -26,7 +26,7 @@
     flex-shrink: 0;
     align-items: center;
     justify-content: flex-start;
-    animation: spin 30s infinite linear;
+    animation: spin 40s infinite linear;
     height: 100%;
     will-change: transform;
     margin: 0;

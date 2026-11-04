@@ -156,9 +156,13 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
       }
 
       const precios = (vars.length > 0 ? vars : []).map((v) => v.Precio_Actual).filter((n) => n > 0);
-      const fotos = [...(fotosPorProducto[pid] || fotosPorProducto[String(pid)] || [])].sort(
-        (a, b) => (Number(a.Orden) ?? 0) - (Number(b.Orden) ?? 0)
-      );
+      const fotos = [...(fotosPorProducto[pid] || fotosPorProducto[String(pid)] || [])].sort((a, b) => {
+        if (a.Es_Principal && !b.Es_Principal) return -1;
+        if (!a.Es_Principal && b.Es_Principal) return 1;
+        const ordenA = a.Orden != null && !isNaN(Number(a.Orden)) ? Number(a.Orden) : 999999;
+        const ordenB = b.Orden != null && !isNaN(Number(b.Orden)) ? Number(b.Orden) : 999999;
+        return ordenA - ordenB;
+      });
 
       const marcaObj = marcasMap[p.ID_Marca] || null;
 
@@ -180,6 +184,12 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
       const precioBase = precios.length ? Math.min(...precios) : (Number(p.Precio ?? 0) || 0);
       const precioFinal = enOferta ? calcularPrecioConDescuento(precioBase, porcentaje) : precioBase;
 
+      const fotoPrincipal =
+        p.Imagen_Principal ||
+        fotos.find((f) => f.Es_Principal)?.URL_Foto ||
+        fotos[0]?.URL_Foto ||
+        "/Fotos/placeholder.jpg";
+
       vistos.set(pid, {
         id: pid,
         nombre: p.Nombre_Producto || "",
@@ -188,7 +198,7 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
         precioOriginal: precioBase,
         enOferta,
         porcentajeDescuento: enOferta ? porcentaje : 0,
-        imagen: fotos[3]?.URL_Foto ?? fotos[0]?.URL_Foto ?? "/Fotos/placeholder.jpg",
+        imagen: fotoPrincipal,
       });
     }
 

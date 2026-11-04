@@ -81,6 +81,16 @@ async function eliminarDocPorId(nombreColeccion, campoId, idValor) {
     }
 }
 
+function ordenarFotosProducto(listaFotos = []) {
+    return [...listaFotos].sort((a, b) => {
+        if (a.Es_Principal && !b.Es_Principal) return -1;
+        if (!a.Es_Principal && b.Es_Principal) return 1;
+        const ordenA = a.Orden != null && !isNaN(Number(a.Orden)) ? Number(a.Orden) : 999999;
+        const ordenB = b.Orden != null && !isNaN(Number(b.Orden)) ? Number(b.Orden) : 999999;
+        return ordenA - ordenB;
+    });
+}
+
 function IconoCamisa() {
   return (
     <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
@@ -144,6 +154,7 @@ function AdminInventario() {
     const [fotosNuevasEditar, setFotosNuevasEditar] = useState([]); // Archivos nuevos File
     const [previewsNuevasEditar, setPreviewsNuevasEditar] = useState([]); // Previews locales
     const [fotosAEliminar, setFotosAEliminar] = useState([]); // IDs de fotos marcadas para borrar
+    const [principalEsNueva, setPrincipalEsNueva] = useState(false); // Indica si la foto principal elegida en edición es una foto nueva
     const [guardandoEdicion, setGuardandoEdicion] = useState(false);
 
     //------ ESTADOS DE MODAL DE INGRESO DE STOCK ----------//
@@ -460,11 +471,12 @@ function AdminInventario() {
         }
 
         // Carga las fotos que ya existen en la base de datos
-        const fotos = (v.Productos?.Fotos_Productos || []).sort((a, b) => (Number(a.Orden) ?? 0) - (Number(b.Orden) ?? 0));
+        const fotos = ordenarFotosProducto(v.Productos?.Fotos_Productos || []);
         setFotosExistentes(fotos);
         setFotosNuevasEditar([]);
         setPreviewsNuevasEditar([]);
         setFotosAEliminar([]);
+        setPrincipalEsNueva(false);
         setModalAbierto('editar');
     }
 
@@ -661,8 +673,83 @@ function AdminInventario() {
 
     // Descarta una foto recién seleccionada en el modal de edición
     function quitarFotoNuevaEditar(index) {
-        setFotosNuevasEditar((prev) => prev.filter((_, i) => i !== index));
+        setFotosNuevasEditar((prev) => {
+            const nuevas = prev.filter((_, i) => i !== index);
+            if (nuevas.length === 0) setPrincipalEsNueva(false);
+            return nuevas;
+        });
         setPreviewsNuevasEditar((prev) => prev.filter((_, i) => i !== index));
+    }
+
+    // Marca una foto ya existente como principal en el modal de edición y la aplica en Firestore de inmediato
+    async function marcarExistenteComoPrincipal(indice) {
+        setPrincipalEsNueva(false);
+        const copia = [...fotosExistentes];
+        if (indice > 0 && indice < copia.length) {
+            const [fotoElegida] = copia.splice(indice, 1);
+            copia.unshift(fotoElegida);
+        }
+        const actualizadas = copia.map((f, i) => ({
+            ...f,
+            Orden: i,
+            Es_Principal: i === 0
+        }));
+        setFotosExistentes(actualizadas);
+
+        const idProducto = varianteEditando?.Productos?.ID_Producto ?? varianteEditando?.ID_Producto;
+        const urlPrincipal = actualizadas[0]?.URL_Foto || null;
+
+        // Actualizar estado local de variantes inmediatamente
+        if (idProducto != null) {
+            setVariantes((prev) =>
+                prev.map((v) =>
+                    String(v.ID_Producto) === String(idProducto) && v.Productos
+                        ? {
+                              ...v,
+                              Productos: {
+                                  ...v.Productos,
+                                  Imagen_Principal: urlPrincipal,
+                                  Fotos_Productos: actualizadas
+                              }
+                          }
+                        : v
+                )
+            );
+        }
+
+        // Persistir de inmediato en Firestore para que se aplique al instante en carruseles y listados
+        try {
+            await Promise.all([
+                ...actualizadas.map((foto, i) => {
+                    const campos = { Orden: i, Es_Principal: i === 0 };
+                    if (foto._docId) {
+                        return updateDoc(doc(db, 'Fotos_Productos', String(foto._docId)), campos);
+                    }
+                    return actualizarDocPorId('Fotos_Productos', 'ID_Foto', foto.ID_Foto, campos);
+                }),
+                ...(idProducto && urlPrincipal
+                    ? [actualizarDocPorId('Productos', 'ID_Producto', idProducto, { Imagen_Principal: urlPrincipal })]
+                    : [])
+            ]);
+        } catch (err) {
+            console.error('Error aplicando foto principal en Firestore:', err);
+        }
+    }
+
+    // Marca una foto recién agregada como principal en el modal de edición
+    function marcarNuevaEditarComoPrincipal(indice) {
+        setPrincipalEsNueva(true);
+        if (indice === 0) return;
+        setFotosNuevasEditar((prev) => {
+            const copia = [...prev];
+            const [archivoElegido] = copia.splice(indice, 1);
+            return [archivoElegido, ...copia];
+        });
+        setPreviewsNuevasEditar((prev) => {
+            const copia = [...prev];
+            const [previewElegida] = copia.splice(indice, 1);
+            return [previewElegida, ...copia];
+        });
     }
 
     /*---------- TEXTOS Y COLORES PARA LOS FILTROS ----------*/
@@ -742,7 +829,33 @@ function AdminInventario() {
                 }
             }
 
-            // 6. Sube y registra nuevas fotos añadidas durante la edición en paralelo
+            const usarNuevaComoPrincipal = principalEsNueva && fotosNuevasEditar.length > 0;
+
+            // 6. Actualiza el Orden y Es_Principal de las fotos existentes en Firestore
+            if (fotosExistentes.length > 0) {
+                await Promise.all(
+                    fotosExistentes.map(async (foto, i) => {
+                        const nuevoOrden = usarNuevaComoPrincipal ? fotosNuevasEditar.length + i : i;
+                        const esPrincipal = !usarNuevaComoPrincipal && i === 0;
+                        const camposFoto = {
+                            Orden: nuevoOrden,
+                            Es_Principal: esPrincipal
+                        };
+                        try {
+                            if (foto._docId) {
+                                await updateDoc(doc(db, 'Fotos_Productos', String(foto._docId)), camposFoto);
+                            } else {
+                                await actualizarDocPorId('Fotos_Productos', 'ID_Foto', foto.ID_Foto, camposFoto);
+                            }
+                        } catch (errOrden) {
+                            console.error('Error actualizando orden de foto:', errOrden);
+                        }
+                    })
+                );
+            }
+
+            // 7. Sube y registra nuevas fotos añadidas durante la edición en paralelo
+            let urlNuevaPrincipal = null;
             if (fotosNuevasEditar.length > 0) {
                 if (!idProducto) {
                     alert("Error: No se encontró el ID_Producto para asociar la foto.");
@@ -750,23 +863,28 @@ function AdminInventario() {
                 }
 
                 const idUser = await obtenerIdUsuario();
-                const ordenBase = fotosExistentes.length;
+                const ordenBase = usarNuevaComoPrincipal ? 0 : fotosExistentes.length;
+                const timestampBase = Date.now();
 
                 await Promise.all(
                     fotosNuevasEditar.map(async (archivo, i) => {
                         const extension = archivo.name.split('.').pop() || 'jpg';
-                        const nombreArchivo = `${idProducto}_${Date.now()}_${i}.${extension}`;
+                        const nombreArchivo = `${idProducto}_${timestampBase}_${i}.${extension}`;
 
                         try {
                             const publicUrl = await subirImagenStorage(archivo, nombreArchivo);
 
-                            const idFoto = Date.now() + i;
+                            const idFoto = timestampBase + i;
+                            const ordenFoto = ordenBase + i;
+                            const esPrincipal = (usarNuevaComoPrincipal && i === 0) || (fotosExistentes.length === 0 && i === 0);
+                            if (esPrincipal) urlNuevaPrincipal = publicUrl;
                             await setDoc(doc(db, 'Fotos_Productos', String(idFoto)), {
                                 ID_Foto: idFoto,
                                 ID_Producto: idProducto,
                                 ID_User: idUser,
                                 URL_Foto: publicUrl,
-                                Orden: ordenBase + i,
+                                Orden: ordenFoto,
+                                Es_Principal: esPrincipal,
                                 Fecha_Carga: new Date().toISOString()
                             });
                         } catch (errorStorage) {
@@ -774,6 +892,16 @@ function AdminInventario() {
                         }
                     })
                 );
+            }
+
+            // 8. Sincronizar Imagen_Principal en el documento del Producto padre
+            const urlPrincipalFinal = usarNuevaComoPrincipal
+                ? urlNuevaPrincipal
+                : (fotosExistentes[0]?.URL_Foto || urlNuevaPrincipal || null);
+            if (idProducto && urlPrincipalFinal) {
+                await actualizarDocPorId('Productos', 'ID_Producto', idProducto, {
+                    Imagen_Principal: urlPrincipalFinal
+                });
             }
 
             setModalAbierto(null);
@@ -813,6 +941,7 @@ function AdminInventario() {
 
             if (tallaCambio || colorCambio) {
                 let idNuevaTalla = null;
+                const idsTallaEquivalentes = new Set();
 
                 if (tipoTallaSeleccionada) {
                     const qTalla = query(
@@ -825,6 +954,10 @@ function AdminInventario() {
                     );
                     const snapTalla = await getDocs(qTalla);
                     if (!snapTalla.empty) {
+                        snapTalla.docs.forEach((td) => {
+                            const tid = td.data().ID_Talla ?? td.id;
+                            idsTallaEquivalentes.add(String(tid));
+                        });
                         idNuevaTalla = snapTalla.docs[0].data().ID_Talla ?? snapTalla.docs[0].id;
                     } else {
                         const nuevaTallaId = Date.now();
@@ -833,12 +966,13 @@ function AdminInventario() {
                             ID_TipoTalla: Number(tipoTallaSeleccionada) || tipoTallaSeleccionada
                         });
                         idNuevaTalla = nuevaTallaId;
+                        idsTallaEquivalentes.add(String(nuevaTallaId));
                     }
                 }
 
                 const idColorFinal = colorSeleccionado ? (Number(colorSeleccionado) || colorSeleccionado) : null;
 
-                // Buscar variante existente con misma talla y color
+                // Buscar variante existente de la misma prenda con esa talla (evita duplicar la misma talla en una prenda)
                 const qVar = query(
                     collection(db, 'Variante_Producto'),
                     where('ID_Producto', 'in', [
@@ -852,9 +986,10 @@ function AdminInventario() {
 
                 for (const d of snapVar.docs) {
                     const vd = d.data();
-                    const matchTalla = String(vd.ID_Talla ?? '') === String(idNuevaTalla ?? '');
-                    const matchColor = String(vd.ID_Color ?? '') === String(idColorFinal ?? '');
-                    if (matchTalla && matchColor) {
+                    const matchTalla = idsTallaEquivalentes.size > 0
+                        ? idsTallaEquivalentes.has(String(vd.ID_Talla ?? ''))
+                        : String(vd.ID_Talla ?? '') === String(idNuevaTalla ?? '');
+                    if (matchTalla) {
                         varExistente = { ...vd, ID_Variante: vd.ID_Variante ?? d.id, _docId: d.id };
                         break;
                     }
@@ -1001,13 +1136,13 @@ function AdminInventario() {
                 const f = d.data();
                 const pid = f.ID_Producto;
                 if (pid != null) {
-                    if (!fotosPorProducto[pid]) fotosPorProducto[pid] = [];
-                    fotosPorProducto[pid].push({
+                    const k = String(pid);
+                    if (!fotosPorProducto[k]) fotosPorProducto[k] = [];
+                    fotosPorProducto[k].push({
+                        ...f,
                         ID_Foto: f.ID_Foto ?? d.id,
-                        _docId: d.id,
-                        ...f
+                        _docId: d.id
                     });
-                    if (!fotosPorProducto[String(pid)]) fotosPorProducto[String(pid)] = fotosPorProducto[pid];
                 }
             });
 
@@ -1030,8 +1165,8 @@ function AdminInventario() {
             prodSnap.docs.forEach((d) => {
                 const p = d.data();
                 const pid = p.ID_Producto ?? d.id;
-                const fotos = (fotosPorProducto[pid] || fotosPorProducto[String(pid)] || []).sort(
-                    (a, b) => (Number(a.Orden) ?? 0) - (Number(b.Orden) ?? 0)
+                const fotos = ordenarFotosProducto(
+                    fotosPorProducto[String(pid)] || fotosPorProducto[String(d.id)] || []
                 );
                 const item = {
                     ...p,
@@ -1184,25 +1319,29 @@ function AdminInventario() {
         if (!archivos || archivos.length === 0) return;
 
         const idUser = await obtenerIdUsuario();
+        const timestampBase = Date.now();
+        let urlPrincipal = null;
 
         // Optimizar y subir todas las fotos en paralelo para máxima velocidad
         await Promise.all(
             archivos.map(async (archivo, i) => {
                 const extension = archivo.name.split('.').pop() || 'jpg';
-                const nombreArchivo = `${idProducto}_${Date.now()}_${i}.${extension}`;
+                const nombreArchivo = `${idProducto}_${timestampBase}_${i}.${extension}`;
 
                 try {
                     // Subida rápida (Supabase Storage / Firebase fallback)
                     const publicUrl = await subirImagenStorage(archivo, nombreArchivo);
+                    if (i === 0) urlPrincipal = publicUrl;
 
                     // Registrar en Fotos_Productos de Firestore
-                    const idFoto = Date.now() + i;
+                    const idFoto = timestampBase + i;
                     await setDoc(doc(db, 'Fotos_Productos', String(idFoto)), {
                         ID_Foto: idFoto,
                         ID_Producto: idProducto,
                         ID_User: idUser,
                         URL_Foto: publicUrl,
                         Orden: i,
+                        Es_Principal: i === 0,
                         Fecha_Carga: new Date().toISOString()
                     });
 
@@ -1212,6 +1351,12 @@ function AdminInventario() {
                 }
             })
         );
+
+        if (idProducto && urlPrincipal) {
+            await actualizarDocPorId('Productos', 'ID_Producto', idProducto, {
+                Imagen_Principal: urlPrincipal
+            });
+        }
     }
 
     function marcarComoPrincipal(indice) {
@@ -1986,33 +2131,56 @@ function AdminInventario() {
             <label>Fotos del producto</label>
             <div className="fotos-row">
                 {/* Fotos ya guardadas en Firestore */}
-                {fotosExistentes.map((foto, index) => (
-                    <div key={`existente-${foto.ID_Foto}`} className="foto-box">
-                        <img src={foto.URL_Foto} alt="producto" className="foto-preview" />
-                        <button 
-                            type="button" 
-                            className="foto-quitar" 
-                            onClick={() => quitarFotoExistente(foto.ID_Foto)}
+                {fotosExistentes.map((foto, index) => {
+                    const esPrincipal = (!principalEsNueva || previewsNuevasEditar.length === 0) && index === 0;
+                    return (
+                        <div
+                            key={`existente-${foto._docId ?? foto.ID_Foto ?? index}`}
+                            className="foto-box"
+                            onClick={() => marcarExistenteComoPrincipal(index)}
+                            title={esPrincipal ? "Foto principal" : "Haz clic para hacerla principal"}
                         >
-                            ✕
-                        </button>
-                        {index === 0 && <span className="foto-principal-label">Principal</span>}
-                    </div>
-                ))}
+                            <img src={foto.URL_Foto} alt="producto" className="foto-preview" />
+                            <button 
+                                type="button" 
+                                className="foto-quitar" 
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    quitarFotoExistente(foto.ID_Foto);
+                                }}
+                            >
+                                ✕
+                            </button>
+                            {esPrincipal && <span className="foto-principal-label">Principal</span>}
+                        </div>
+                    );
+                })}
 
                 {/* Nuevas fotos pendientes de subir */}
-                {previewsNuevasEditar.map((url, index) => (
-                    <div key={`nueva-${index}`} className="foto-box">
-                        <img src={url} alt="preview" className="foto-preview" />
-                        <button 
-                            type="button" 
-                            className="foto-quitar" 
-                            onClick={() => quitarFotoNuevaEditar(index)}
+                {previewsNuevasEditar.map((url, index) => {
+                    const esPrincipal = (principalEsNueva || fotosExistentes.length === 0) && index === 0;
+                    return (
+                        <div
+                            key={`nueva-${index}`}
+                            className="foto-box"
+                            onClick={() => marcarNuevaEditarComoPrincipal(index)}
+                            title={esPrincipal ? "Foto principal" : "Haz clic para hacerla principal"}
                         >
-                            ✕
-                        </button>
-                    </div>
-                ))}
+                            <img src={url} alt="preview" className="foto-preview" />
+                            <button 
+                                type="button" 
+                                className="foto-quitar" 
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    quitarFotoNuevaEditar(index);
+                                }}
+                            >
+                                ✕
+                            </button>
+                            {esPrincipal && <span className="foto-principal-label">Principal</span>}
+                        </div>
+                    );
+                })}
 
                 {/* Botón agregar foto */}
                 <label className="foto-box agregar">

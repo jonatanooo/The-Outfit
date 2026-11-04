@@ -22,7 +22,7 @@ export default function PaginaPrenda() {
             <PrendaIfo idProducto={idProducto} />
             <h2 className="recotittle">RECOMENDACIONES</h2>
             <div className='carru-prenda'>
-                <CarruselPrendas idGenero={producto?.idGenero} />
+                <CarruselPrendas idGenero={producto?.idGenero} idExcluir={idProducto} />
             </div>
         </main>
         <Footer />

@@ -12,15 +12,39 @@ import './favoritos.css'
 
 function obtenerVariantes(variantes) {
   const activas = (variantes ?? []).filter((v) => (v.ID_EstadoProducto ?? 1) === 1);
-  return activas.map((v) => ({
-    idVariante: v.ID_Variante,
-    precio: Number(v.Precio_Actual ?? 0),
-    talla: v.Talla?.Tipos_Talla?.Nombre_TipoTalla?.trim() || '',
-    stock: (v.Inventario ?? []).reduce(
+  const porTalla = new Map();
+
+  for (const v of activas) {
+    const rawTalla = (v.Talla?.Tipos_Talla?.Nombre_TipoTalla || '').trim();
+    if (!rawTalla || rawTalla.toLowerCase() === 'única' || rawTalla.toLowerCase() === 'unica') continue;
+
+    const talla = rawTalla.toUpperCase();
+    const stock = (v.Inventario ?? []).reduce(
       (total, inv) => total + (Number(inv.Cantidad_Disponible ?? 0) - Number(inv.Cantidad_Reservada ?? 0)),
       0
-    ),
-  }));
+    );
+    const item = {
+      idVariante: v.ID_Variante,
+      precio: Number(v.Precio_Actual ?? 0),
+      talla,
+      stock,
+    };
+
+    const existente = porTalla.get(talla);
+    if (!existente || item.stock > existente.stock) {
+      porTalla.set(talla, item);
+    }
+  }
+
+  const ordenTallas = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+  return Array.from(porTalla.values()).sort((a, b) => {
+    const idxA = ordenTallas.indexOf(a.talla);
+    const idxB = ordenTallas.indexOf(b.talla);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.talla.localeCompare(b.talla);
+  });
 }
 
 export default function FavoritosPage() {
