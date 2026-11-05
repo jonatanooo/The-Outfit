@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { db, auth } from '@/lib/firebaseClient';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { verificarAccesoServidor } from '@/lib/usuario';
 import SidebarAdmin from '@/components/SidebarAdmin';
 import AdminHeader from '@/components/AdminHeader';
 import '../admin/Admin.css';
@@ -16,42 +17,15 @@ export default function ConfiguracionPage() {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (!user) {
-                router.push('/login');
+                router.replace('/login');
                 return;
             }
 
             try {
-                let rol = 'usuario';
-
-                const docRef = doc(db, 'User', user.uid);
-                const docSnap = await getDoc(docRef);
-                let userData = docSnap.exists() ? docSnap.data() : null;
-
-                if (!userData) {
-                    const q = query(collection(db, 'User'), where('auth_id', '==', user.uid));
-                    const snap = await getDocs(q);
-                    if (!snap.empty) {
-                        userData = snap.docs[0].data();
-                    } else if (user.email) {
-                        const qE = query(collection(db, 'User'), where('Correo', '==', user.email));
-                        const snapE = await getDocs(qE);
-                        if (!snapE.empty) userData = snapE.docs[0].data();
-                    }
-                }
-
-                if (userData) {
-                    const puesto = (userData.Puesto || '').toLowerCase();
-                    const rolCampo = (userData.Rol || '').toLowerCase();
-                    if (puesto === 'admin' || rolCampo === 'admin' || userData.ID_Rol === 1 || userData.ID_Rol === '1') {
-                        rol = 'admin';
-                    }
-                }
-
-                const tokenResult = await user.getIdTokenResult().catch(() => null);
-                if (tokenResult?.claims?.rol === 'admin' || tokenResult?.claims?.admin) rol = 'admin';
-
-                if (rol !== 'admin') {
-                    router.push('/');
+                // Validación autoritativa de sesión y rol en el servidor (/api/auth/session)
+                const acceso = await verificarAccesoServidor('admin');
+                if (!acceso.autorizado) {
+                    router.replace('/');
                     return;
                 }
 
@@ -59,7 +33,7 @@ export default function ConfiguracionPage() {
                 setVerificando(false);
             } catch (err) {
                 console.error('Error al verificar admin en configuracion:', err);
-                router.push('/');
+                router.replace('/');
             }
         });
 

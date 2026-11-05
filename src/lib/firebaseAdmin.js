@@ -1,55 +1,61 @@
 import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-import fs from 'fs';
-import path from 'path';
 
+/**
+ * Inicializa Firebase Admin exclusivamente a partir de variables de entorno seguras.
+ * Elimina por completo la lectura de archivos físicos (serviceAccountKey.json) en el disco.
+ */
 function getAdminApp() {
   if (getApps().length > 0) {
     return getApp();
   }
 
-  // 1. Variable de entorno con el contenido JSON directo del Service Account
+  const projectId =
+    process.env.FIREBASE_ADMIN_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY
+    ? process.env.FIREBASE_ADMIN_PRIVATE_KEY.replace(/\\n/g, '\n')
+    : undefined;
+
+  // 1. Inicialización mediante variables de entorno separadas (Recomendado en producción/Vercel)
+  if (projectId && clientEmail && privateKey) {
+    return initializeApp({
+      credential: cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      }),
+      projectId,
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    });
+  }
+
+  // 2. Alternativa mediante JSON en variable de entorno FIREBASE_SERVICE_ACCOUNT_KEY
   if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
     try {
       const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      if (serviceAccount.private_key) {
+        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+      }
       return initializeApp({
         credential: cert(serviceAccount),
-        projectId: serviceAccount.project_id || 'the-outfit-b0003',
+        projectId: serviceAccount.project_id || projectId,
+        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
       });
-    } catch (e) {
-      console.error('Error parseando FIREBASE_SERVICE_ACCOUNT_KEY:', e);
+    } catch (error) {
+      console.error('Error parseando la variable de entorno FIREBASE_SERVICE_ACCOUNT_KEY:', error);
     }
   }
 
-  // 2. Ruta a archivo local serviceAccountKey.json o el archivo descargado
-  const possiblePaths = [
-    process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
-    path.join(process.cwd(), 'serviceAccountKey.json'),
-    path.join(process.cwd(), 'service-account.json')
-  ].filter(Boolean);
-
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
-      try {
-        const serviceAccount = JSON.parse(fs.readFileSync(p, 'utf8'));
-        return initializeApp({
-          credential: cert(serviceAccount),
-          projectId: serviceAccount.project_id || 'the-outfit-b0003',
-        });
-      } catch (err) {
-        console.error(`Error leyendo clave de servicio en ${p}:`, err);
-      }
-    }
-  }
-
-  // 3. Fallback con Application Default Credentials de Google Cloud o Project ID
+  // 3. Fallback a Application Default Credentials (entornos gestionados de Google Cloud)
   return initializeApp({
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'the-outfit-b0003',
+    projectId,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   });
 }
 
 export const adminApp = getAdminApp();
 export const adminDb = getFirestore(adminApp);
 export const adminAuth = getAuth(adminApp);
-

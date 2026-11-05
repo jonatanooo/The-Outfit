@@ -1,7 +1,10 @@
 "use client"
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import SidebarAdmin from '@/components/SidebarAdmin'
 import { db, auth } from '@/lib/firebaseClient'
+import { onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth'
+import { verificarAccesoServidor, obtenerIdUsuario } from '@/lib/usuario'
 import {
   collection,
   getDocs,
@@ -54,6 +57,8 @@ async function actualizarUser(idUser, campos) {
 }
 
 export default function EmpleadosPage() {
+  const router = useRouter();
+  const [verificandoAcceso, setVerificandoAcceso] = useState(true);
   const [empleados, setEmpleados] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
@@ -65,21 +70,39 @@ export default function EmpleadosPage() {
   const [errorForm, setErrorForm] = useState('');
 
   useEffect(() => {
-    cargarEmpleados();
-  }, []);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
+
+      const acceso = await verificarAccesoServidor('admin');
+      if (!acceso.autorizado) {
+        router.replace('/');
+        return;
+      }
+
+      setVerificandoAcceso(false);
+      await cargarEmpleados();
+    });
+
+    return () => unsubscribe();
+  }, [router]);
 
   async function cargarEmpleados() {
     setCargando(true);
     try {
       const snap = await getDocs(collection(db, 'User'));
-      const list = snap.docs.map((d) => {
-        const data = d.data();
-        return {
-          ...data,
-          ID_User: data.ID_User ?? d.id,
-          _docId: d.id,
-        };
-      });
+      const list = snap.docs
+        .filter((d) => d.id !== '_schema_init' && d.id !== '_placeholder' && !d.data()?._is_schema_template)
+        .map((d) => {
+          const data = d.data();
+          return {
+            ...data,
+            ID_User: data.ID_User ?? d.id,
+            _docId: d.id,
+          };
+        });
       list.sort((a, b) => (Number(a.ID_User) || 0) - (Number(b.ID_User) || 0));
       setEmpleados(list);
     } catch (err) {
@@ -138,38 +161,46 @@ export default function EmpleadosPage() {
     if (error) { setErrorForm(error); return; }
 
     setGuardando(true);
-    
-    try {
-      // Check DUI
-      const qDui = query(collection(db, 'User'), where('DUI', '==', form.dui));
-      const snapDui = await getDocs(qDui);
+    setErrorForm('');
 
-      if (!snapDui.empty) {
-        setErrorForm('Ese DUI ya está registrado para otro usuario.');
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/admin/empleados', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          nombres: form.nombres.trim(),
+          apellidos: form.apellidos.trim(),
+          correo: form.correo.trim(),
+          dui: form.dui,
+          puesto: form.puesto,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrorForm(data.error || 'No se pudo crear el usuario.');
         setGuardando(false);
         return;
       }
 
-      const nuevoId = Date.now();
-      await setDoc(doc(db, 'User', String(nuevoId)), {
-        ID_User: nuevoId,
-        Nombres: form.nombres.trim(),
-        Apellidos: form.apellidos.trim(),
-        Correo: form.correo.trim(),
-        Usuario: `${form.nombres.trim()} ${form.apellidos.trim()}`,
-        Contrasena: '12345',
-        DUI: form.dui,
-        Puesto: form.puesto,
-        ID_EstadoUsuario: 1,
-        Es_Empleado: form.puesto === 'Empleado',
-        Fecha_Creacion: new Date().toISOString(),
-        Fecha_Incorporacion: new Date().toISOString()
-      });
+      // Disparar envío oficial del correo de restablecimiento de contraseña de Firebase Auth
+      try {
+        await sendPasswordResetEmail(auth, form.correo.trim());
+      } catch (errMail) {
+        console.warn('Aviso al enviar correo de restablecimiento:', errMail.message);
+      }
 
       cerrarModal();
-      cargarEmpleados();
+      await cargarEmpleados();
+      alert(
+        `Usuario creado de forma segura sin contraseña en texto plano.\nSe envió un enlace de configuración de contraseña a ${form.correo.trim()}.`
+      );
     } catch (err) {
-      console.error('Error creando usuario en Firestore:', err);
+      console.error('Error creando usuario:', err);
       setErrorForm('No se pudo crear: ' + err.message);
     } finally {
       setGuardando(false);
@@ -199,6 +230,11 @@ export default function EmpleadosPage() {
         }
       }
 
+      const puestoAnterior = empleadoEditando.Puesto || (empleadoEditando.Es_Empleado ? 'Empleado' : 'Usuario normal');
+      const rolAnteriorId = Number(empleadoEditando.ID_Rol ?? (empleadoEditando.Es_Empleado ? 2 : 3));
+      const esEmpleadoNuevo = form.puesto === 'Empleado';
+      const rolNuevoId = esEmpleadoNuevo ? 2 : 3;
+
       await actualizarUser(empleadoEditando.ID_User, {
         Nombres: form.nombres.trim(),
         Apellidos: form.apellidos.trim(),
@@ -206,22 +242,43 @@ export default function EmpleadosPage() {
         Usuario: `${form.nombres.trim()} ${form.apellidos.trim()}`,
         DUI: form.dui,
         Puesto: form.puesto,
-        Es_Empleado: form.puesto === 'Empleado'
+        ID_Rol: rolNuevoId,
+        Es_Empleado: esEmpleadoNuevo
       });
 
-      // Insertar en tabla de auditoría
+      // Registrar en Auditoria_Actualizacion_User y (si cambió el rol) en Auditoria_CambioRol
       try {
+        const idUserAccion = (await obtenerIdUsuario()) || auth.currentUser?.uid || 'Admin';
         const adminEmail = auth.currentUser?.email || 'Admin Desconocido';
-        const datosAnteriores = `Nombre: ${empleadoEditando.Nombres} ${empleadoEditando.Apellidos}, DUI: ${empleadoEditando.DUI}, Puesto: ${empleadoEditando.Puesto}`;
-        const datosNuevos = `Nombre: ${form.nombres} ${form.apellidos}, DUI: ${form.dui}, Puesto: ${form.puesto}`;
+        const ahoraIso = new Date().toISOString();
+        const datosAnteriores = `Nombre: ${empleadoEditando.Nombres} ${empleadoEditando.Apellidos}, Correo: ${empleadoEditando.Correo || ''}, DUI: ${empleadoEditando.DUI}, Rol: ${puestoAnterior}`;
+        const datosNuevos = `Nombre: ${form.nombres.trim()} ${form.apellidos.trim()}, Correo: ${form.correo.trim()}, DUI: ${form.dui}, Rol: ${form.puesto}`;
 
-        await setDoc(doc(db, 'Auditoria', String(Date.now())), {
+        const auditUserRef = doc(collection(db, 'Auditoria_Actualizacion_User'));
+        await setDoc(auditUserRef, {
+          ID_Auditoria: auditUserRef.id,
+          ID_User: empleadoEditando.ID_User,
+          ID_UserAccion: idUserAccion,
           Usuario_Admin: adminEmail,
-          Accion: 'Edición de Usuario',
-          Dato_Anterior: datosAnteriores,
-          Dato_Nuevo: datosNuevos,
-          Fecha_Registro: new Date().toISOString()
+          ValorAntiguo: datosAnteriores,
+          ValorNuevo: datosNuevos,
+          Fecha_Registro: ahoraIso
         });
+
+        if (puestoAnterior !== form.puesto || rolAnteriorId !== rolNuevoId) {
+          const auditRolRef = doc(collection(db, 'Auditoria_CambioRol'));
+          await setDoc(auditRolRef, {
+            ID_Auditoria: auditRolRef.id,
+            ID_User: empleadoEditando.ID_User,
+            ID_UserAccion: idUserAccion,
+            Usuario_Admin: adminEmail,
+            ID_RolAntiguo: rolAnteriorId,
+            ID_RolNuevo: rolNuevoId,
+            Rol_Antiguo: puestoAnterior,
+            Rol_Nuevo: form.puesto,
+            Fecha_Registro: ahoraIso
+          });
+        }
       } catch (errAudit) {
         console.log('No se pudo guardar en auditoría:', errAudit);
       }
@@ -252,11 +309,45 @@ export default function EmpleadosPage() {
         }
       }
 
-      await actualizarUser(emp.ID_User, { ID_EstadoUsuario: nuevoEstado });
+      const estadoAnterior = Number(emp.ID_EstadoUsuario ?? 1);
+
+      // Sincronizar en servidor (deshabilita/habilita cuenta en Firebase Auth, revoca tokens y registra en Auditoria_CambioEstado_User)
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
+      const res = await fetch('/api/admin/empleados', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ idUser: emp.ID_User, nuevoEstado }),
+      });
+
+      if (!res.ok) {
+        await actualizarUser(emp.ID_User, { ID_EstadoUsuario: nuevoEstado });
+        try {
+          const idUserAccion = (await obtenerIdUsuario()) || auth.currentUser?.uid || 'Admin';
+          const auditEstadoRef = doc(collection(db, 'Auditoria_CambioEstado_User'));
+          await setDoc(auditEstadoRef, {
+            ID_Auditoria: auditEstadoRef.id,
+            ID_User: emp.ID_User,
+            ID_UserAccion: idUserAccion,
+            ID_EstadoAnterior: estadoAnterior,
+            ID_EstadoNuevo: nuevoEstado,
+            Fecha_Registro: new Date().toISOString()
+          });
+        } catch (errAuditEst) {
+          console.error('Error guardando Auditoria_CambioEstado_User:', errAuditEst);
+        }
+      }
+
       cargarEmpleados();
     } catch (error) {
       alert('No se pudo cambiar el estado: ' + error.message);
     }
+  }
+
+  if (verificandoAcceso) {
+    return null;
   }
 
   return (

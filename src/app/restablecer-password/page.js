@@ -5,11 +5,23 @@ import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/firebaseClient';
 import { confirmPasswordReset, verifyPasswordResetCode, updatePassword } from 'firebase/auth';
 
+/**
+ * Misma política estricta de complejidad de contraseña exigida en el registro.
+ */
+const REQUISITOS_PASSWORD = [
+  { id: 'len', label: 'Mínimo 8 caracteres', test: (pwd) => pwd.length >= 8 },
+  { id: 'upper', label: 'Al menos una letra mayúscula (A-Z)', test: (pwd) => /[A-Z]/.test(pwd) },
+  { id: 'lower', label: 'Al menos una letra minúscula (a-z)', test: (pwd) => /[a-z]/.test(pwd) },
+  { id: 'num', label: 'Al menos un número (0-9)', test: (pwd) => /[0-9]/.test(pwd) },
+  { id: 'sym', label: 'Al menos un símbolo (!@#$%^&*...)', test: (pwd) => /[!@#$%^&*(),.?":{}|<>_\-+=/\\[\]~`';]/.test(pwd) },
+];
+
 export default function RestablecerPasswordPage() {
   const router = useRouter();
   const [listo, setListo] = useState(false);
   const [oobCode, setOobCode] = useState(null);
   const [password, setPassword] = useState('');
+  const [confirmarPassword, setConfirmarPassword] = useState('');
   const [error, setError] = useState('');
   const [ok, setOk] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -32,12 +44,25 @@ export default function RestablecerPasswordPage() {
     }
   }, []);
 
+  const estadoRequisitos = REQUISITOS_PASSWORD.map((req) => ({
+    ...req,
+    cumplido: req.test(password || ''),
+  }));
+  const todosRequisitosCumplidos = estadoRequisitos.every((r) => r.cumplido);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
 
-    if (password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres.');
+    const faltantes = estadoRequisitos.filter((r) => !r.cumplido).map((r) => r.label);
+    if (faltantes.length > 0) {
+      setError(`La contraseña no cumple los requisitos: ${faltantes.join(', ')}.`);
+      return;
+    }
+
+    if (password !== confirmarPassword) {
+      setError('Las contraseñas no coinciden.');
       return;
     }
 
@@ -67,10 +92,14 @@ export default function RestablecerPasswordPage() {
           RESTABLECER CONTRASEÑA
         </h1>
 
-        {!listo && (
+        {!listo && !error && (
           <p className="text-sm text-gray-600 text-center">
             Abrí esta página desde el enlace que te enviamos por correo.
           </p>
+        )}
+
+        {!listo && error && (
+          <p className="text-red-500 text-sm text-center">{error}</p>
         )}
 
         {listo && !ok && (
@@ -82,10 +111,52 @@ export default function RestablecerPasswordPage() {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full h-11 border border-gray-300 rounded-sm px-4 text-base text-black focus:outline-none focus:border-black"
             />
+
+            <input
+              type="password"
+              placeholder="Confirmar nueva contraseña"
+              value={confirmarPassword}
+              onChange={(e) => setConfirmarPassword(e.target.value)}
+              className="w-full h-11 border border-gray-300 rounded-sm px-4 text-base text-black focus:outline-none focus:border-black"
+            />
+
+            {/* Indicador visual en tiempo real de los requisitos de complejidad */}
+            <div
+              style={{
+                padding: '10px 12px',
+                backgroundColor: '#fafafa',
+                border: '1px solid #e5e7eb',
+                borderRadius: '4px',
+              }}
+            >
+              <p className="text-xs font-medium text-gray-700" style={{ marginBottom: '6px' }}>
+                Requisitos de seguridad de la contraseña:
+              </p>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {estadoRequisitos.map((req) => (
+                  <li
+                    key={req.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.75rem',
+                      color: req.cumplido ? '#15803d' : '#6b7280',
+                      fontWeight: req.cumplido ? 600 : 400,
+                      marginBottom: '2px',
+                    }}
+                  >
+                    <span>{req.cumplido ? '✓' : '○'}</span>
+                    <span>{req.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             {error && <p className="text-red-500 text-xs">{error}</p>}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !todosRequisitosCumplidos}
               className="w-full h-14 bg-black text-white text-base tracking-[0.3em] font-medium hover:bg-gray-800 transition disabled:opacity-50"
             >
               {loading ? 'GUARDANDO...' : 'GUARDAR CONTRASEÑA'}

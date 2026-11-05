@@ -304,6 +304,7 @@
 .fotos-row .foto-box.agregar {
     margin-top: 0;
     margin-bottom: 0;
+    background: transparent;
 }
 
 .foto-box {

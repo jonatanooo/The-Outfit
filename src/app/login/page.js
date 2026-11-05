@@ -9,9 +9,12 @@ import {
   sendPasswordResetEmail,
   signInWithPopup,
   GoogleAuthProvider,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
   signOut
 } from 'firebase/auth';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { sincronizarSesionServidor } from '@/lib/usuario';
 import Footer from '@/components/Footer';
 
 /* ---------- Iconos SVG (redes + ojo + Google) ---------- */
@@ -109,36 +112,37 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      await setPersistence(
+        auth,
+        mantenerSesion ? browserLocalPersistence : browserSessionPersistence
+      );
+
       const userCredential = await signInWithEmailAndPassword(auth, correo, password);
       const user = userCredential.user;
 
-      // Verificar si el usuario está baneado o su rol en la colección User de Firestore
-      let userData = null;
-      try {
-        const qUser = query(collection(db, 'User'), where('Correo', '==', correo));
-        const snapUser = await getDocs(qUser);
-        if (!snapUser.empty) {
-          userData = snapUser.docs[0].data();
-        } else {
-          const docSnap = await getDoc(doc(db, 'User', user.uid));
-          if (docSnap.exists()) userData = docSnap.data();
-        }
-      } catch (errUser) {
-        console.warn('Aviso: No se pudo consultar la colección User:', errUser);
-      }
+      // Validar token, estado de baneo y rol de manera autoritativa en el servidor (emite cookie HttpOnly __session)
+      const sesionServidor = await sincronizarSesionServidor(user);
 
-      if (userData && (Number(userData.ID_EstadoUsuario) === 2 || userData.ID_EstadoUsuario === 2)) {
+      if (sesionServidor.baneado) {
         await signOut(auth);
         setError('Tu cuenta fue baneada. No tienes acceso al sitio.');
         setLoading(false);
         return;
       }
 
-      const idRol = Number(userData?.ID_Rol);
-      const puesto = (userData?.Puesto || '').toLowerCase();
-      if (idRol === 1 || puesto === 'admin' || puesto === 'administrador') {
+      if (!sesionServidor.authenticated) {
+        await signOut(auth);
+        setError('No se pudo validar la sesión en el servidor.');
+        setLoading(false);
+        return;
+      }
+
+      // Refrescar el token local para incorporar los Custom Claims firmados por el servidor
+      await user.getIdToken(true).catch(() => {});
+
+      if (sesionServidor.rol === 'admin') {
         router.push('/admin');
-      } else if (idRol === 2 || puesto === 'empleado' || userData?.Es_Empleado) {
+      } else if (sesionServidor.rol === 'empleado') {
         router.push('/empleado');
       } else {
         router.push('/');
@@ -160,7 +164,13 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const cred = await signInWithPopup(auth, provider);
+      const sesion = await sincronizarSesionServidor(cred.user);
+      if (sesion.baneado) {
+        await signOut(auth);
+        setError('Tu cuenta fue baneada. No tienes acceso al sitio.');
+        return;
+      }
       router.push('/');
     } catch (error) {
       console.error('Error al iniciar con Google:', error);

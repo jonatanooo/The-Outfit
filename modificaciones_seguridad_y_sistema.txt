@@ -1,0 +1,87 @@
+================================================================================
+RESUMEN GENERAL DE MODIFICACIONES REALIZADAS - RAMA: Arreglos_SeguridadV1
+Proyecto: The Outfit (Next.js + Firebase Firestore / Auth + Cloudinary)
+Fecha: 2026-11-04
+================================================================================
+
+1. ELIMINACIÓN TOTAL DE SUPABASE Y MIGRACIÓN DE IMÁGENES A CLOUDINARY + FIRESTORE
+--------------------------------------------------------------------------------
+- Archivos modificados / creados:
+  * package.json / pnpm-lock.yaml: Se desinstaló `@supabase/supabase-js` y se instaló `next-cloudinary`.
+  * next.config.mjs: Se agregó `res.cloudinary.com` dentro de `images.remotePatterns` para permitir el renderizado seguro de imágenes con `<Image>` sin errores de CORS.
+  * src/lib/storage.js: Se eliminó toda referencia a Supabase Storage. Ahora opera con Firebase Storage / Cloudinary.
+  * src/lib/firebaseClient.js: Se exportó `storage` (`getStorage(app)`) y se configuró el consumo exclusivo de variables de entorno `NEXT_PUBLIC_FIREBASE_*`.
+  * src/components/ImageUpload.jsx: Se creó el componente reutilizable con `<CldUploadWidget>` usando `NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET` (unsigned), extrayendo `info.secure_url` en `onSuccess` y persistiendo la referencia en la colección `products` de Firestore.
+  * src/app/Inventario/page.js: Se integró `<CldUploadWidget>` en los modales de "Agregar producto" y "Editar producto", guardando las URLs en `Fotos_Productos`, `Productos.Imagen_Principal` y `products`.
+
+2. PESTAÑA DE "PRENDAS DESACTIVADAS" EN EL PANEL DE INVENTARIO
+--------------------------------------------------------------------------------
+- Archivos modificados:
+  * src/app/Inventario/page.js
+  * src/app/Inventario/AdminInventario.css
+- Cambios realizados:
+  * Se añadió la pestaña "Prendas desactivadas" junto a "Productos" e "Ingresos y Salidas".
+  * Las prendas/variantes con `ID_EstadoProducto === 2` (Inactivo) se filtran automáticamente fuera de la pestaña de productos activos y se muestran en la pestaña "Prendas desactivadas".
+  * Se incluyó buscador dedicado y botón "Activar" para restaurar cualquier prenda desactivada al inventario activo en un clic.
+
+3. SOLUCIÓN DE VULNERABILIDADES CATEGORÍA 1: CONTROL DE ACCESO Y AUTORIZACIÓN (OWASP A01)
+--------------------------------------------------------------------------------
+- Archivos modificados / creados:
+  * src/proxy.js (Middleware de Next.js)
+  * src/app/api/auth/session/route.js (Nuevo endpoint de sesión segura y verificación de rol con Firebase Admin)
+  * src/app/api/admin/empleados/route.js (Nuevo endpoint protegido en servidor para gestión de empleados)
+  * src/lib/usuario.js
+  * src/app/login/page.js, src/components/Header.jsx
+  * src/app/Inventario/page.js, src/app/transacciones/page.js, src/app/empleados/page.js, src/app/admin/page.js, src/app/empleado/page.js, src/app/reportes/page.js, src/app/configuracion/page.js
+- Cambios realizados:
+  * Validación real en el servidor (`src/proxy.js` y `/api/auth/session`) mediante cookies `HttpOnly`, `SameSite=Lax`, firmadas con HMAC-SHA256 (`SESSION_COOKIE_SECRET`) y verificación del `idToken` con Firebase Admin SDK (`adminAuth.verifyIdToken`).
+  * Eliminación de la confianza en `localStorage` para permisos administrativos; cada panel verifica sesión y rol contra el servidor (`verificarAccesoServidor`).
+  * Prevención de Account Takeover en `src/lib/usuario.js`: solo se permite vincular un documento de usuario por correo si `user.emailVerified === true` y aún no posee otro `Firebase_UID` distinto asignado.
+
+4. SOLUCIÓN DE VULNERABILIDADES CATEGORÍA 2: FALLOS CRIPTOGRÁFICOS Y GESTIÓN DE SECRETOS (OWASP A02)
+--------------------------------------------------------------------------------
+- Archivos modificados:
+  * src/lib/firebaseAdmin.js
+  * src/app/empleados/page.js y src/app/api/admin/empleados/route.js
+  * fix-tallas.mjs, script.mjs, scripts/migracion_auditoria_descuentos.mjs
+- Cambios realizados:
+  * Se eliminó la lectura del archivo físico `serviceAccountKey.json`. `src/lib/firebaseAdmin.js` inicializa Firebase Admin leyendo exclusivamente variables de entorno (`FIREBASE_ADMIN_PROJECT_ID`, `FIREBASE_ADMIN_CLIENT_EMAIL`, `FIREBASE_ADMIN_PRIVATE_KEY`).
+  * Se eliminaron las contraseñas por defecto en texto plano al crear empleados. Ahora el servidor genera una entropía criptográfica aleatoria (`crypto.randomBytes(32)`) y emite un enlace seguro de restablecimiento de contraseña de Firebase Auth (`generatePasswordResetLink`).
+
+5. SOLUCIÓN DE VULNERABILIDADES CATEGORÍA 3: DISEÑO INSEGURO Y LÓGICA DE NEGOCIO (OWASP A04)
+--------------------------------------------------------------------------------
+- Archivos modificados / creados:
+  * src/app/api/checkout/route.js (Nuevo endpoint de procesamiento atómico de compra)
+  * src/app/checkout/page.js
+  * src/lib/CarritoContext.js
+  * src/app/register/page.js
+  * src/app/restablecer-password/page.js
+  * src/app/login/page.js y src/components/Header.jsx
+- Cambios realizados:
+  * Prevención de doble cobro: Estado de bloqueo (`procesandoCompra`) con cerradura síncrona (`submitLockRef`) que deshabilita inmediatamente el botón de compra tras el primer clic, y se dejó un único botón de confirmación en la barra inferior del checkout.
+  * Integridad de precios y stock: El servidor (`/api/checkout`) ignora cualquier precio proveniente del `localStorage`, consulta el precio oficial y descuentos vigentes desde Firestore y ejecuta una transacción atómica (`adminDb.runTransaction`) que verifica y descuenta el stock evitando sobreventa (race conditions).
+  * Generación de IDs seguros: Se reemplazó `Date.now()` por identificadores únicos generados por Firestore (`doc(collection(...)).id`) y `crypto.randomUUID()`.
+  * Política estricta de contraseñas: En registro (`src/app/register/page.js`) y restablecimiento (`src/app/restablecer-password/page.js`) se exige longitud mínima de 8 caracteres, mayúscula, minúscula, número y símbolo especial, mostrando un indicador visual dinámico en tiempo real.
+  * Bloqueo inmediato de cuentas suspendidas/baneadas (`ID_EstadoUsuario === 3` o `2`) antes de emitir sesión en `src/app/login/page.js`.
+
+6. CONEXIÓN Y VERIFICACIÓN DE LAS 9 TABLAS DE AUDITORÍA EN FIRESTORE
+--------------------------------------------------------------------------------
+- Todas las acciones administrativas y de usuario registran su trazabilidad en su colección correspondiente:
+  1. `Auditoria_Actualizacion_User`: Al editar datos de perfil (`src/components/PerfilPanel.jsx`) o datos de empleados (`src/app/empleados/page.js`).
+  2. `Auditoria_CambioCategoria`: Al cambiar la categoría o subcategoría de un producto (`src/app/Inventario/page.js`).
+  3. `Auditoria_CambioEstado_Producto`: Al activar o desactivar una prenda (`src/app/Inventario/page.js`).
+  4. `Auditoria_CambioEstado_User`: Al activar, desactivar o suspender un usuario/empleado (`src/app/api/admin/empleados/route.js` y `src/app/empleados/page.js`).
+  5. `Auditoria_CambioRol`: Al modificar el rol de un empleado (`src/app/empleados/page.js`).
+  6. `Auditoria_Cambio_Estado Pedido`: Al cambiar el estado de una orden en transacciones (`src/app/transacciones/page.js`).
+  7. `Auditoria_Descuentos`: Al aplicar o quitar una oferta/descuento (`src/app/Inventario/page.js`).
+  8. `Auditoria_Inventario`: Al ingresar/retirar stock por talla, editar stock manualmente o descontar stock por venta en checkout (`src/app/Inventario/page.js`, `src/app/api/checkout/route.js`, `src/app/checkout/page.js`).
+  9. `Auditoria_Precio_Variante`: Al modificar el precio de una variante (`src/app/Inventario/page.js`).
+
+7. FLUJO DE INVENTARIO POR TALLAS E IDENTIFICADORES ÚNICOS POR TALLA DE CADA PRENDA
+--------------------------------------------------------------------------------
+- Archivos modificados:
+  * src/app/Inventario/page.js
+- Cambios realizados:
+  * Al agregar una prenda nueva (`+ Agregar producto`), solo se solicitan los datos maestros del catálogo (nombre, descripción, categoría, subcategoría, marca, precio base y fotos), sin pedir talla ni stock inicial.
+  * Los ingresos y salidas de stock se realizan por talla desde el modal "Ajustar stock", el cual muestra el resumen de todas las tallas registradas de esa prenda con su ID único y cantidad disponible.
+  * Se garantizó en código y en la base de datos Firestore que cada talla de cada prenda tenga su propio `ID_Variante` único en `Variante_Producto`, su propio `ID_Talla` único en `Talla` y su propio `ID_Inventario` único en `Inventario` (0 duplicados).

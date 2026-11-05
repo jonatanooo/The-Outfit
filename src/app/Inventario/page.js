@@ -1,31 +1,43 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { CldUploadWidget } from 'next-cloudinary';
 import SidebarAdmin from '@/components/SidebarAdmin.jsx';
-import { db, auth, storage } from '@/lib/firebaseClient';
+import { db, auth } from '@/lib/firebaseClient';
+import { onAuthStateChanged } from 'firebase/auth';
 import {
     collection,
     doc,
     getDocs,
     getDoc,
     setDoc,
+    addDoc,
     updateDoc,
     deleteDoc,
     writeBatch,
+    arrayUnion,
+    serverTimestamp,
     query,
     where,
     limit
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { obtenerIdUsuario } from '@/lib/usuario';
+import { obtenerIdUsuario, verificarAccesoServidor } from '@/lib/usuario';
 import { esOfertaActiva, calcularPrecioConDescuento } from '@/lib/descuentos';
-import { subirImagenStorage } from '@/lib/storage';
 import './AdminInventario.css';
 
 // Helpers para indexar y buscar documentos en Firestore por ID flexible (número, string o doc.id)
+function esDocPlantilla(d) {
+    if (!d) return true;
+    if (d.id === '_schema_init' || d.id === '_placeholder') return true;
+    const data = typeof d.data === 'function' ? d.data() : d;
+    return Boolean(data?._is_schema_template);
+}
+
 function indexarColeccion(snap, campoId) {
     const map = {};
     snap.docs.forEach((d) => {
+        if (esDocPlantilla(d)) return;
         const data = d.data();
         const rawId = data[campoId] ?? d.id;
         const item = { ...data, [campoId]: rawId, _docId: d.id };
@@ -101,6 +113,8 @@ function IconoCamisa() {
 }
 
 function AdminInventario() {
+    const router = useRouter();
+    const [verificandoAcceso, setVerificandoAcceso] = useState(true);
     // ---------- ESTADOS DE LA TABLA PRINCIPAL ----------
     const [filtroActivo, setFiltroActivo] = useState('todos'); // 'activos' | 'inactivos' | 'bajo' | 'sinstock'
     const [idEstadoInactivo, setIdEstadoInactivo] = useState(null);
@@ -108,7 +122,8 @@ function AdminInventario() {
     const [variantes, setVariantes] = useState([]);
     const [cargando, setCargando] = useState(true);
 
-    const [pestana, setPestana] = useState('inventario'); // 'inventario' | 'historial'
+    const [pestana, setPestana] = useState('inventario'); // 'inventario' | 'inactivos' | 'historial'
+    const [busquedaInactivos, setBusquedaInactivos] = useState('');
     const [historialAuditoria, setHistorialAuditoria] = useState([]);
     const [cargandoHistorial, setCargandoHistorial] = useState(false);
     const [busquedaHistorial, setBusquedaHistorial] = useState('');
@@ -190,12 +205,14 @@ function AdminInventario() {
     async function cargarMarcas() {
         try {
             const snap = await getDocs(collection(db, 'Marca'));
-            const data = snap.docs.map((d) => ({
-                _docId: d.id,
-                ID_Marca: d.data().ID_Marca ?? d.id,
-                Nombre_Marca: d.data().Nombre_Marca,
-                ...d.data()
-            }));
+            const data = snap.docs
+                .filter((d) => !esDocPlantilla(d))
+                .map((d) => ({
+                    _docId: d.id,
+                    ID_Marca: d.data().ID_Marca ?? d.id,
+                    Nombre_Marca: d.data().Nombre_Marca,
+                    ...d.data()
+                }));
             setMarcas(data);
         } catch (err) {
             console.error('Error al cargar marcas desde Firestore:', err);
@@ -205,7 +222,7 @@ function AdminInventario() {
     async function crearMarca() {
         try {
             const idUser = await obtenerIdUsuario();
-            const nuevoId = Date.now();
+            const nuevoId = doc(collection(db, 'Marca')).id;
             const nuevaMarca = {
                 ID_Marca: nuevoId,
                 ID_User: idUser,
@@ -234,12 +251,14 @@ function AdminInventario() {
     async function cargarTallasDisponibles() {
         try {
             const snap = await getDocs(collection(db, 'Tipos_Talla'));
-            const data = snap.docs.map((d) => ({
-                _docId: d.id,
-                ID_TipoTalla: d.data().ID_TipoTalla ?? d.id,
-                Nombre_TipoTalla: d.data().Nombre_TipoTalla,
-                ...d.data()
-            }));
+            const data = snap.docs
+                .filter((d) => !esDocPlantilla(d))
+                .map((d) => ({
+                    _docId: d.id,
+                    ID_TipoTalla: d.data().ID_TipoTalla ?? d.id,
+                    Nombre_TipoTalla: d.data().Nombre_TipoTalla,
+                    ...d.data()
+                }));
             setTallasDisponibles(data);
         } catch (err) {
             console.error('Error al cargar tallas disponibles:', err);
@@ -249,24 +268,43 @@ function AdminInventario() {
     async function cargarColoresDisponibles() {
         try {
             const snap = await getDocs(collection(db, 'Colores'));
-            const data = snap.docs.map((d) => ({
-                _docId: d.id,
-                ID_Color: d.data().ID_Color ?? d.id,
-                Nombre_Color: d.data().Nombre_Color,
-                ...d.data()
-            }));
+            const data = snap.docs
+                .filter((d) => !esDocPlantilla(d))
+                .map((d) => ({
+                    _docId: d.id,
+                    ID_Color: d.data().ID_Color ?? d.id,
+                    Nombre_Color: d.data().Nombre_Color,
+                    ...d.data()
+                }));
             setColoresDisponibles(data);
         } catch (err) {
             console.error('Error al cargar colores disponibles:', err);
         }
     }
 
-    // ---------- CARGA INICIAL DE PRODUCTOS ----------
+    // ---------- VERIFICACIÓN DE SESIÓN/ROL EN SERVIDOR Y CARGA INICIAL ----------
     useEffect(() => {
-        cargarVariantes();
-    }, []);
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                router.replace('/login');
+                return;
+            }
+
+            const acceso = await verificarAccesoServidor('admin');
+            if (!acceso.autorizado) {
+                router.replace('/');
+                return;
+            }
+
+            setVerificandoAcceso(false);
+            cargarVariantes();
+        });
+
+        return () => unsubscribe();
+    }, [router]);
 
     useEffect(() => {
+        if (verificandoAcceso) return;
         async function cargarEstadoInactivo() {
             try {
                 const q = query(collection(db, 'Estado_Producto'), where('Estado', '==', 'Inactivo'), limit(1));
@@ -282,35 +320,63 @@ function AdminInventario() {
             }
         }
         cargarEstadoInactivo();
-    }, []);
+    }, [verificandoAcceso]);
+
+    const estadoInactivoValor = idEstadoInactivo ?? 2;
+    const esVarianteInactiva = (v) =>
+        Number(v.ID_EstadoProducto) === Number(estadoInactivoValor) ||
+        Number(v.ID_EstadoProducto) === 2;
 
     const totalProductos = variantes.length;
 
     const stockBajo = variantes.filter((v) => {
+        if (esVarianteInactiva(v)) return false;
         const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
         return stock > 0 && stock < 5;
     }).length;
 
     const sinStock = variantes.filter((v) => {
+        if (esVarianteInactiva(v)) return false;
         const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
         return stock === 0;
     }).length;
 
-    const productosInactivos = variantes.filter((v) => v.ID_EstadoProducto === idEstadoInactivo).length;
+    const productosInactivos = variantes.filter((v) => esVarianteInactiva(v)).length;
     const productosActivos = totalProductos - productosInactivos;
 
-    // ---------- Filtro combinado (busqueda + tarjeta activa) ----------
+    // ---------- Filtro combinado para pestaña de Productos activos ----------
     const filtrados = variantes.filter((v) => {
+        if (esVarianteInactiva(v)) return false;
+
         const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
-        const coincideBusqueda = (v.Productos?.Nombre_Producto || '').toLowerCase().includes(busqueda.toLowerCase());
+        const q = busqueda.toLowerCase();
+        const nombreProd = (v.Productos?.Nombre_Producto || '').toLowerCase();
+        const nombreTalla = (v.Talla?.Tipos_Talla?.Nombre_TipoTalla || '').toLowerCase();
+        const nombreMarca = (v.Productos?.Marca?.Nombre_Marca || '').toLowerCase();
+        const coincideBusqueda =
+            !q ||
+            nombreProd.includes(q) ||
+            nombreTalla.includes(q) ||
+            nombreMarca.includes(q) ||
+            String(v.ID_Variante).toLowerCase().includes(q);
 
         let coincideFiltro = true;
         if (filtroActivo === 'bajo') coincideFiltro = stock > 0 && stock < 5;
         if (filtroActivo === 'sinstock') coincideFiltro = stock === 0;
-        if (filtroActivo === 'activos') coincideFiltro = v.ID_EstadoProducto !== idEstadoInactivo;
-        if (filtroActivo === 'inactivos') coincideFiltro = v.ID_EstadoProducto === idEstadoInactivo;
+        if (filtroActivo === 'activos') coincideFiltro = true;
 
         return coincideBusqueda && coincideFiltro;
+    });
+
+    // ---------- Filtro para pestaña de Prendas Desactivadas ----------
+    const inactivosFiltrados = variantes.filter((v) => {
+        if (!esVarianteInactiva(v)) return false;
+        if (!busquedaInactivos.trim()) return true;
+        const q = busquedaInactivos.toLowerCase();
+        const nombre = (v.Productos?.Nombre_Producto || '').toLowerCase();
+        const marca = (v.Productos?.Marca?.Nombre_Marca || '').toLowerCase();
+        const talla = (v.Talla?.Tipos_Talla?.Nombre_TipoTalla || '').toLowerCase();
+        return nombre.includes(q) || marca.includes(q) || talla.includes(q) || String(v.ID_Variante).includes(q);
     });
 
     // ---------- Contadores y filtro para Ingresos y Salidas ----------
@@ -399,25 +465,27 @@ function AdminInventario() {
                 varMap[String(vid)] = varMap[vid];
             });
 
-            const items = auditSnap.docs.map((d) => {
-                const a = d.data();
-                const aid = a.ID_Auditoria ?? d.id;
-                const vid = a.ID_Variante;
-                const uid = a.ID_UserAccion ?? a.ID_User;
+            const items = auditSnap.docs
+                .filter((d) => !esDocPlantilla(d))
+                .map((d) => {
+                    const a = d.data();
+                    const aid = a.ID_Auditoria ?? d.id;
+                    const vid = a.ID_Variante;
+                    const uid = a.ID_UserAccion ?? a.ID_User;
 
-                return {
-                    ...a,
-                    _docId: d.id,
-                    ID_Auditoria: aid,
-                    ID_Variante: vid,
-                    Cantidad_Anterior: a.Cantidad_Anterior,
-                    Cantidad_Nueva: a.Cantidad_Nueva,
-                    Tipo_Movimiento: a.Tipo_Movimiento,
-                    Fecha_Accion: a.Fecha_Accion,
-                    Variante_Producto: varMap[vid] || varMap[String(vid)] || null,
-                    User: userMap[uid] || userMap[String(uid)] || null
-                };
-            });
+                    return {
+                        ...a,
+                        _docId: d.id,
+                        ID_Auditoria: aid,
+                        ID_Variante: vid,
+                        Cantidad_Anterior: a.Cantidad_Anterior,
+                        Cantidad_Nueva: a.Cantidad_Nueva,
+                        Tipo_Movimiento: a.Tipo_Movimiento,
+                        Fecha_Accion: a.Fecha_Accion,
+                        Variante_Producto: varMap[vid] || varMap[String(vid)] || null,
+                        User: userMap[uid] || userMap[String(uid)] || null
+                    };
+                });
 
             items.sort((x, y) => {
                 const fx = x.Fecha_Accion ? new Date(x.Fecha_Accion).getTime() : (Number(x.ID_Auditoria) || 0);
@@ -588,7 +656,7 @@ function AdminInventario() {
             }
 
             // 4. Registrar OBLIGATORIAMENTE en Auditoria_Descuentos
-            const idAuditoria = Date.now().toString();
+            const idAuditoria = doc(collection(db, 'Auditoria_Descuentos')).id;
             await setDoc(doc(db, 'Auditoria_Descuentos', idAuditoria), {
                 ID_AuditoriaDescuento: idAuditoria,
                 ID_Producto: String(idProd),
@@ -625,9 +693,11 @@ function AdminInventario() {
         }
     }
 
-    // Activa o desactiva un producto (variante)
+    // Activa o desactiva un producto (variante) y registra en Auditoria_CambioEstado_Producto
     async function alternarEstadoProducto(v) {
-        const nuevoEstado = v.ID_EstadoProducto === 2 ? 1 : 2;
+        const inactivoAhora = esVarianteInactiva(v);
+        const estadoAnterior = Number(v.ID_EstadoProducto ?? (inactivoAhora ? 2 : 1));
+        const nuevoEstado = inactivoAhora ? 1 : (idEstadoInactivo ?? 2);
 
         try {
             // 1. Actualizar el estado de la variante
@@ -635,11 +705,36 @@ function AdminInventario() {
                 ID_EstadoProducto: nuevoEstado
             });
 
-            // 2. Actualizar el estado del producto padre para que se oculte del feed general
+            // 2. Actualizar el estado del producto padre solo si todas las variantes quedan inactivas, o si se está activando
             if (v.ID_Producto) {
+                const hermanas = variantes.filter(
+                    (item) =>
+                        String(item.ID_Producto) === String(v.ID_Producto) &&
+                        String(item.ID_Variante) !== String(v.ID_Variante)
+                );
+                const algunaHermanaActiva = hermanas.some((h) => !esVarianteInactiva(h));
+                const estadoProductoPadre = nuevoEstado === 1 ? 1 : (algunaHermanaActiva ? 1 : nuevoEstado);
+
                 await actualizarDocPorId('Productos', 'ID_Producto', v.ID_Producto, {
-                    ID_EstadoProducto: nuevoEstado
+                    ID_EstadoProducto: estadoProductoPadre
                 });
+            }
+
+            // 3. Registrar en Auditoria_CambioEstado_Producto
+            try {
+                const idUserAccion = await obtenerIdUsuario();
+                const idAuditEstado = doc(collection(db, 'Auditoria_CambioEstado_Producto')).id;
+                await setDoc(doc(db, 'Auditoria_CambioEstado_Producto', idAuditEstado), {
+                    ID_Auditoria: idAuditEstado,
+                    ID_Producto: v.ID_Producto ?? null,
+                    ID_Variante: v.ID_Variante,
+                    ID_UserAccion: idUserAccion,
+                    ID_EstadoAnterior: estadoAnterior,
+                    ID_EstadoNuevo: nuevoEstado,
+                    Fecha: new Date().toISOString()
+                });
+            } catch (errAudit) {
+                console.error('Error guardando Auditoria_CambioEstado_Producto:', errAudit);
             }
 
             setVariantes((prev) => 
@@ -655,14 +750,39 @@ function AdminInventario() {
         }
     }
 
-    // Manejo de nuevas fotos dentro del modal de edición
-    function manejarSeleccionFotosEditar(event) {
-        const archivos = Array.from(event.target.files);
-        if (archivos.length === 0) return;
-        
-        setFotosNuevasEditar((prev) => [...prev, ...archivos]);
-        const urls = archivos.map((file) => URL.createObjectURL(file));
-        setPreviewsNuevasEditar((prev) => [...prev, ...urls]);
+    // Subida de nuevas fotos con Cloudinary (<CldUploadWidget>) dentro del modal de edición
+    async function manejarSubidaCloudinaryEditar(result) {
+        const secureUrl = result?.info?.secure_url;
+        if (!secureUrl) return;
+
+        setFotosNuevasEditar((prev) => [...prev, secureUrl]);
+        setPreviewsNuevasEditar((prev) => [...prev, secureUrl]);
+
+        const idProducto = varianteEditando?.Productos?.ID_Producto ?? varianteEditando?.ID_Producto;
+        try {
+            if (idProducto) {
+                await setDoc(
+                    doc(db, 'products', String(idProducto)),
+                    {
+                        ID_Producto: idProducto,
+                        name: nombreEditar || varianteEditando?.Productos?.Nombre_Producto || '',
+                        imageUrl: secureUrl,
+                        images: arrayUnion(secureUrl),
+                        updatedAt: serverTimestamp()
+                    },
+                    { merge: true }
+                );
+            } else {
+                await addDoc(collection(db, 'products'), {
+                    imageUrl: secureUrl,
+                    images: [secureUrl],
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                });
+            }
+        } catch (err) {
+            console.error('Error guardando URL de Cloudinary en colección products:', err);
+        }
     }
 
     // Marca una foto existente para borrarla al guardar cambios
@@ -784,42 +904,142 @@ function AdminInventario() {
         }
         setGuardandoEdicion(true);
 
-        const idProducto = varianteEditando.Productos?.ID_Producto;
+        const idProducto = varianteEditando.Productos?.ID_Producto ?? varianteEditando.ID_Producto;
         const idVariante = varianteEditando.ID_Variante;
         const idInventario = varianteEditando.Inventario?.[0]?.ID_Inventario;
         const idTipoTalla = varianteEditando.Talla?.Tipos_Talla?.ID_TipoTalla;
+        const categoriaAnterior = varianteEditando.Productos?.ID_Categoria ?? varianteEditando.Productos?.ID_categoria ?? null;
+        const precioAnterior = Number(varianteEditando.Precio_Actual ?? 0);
+        const stockAnterior = Number(varianteEditando.Inventario?.[0]?.Cantidad_Disponible ?? 0);
 
         try {
+            const idUserAudit = await obtenerIdUsuario();
+
             // 1. Actualiza el nombre, marca y categoría del producto
             if (idProducto) {
                 const idCatUpdate = subcategoriaEditar ? subcategoriaEditar : (categoriaEditar || null);
+                const idCatFinal = idCatUpdate ? (Number(idCatUpdate) || idCatUpdate) : null;
                 await actualizarDocPorId('Productos', 'ID_Producto', idProducto, {
                     Nombre_Producto: nombreEditar,
                     ID_Marca: marcaEditar || null,
-                    ID_Categoria: idCatUpdate ? (Number(idCatUpdate) || idCatUpdate) : null
+                    ID_Categoria: idCatFinal
                 });
+
+                // Registrar en Auditoria_CambioCategoria si cambió la categoría
+                if (idCatFinal != null && String(idCatFinal) !== String(categoriaAnterior ?? '')) {
+                    try {
+                        const idAuditCat = doc(collection(db, 'Auditoria_CambioCategoria')).id;
+                        await setDoc(doc(db, 'Auditoria_CambioCategoria', idAuditCat), {
+                            ID_Auditoria: idAuditCat,
+                            ID_Producto: idProducto,
+                            ID_UserAccion: idUserAudit,
+                            ID_CategoriaAntigua: categoriaAnterior,
+                            ID_CategoriaNueva: idCatFinal,
+                            Fecha_Registro: new Date().toISOString()
+                        });
+                    } catch (errCatAudit) {
+                        console.error('Error guardando Auditoria_CambioCategoria:', errCatAudit);
+                    }
+                }
             }
 
-            // 2. Actualiza el precio actual (Variante_Producto)
+            // 2. Actualiza el precio actual (Variante_Producto) y registra en Auditoria_Precio_Variante si cambió
             if (idVariante) {
+                const nuevoPrecioNum = parseFloat(precioEditar);
                 await actualizarDocPorId('Variante_Producto', 'ID_Variante', idVariante, {
-                    Precio_Actual: parseFloat(precioEditar)
+                    Precio_Actual: nuevoPrecioNum
                 });
+
+                if (!isNaN(nuevoPrecioNum) && Number(nuevoPrecioNum) !== Number(precioAnterior)) {
+                    try {
+                        const idAuditPrecio = doc(collection(db, 'Auditoria_Precio_Variante')).id;
+                        await setDoc(doc(db, 'Auditoria_Precio_Variante', idAuditPrecio), {
+                            ID_Auditoria: idAuditPrecio,
+                            ID_Variante: idVariante,
+                            ID_UserAccion: idUserAudit,
+                            Precio_Anterior: precioAnterior,
+                            Precio_Nuevo: nuevoPrecioNum,
+                            Fecha: new Date().toISOString()
+                        });
+                    } catch (errPrecioAudit) {
+                        console.error('Error guardando Auditoria_Precio_Variante:', errPrecioAudit);
+                    }
+                }
             }
 
-            // 3. Actualiza el nombre de la talla (solo si se especificó una talla válida, para no vaciar la talla global)
-            if (idTipoTalla && tallaEditar && tallaEditar.trim() !== '') {
-                await actualizarDocPorId('Tipos_Talla', 'ID_TipoTalla', idTipoTalla, {
-                    Nombre_TipoTalla: tallaEditar.trim()
-                });
+            // 3. Asigna o actualiza la talla de la variante de forma segura (sin corromper Tipos_Talla global)
+            if (tallaEditar && tallaEditar.trim() !== '') {
+                const nombreTallaLimpio = tallaEditar.trim().toUpperCase();
+                const nombreTallaActual = (varianteEditando.Talla?.Tipos_Talla?.Nombre_TipoTalla || '').trim().toUpperCase();
+
+                if (nombreTallaLimpio !== nombreTallaActual || !varianteEditando.ID_Talla) {
+                    const tiposSnap = await getDocs(collection(db, 'Tipos_Talla'));
+                    let tipoDoc = tiposSnap.docs
+                        .filter((d) => !esDocPlantilla(d))
+                        .find((d) => (d.data().Nombre_TipoTalla || '').trim().toUpperCase() === nombreTallaLimpio);
+
+                    let targetIdTipoTalla;
+                    if (tipoDoc) {
+                        targetIdTipoTalla = tipoDoc.data().ID_TipoTalla ?? tipoDoc.id;
+                    } else {
+                        targetIdTipoTalla = doc(collection(db, 'Tipos_Talla')).id;
+                        await setDoc(doc(db, 'Tipos_Talla', String(targetIdTipoTalla)), {
+                            ID_TipoTalla: targetIdTipoTalla,
+                            Nombre_TipoTalla: nombreTallaLimpio
+                        });
+                    }
+
+                    // Crear siempre un ID_Talla único y exclusivo para esta talla de esta prenda
+                    const targetIdTalla = doc(collection(db, 'Talla')).id;
+                    await setDoc(doc(db, 'Talla', String(targetIdTalla)), {
+                        ID_Talla: targetIdTalla,
+                        ID_TipoTalla: targetIdTipoTalla,
+                        ID_Producto: idProducto ?? null,
+                        ID_Variante: idVariante ?? null
+                    });
+
+                    if (idVariante) {
+                        await actualizarDocPorId('Variante_Producto', 'ID_Variante', idVariante, {
+                            ID_Talla: targetIdTalla
+                        });
+                    }
+                }
             }
 
-            // 4. Actualiza la cantidad de stock disponible
+            // 4. Actualiza o crea la cantidad de stock disponible y registra en Auditoria_Inventario si cambió
+            const nuevoStockNum = parseInt(stockEditar, 10) || 0;
             if (idInventario) {
                 await actualizarDocPorId('Inventario', 'ID_Inventario', idInventario, {
-                    Cantidad_Disponible: parseInt(stockEditar, 10),
+                    Cantidad_Disponible: nuevoStockNum,
                     Fecha_Actualizacion: new Date().toISOString()
                 });
+            } else if (idVariante) {
+                const nuevoInvId = doc(collection(db, 'Inventario')).id;
+                await setDoc(doc(db, 'Inventario', String(nuevoInvId)), {
+                    ID_Inventario: nuevoInvId,
+                    ID_Variante: idVariante,
+                    Cantidad_Disponible: nuevoStockNum,
+                    Cantidad_Reservada: 0,
+                    Fecha_Actualizacion: new Date().toISOString()
+                });
+            }
+
+            if (nuevoStockNum !== stockAnterior && idVariante) {
+                try {
+                    const idAuditInv = doc(collection(db, 'Auditoria_Inventario')).id;
+                    await setDoc(doc(db, 'Auditoria_Inventario', idAuditInv), {
+                        ID_Auditoria: idAuditInv,
+                        ID_Variante: idVariante,
+                        ID_UserAccion: idUserAudit,
+                        Cantidad_Anterior: stockAnterior,
+                        Cantidad_Nueva: nuevoStockNum,
+                        Tipo_Movimiento: nuevoStockNum > stockAnterior ? 'Ingreso' : 'Salida',
+                        Motivo: 'Ajuste desde edición de producto',
+                        Fecha_Accion: new Date().toISOString()
+                    });
+                } catch (errInvAudit) {
+                    console.error('Error guardando Auditoria_Inventario en edición:', errInvAudit);
+                }
             }
 
             // 5. Elimina de la BD las fotos que el usuario quitó
@@ -854,7 +1074,7 @@ function AdminInventario() {
                 );
             }
 
-            // 7. Sube y registra nuevas fotos añadidas durante la edición en paralelo
+            // 7. Registra las nuevas fotos subidas con Cloudinary en Firestore
             let urlNuevaPrincipal = null;
             if (fotosNuevasEditar.length > 0) {
                 if (!idProducto) {
@@ -864,37 +1084,32 @@ function AdminInventario() {
 
                 const idUser = await obtenerIdUsuario();
                 const ordenBase = usarNuevaComoPrincipal ? 0 : fotosExistentes.length;
-                const timestampBase = Date.now();
 
                 await Promise.all(
-                    fotosNuevasEditar.map(async (archivo, i) => {
-                        const extension = archivo.name.split('.').pop() || 'jpg';
-                        const nombreArchivo = `${idProducto}_${timestampBase}_${i}.${extension}`;
-
+                    fotosNuevasEditar.map(async (secureUrl, i) => {
                         try {
-                            const publicUrl = await subirImagenStorage(archivo, nombreArchivo);
-
-                            const idFoto = timestampBase + i;
+                            const idFoto = doc(collection(db, 'Fotos_Productos')).id;
                             const ordenFoto = ordenBase + i;
                             const esPrincipal = (usarNuevaComoPrincipal && i === 0) || (fotosExistentes.length === 0 && i === 0);
-                            if (esPrincipal) urlNuevaPrincipal = publicUrl;
+                            if (esPrincipal) urlNuevaPrincipal = secureUrl;
+
                             await setDoc(doc(db, 'Fotos_Productos', String(idFoto)), {
                                 ID_Foto: idFoto,
                                 ID_Producto: idProducto,
                                 ID_User: idUser,
-                                URL_Foto: publicUrl,
+                                URL_Foto: secureUrl,
                                 Orden: ordenFoto,
                                 Es_Principal: esPrincipal,
                                 Fecha_Carga: new Date().toISOString()
                             });
-                        } catch (errorStorage) {
-                            console.error('Error guardando foto en edición:', errorStorage);
+                        } catch (errorFirestore) {
+                            console.error('Error guardando foto en edición:', errorFirestore);
                         }
                     })
                 );
             }
 
-            // 8. Sincronizar Imagen_Principal en el documento del Producto padre
+            // 8. Sincronizar Imagen_Principal en Productos y en la colección products de Firestore
             const urlPrincipalFinal = usarNuevaComoPrincipal
                 ? urlNuevaPrincipal
                 : (fotosExistentes[0]?.URL_Foto || urlNuevaPrincipal || null);
@@ -902,6 +1117,21 @@ function AdminInventario() {
                 await actualizarDocPorId('Productos', 'ID_Producto', idProducto, {
                     Imagen_Principal: urlPrincipalFinal
                 });
+                await setDoc(
+                    doc(db, 'products', String(idProducto)),
+                    {
+                        ID_Producto: idProducto,
+                        name: nombreEditar,
+                        price: parseFloat(precioEditar) || 0,
+                        imageUrl: urlPrincipalFinal,
+                        images: [
+                            ...fotosExistentes.map((f) => f.URL_Foto),
+                            ...fotosNuevasEditar
+                        ].filter(Boolean),
+                        updatedAt: serverTimestamp()
+                    },
+                    { merge: true }
+                );
             }
 
             setModalAbierto(null);
@@ -914,33 +1144,48 @@ function AdminInventario() {
         }
     }
 
-    // -------------- GUARDAR ENTRADA DE STOCK --------------//
+    // -------------- GUARDAR ENTRADA DE STOCK (POR TALLA) --------------//
     async function guardarEntradaStock() {
+        const cant = parseInt(cantidadIngresar, 10) || 0;
+        if (cant <= 0) {
+            alert('Por favor ingresa una cantidad válida mayor a 0.');
+            return;
+        }
+        if (!tipoTallaSeleccionada) {
+            alert('Por favor selecciona la talla a la que deseas ingresar o retirar stock.');
+            return;
+        }
+
         setGuardandoStock(true);
         try {
-            const idInventario = varianteStock.Inventario?.[0]?.ID_Inventario;
-            const stockActual = Number(varianteStock.Inventario?.[0]?.Cantidad_Disponible ?? 0);
-            const cant = parseInt(cantidadIngresar, 10) || 0;
-            let nuevoStock = tipoMovimiento === 'entrada' ? stockActual + cant : stockActual - cant;
+            let idInventario = varianteStock.Inventario?.[0]?.ID_Inventario;
+            const stockActualVariante = Number(varianteStock.Inventario?.[0]?.Cantidad_Disponible ?? 0);
+            let stockAnteriorAudit = stockActualVariante;
+            let nuevoStock = tipoMovimiento === 'entrada' ? stockActualVariante + cant : stockActualVariante - cant;
 
-            if (!idInventario) {
-                console.log('❌ No se encontró el registro de inventario');
-                setGuardandoStock(false);
-                return;
+            // Si la variante aún no tenía documento en Inventario, creamos uno base antes de operar
+            if (!idInventario && varianteStock?.ID_Variante) {
+                const invCreadoId = doc(collection(db, 'Inventario')).id;
+                await setDoc(doc(db, 'Inventario', String(invCreadoId)), {
+                    ID_Inventario: invCreadoId,
+                    ID_Variante: varianteStock.ID_Variante,
+                    Cantidad_Disponible: stockActualVariante,
+                    Cantidad_Reservada: 0,
+                    Fecha_Actualizacion: new Date().toISOString()
+                });
+                idInventario = invCreadoId;
             }
 
-            // 1. Resolver la talla final
-            let idTallaFinal = varianteStock.Talla?.ID_Talla;
+            // 1. Resolver la talla final seleccionada
             const idTipoTallaActual = varianteStock.Talla?.Tipos_Talla?.ID_TipoTalla;
             
-            const tallaCambio = tipoTallaSeleccionada && Number(tipoTallaSeleccionada) !== Number(idTipoTallaActual);
-            const colorCambio = colorSeleccionado && Number(colorSeleccionado) !== Number(varianteStock.Colores?.ID_Color || null);
+            const tallaCambio = Boolean(tipoTallaSeleccionada && String(tipoTallaSeleccionada) !== String(idTipoTallaActual ?? ''));
+            const colorCambio = Boolean(colorSeleccionado && String(colorSeleccionado) !== String(varianteStock.Colores?.ID_Color ?? ''));
 
             let idVarianteObjetivo = varianteStock.ID_Variante;
             let idInventarioObjetivo = idInventario;
 
-            if (tallaCambio || colorCambio) {
-                let idNuevaTalla = null;
+            if (tallaCambio || colorCambio || varianteStock.ID_Talla == null) {
                 const idsTallaEquivalentes = new Set();
 
                 if (tipoTallaSeleccionada) {
@@ -953,26 +1198,16 @@ function AdminInventario() {
                         ])
                     );
                     const snapTalla = await getDocs(qTalla);
-                    if (!snapTalla.empty) {
-                        snapTalla.docs.forEach((td) => {
-                            const tid = td.data().ID_Talla ?? td.id;
-                            idsTallaEquivalentes.add(String(tid));
-                        });
-                        idNuevaTalla = snapTalla.docs[0].data().ID_Talla ?? snapTalla.docs[0].id;
-                    } else {
-                        const nuevaTallaId = Date.now();
-                        await setDoc(doc(db, 'Talla', String(nuevaTallaId)), {
-                            ID_Talla: nuevaTallaId,
-                            ID_TipoTalla: Number(tipoTallaSeleccionada) || tipoTallaSeleccionada
-                        });
-                        idNuevaTalla = nuevaTallaId;
-                        idsTallaEquivalentes.add(String(nuevaTallaId));
-                    }
+                    const docsTalla = snapTalla.docs.filter((td) => !esDocPlantilla(td));
+                    docsTalla.forEach((td) => {
+                        const tid = td.data().ID_Talla ?? td.id;
+                        idsTallaEquivalentes.add(String(tid));
+                    });
                 }
 
-                const idColorFinal = colorSeleccionado ? (Number(colorSeleccionado) || colorSeleccionado) : null;
+                const idColorFinal = colorSeleccionado ? (Number(colorSeleccionado) || colorSeleccionado) : (varianteStock.Colores?.ID_Color ?? null);
 
-                // Buscar variante existente de la misma prenda con esa talla (evita duplicar la misma talla en una prenda)
+                // Buscar todas las variantes de la misma prenda en la BD
                 const qVar = query(
                     collection(db, 'Variante_Producto'),
                     where('ID_Producto', 'in', [
@@ -983,20 +1218,33 @@ function AdminInventario() {
                 );
                 const snapVar = await getDocs(qVar);
                 let varExistente = null;
+                let varPlantillaSinTalla = null;
 
                 for (const d of snapVar.docs) {
+                    if (esDocPlantilla(d)) continue;
                     const vd = d.data();
-                    const matchTalla = idsTallaEquivalentes.size > 0
-                        ? idsTallaEquivalentes.has(String(vd.ID_Talla ?? ''))
-                        : String(vd.ID_Talla ?? '') === String(idNuevaTalla ?? '');
+                    const vidDoc = vd.ID_Variante ?? d.id;
+                    if (vd.ID_Talla == null || vd.ID_Talla === '' || vd.ID_Talla === 0) {
+                        varPlantillaSinTalla = { ...vd, ID_Variante: vidDoc, _docId: d.id };
+                    }
+                    const matchTalla =
+                        idsTallaEquivalentes.size > 0 &&
+                        vd.ID_Talla != null &&
+                        idsTallaEquivalentes.has(String(vd.ID_Talla));
                     if (matchTalla) {
-                        varExistente = { ...vd, ID_Variante: vd.ID_Variante ?? d.id, _docId: d.id };
+                        varExistente = { ...vd, ID_Variante: vidDoc, _docId: d.id };
                         break;
                     }
                 }
 
-                if (varExistente && String(varExistente.ID_Variante) !== String(varianteStock.ID_Variante)) {
+                // Caso A: Ya existe esa talla para esta prenda -> sumamos/restamos stock sobre el ID único de esa talla
+                if (varExistente) {
                     idVarianteObjetivo = varExistente.ID_Variante;
+                    if (colorCambio && idColorFinal != null) {
+                        await actualizarDocPorId('Variante_Producto', 'ID_Variante', idVarianteObjetivo, {
+                            ID_Color: idColorFinal
+                        });
+                    }
                     const qInv = query(
                         collection(db, 'Inventario'),
                         where('ID_Variante', 'in', [
@@ -1006,37 +1254,89 @@ function AdminInventario() {
                         ])
                     );
                     const snapInv = await getDocs(qInv);
-                    if (!snapInv.empty) {
-                        const invDoc = snapInv.docs[0];
+                    const docsInv = snapInv.docs.filter((idDoc) => !esDocPlantilla(idDoc));
+                    if (docsInv.length > 0) {
+                        const invDoc = docsInv[0];
                         idInventarioObjetivo = invDoc.data().ID_Inventario ?? invDoc.id;
                         const stockBase = Number(invDoc.data().Cantidad_Disponible ?? 0);
-                        nuevoStock = tipoMovimiento === 'entrada' ? stockBase + cant : stockBase - cant;
+                        stockAnteriorAudit = stockBase;
+                        nuevoStock = tipoMovimiento === 'entrada' ? stockBase + cant : Math.max(0, stockBase - cant);
+                    } else {
+                        const nuevoInvId = doc(collection(db, 'Inventario')).id;
+                        stockAnteriorAudit = 0;
+                        nuevoStock = tipoMovimiento === 'entrada' ? cant : 0;
+                        await setDoc(doc(db, 'Inventario', String(nuevoInvId)), {
+                            ID_Inventario: nuevoInvId,
+                            ID_Variante: idVarianteObjetivo,
+                            Cantidad_Disponible: nuevoStock,
+                            Cantidad_Reservada: 0,
+                            Fecha_Actualizacion: new Date().toISOString()
+                        });
+                        idInventarioObjetivo = nuevoInvId;
                     }
-                } else if (!varExistente) {
-                    // Crear nueva variante
-                    const nuevoVarId = Date.now();
+                } else {
+                    // Caso B: Es una talla nueva para esta prenda (sea la primera o una adicional)
+                    // Siempre se genera un ID_Variante único, un ID_Talla único y un ID_Inventario único para esta talla de esta prenda
+                    const nuevoVarId = doc(collection(db, 'Variante_Producto')).id;
+                    const nuevaTallaId = doc(collection(db, 'Talla')).id;
+
+                    await setDoc(doc(db, 'Talla', String(nuevaTallaId)), {
+                        ID_Talla: nuevaTallaId,
+                        ID_TipoTalla: Number(tipoTallaSeleccionada) || tipoTallaSeleccionada,
+                        ID_Producto: varianteStock.ID_Producto,
+                        ID_Variante: nuevoVarId
+                    });
+
                     const nuevaVar = {
                         ID_Variante: nuevoVarId,
                         ID_Producto: varianteStock.ID_Producto,
-                        ID_Talla: idNuevaTalla,
+                        ID_Talla: nuevaTallaId,
                         ID_Color: idColorFinal,
                         Precio_Actual: varianteStock.Precio_Actual,
-                        ID_EstadoProducto: 1
+                        ID_EstadoProducto: 1,
+                        ...(varianteStock.Tiene_Descuento ? {
+                            Porcentaje_Descuento: varianteStock.Porcentaje_Descuento,
+                            Precio_Oferta: varianteStock.Precio_Oferta,
+                            Fecha_Inicio_Oferta: varianteStock.Fecha_Inicio_Oferta ?? null,
+                            Fecha_Fin_Oferta: varianteStock.Fecha_Fin_Oferta ?? null,
+                            Tiene_Descuento: true
+                        } : {})
                     };
                     await setDoc(doc(db, 'Variante_Producto', String(nuevoVarId)), nuevaVar);
                     idVarianteObjetivo = nuevoVarId;
 
-                    // Crear inventario para la nueva variante
-                    const nuevoInvId = Date.now() + 1;
+                    const nuevoInvId = doc(collection(db, 'Inventario')).id;
+                    stockAnteriorAudit = 0;
+                    nuevoStock = tipoMovimiento === 'entrada' ? cant : 0;
                     await setDoc(doc(db, 'Inventario', String(nuevoInvId)), {
                         ID_Inventario: nuevoInvId,
                         ID_Variante: idVarianteObjetivo,
-                        Cantidad_Disponible: cant,
+                        Cantidad_Disponible: nuevoStock,
                         Cantidad_Reservada: 0,
                         Fecha_Actualizacion: new Date().toISOString()
                     });
                     idInventarioObjetivo = nuevoInvId;
-                    nuevoStock = cant;
+
+                    // Si había quedado una variante plantilla temporal sin talla y con stock 0, limpiarla
+                    if (varPlantillaSinTalla && String(varPlantillaSinTalla.ID_Variante) !== String(nuevoVarId)) {
+                        const qInvPlantilla = query(
+                            collection(db, 'Inventario'),
+                            where('ID_Variante', 'in', [
+                                varPlantillaSinTalla.ID_Variante,
+                                Number(varPlantillaSinTalla.ID_Variante),
+                                String(varPlantillaSinTalla.ID_Variante)
+                            ])
+                        );
+                        const snapInvPlantilla = await getDocs(qInvPlantilla);
+                        const stockPlantilla = snapInvPlantilla.docs.reduce(
+                            (acc, docInv) => acc + Number(docInv.data().Cantidad_Disponible ?? 0),
+                            0
+                        );
+                        if (stockPlantilla === 0) {
+                            await eliminarDocPorId('Variante_Producto', 'ID_Variante', varPlantillaSinTalla.ID_Variante);
+                            await eliminarDocPorId('Inventario', 'ID_Variante', varPlantillaSinTalla.ID_Variante);
+                        }
+                    }
                 }
             }
 
@@ -1050,14 +1350,15 @@ function AdminInventario() {
                 // --- INSERTAR EN TABLA DE AUDITORIA ---
                 try {
                     const idUserAccion = await obtenerIdUsuario();
-                    const nuevoAuditId = Date.now();
+                    const nuevoAuditId = doc(collection(db, 'Auditoria_Inventario')).id;
                     await setDoc(doc(db, 'Auditoria_Inventario', String(nuevoAuditId)), {
                         ID_Auditoria: nuevoAuditId,
                         ID_Variante: idVarianteObjetivo,
                         ID_UserAccion: idUserAccion,
-                        Cantidad_Anterior: stockActual,
+                        Cantidad_Anterior: stockAnteriorAudit,
                         Cantidad_Nueva: nuevoStock,
                         Tipo_Movimiento: tipoMovimiento === 'entrada' ? 'Ingreso' : 'Salida',
+                        Motivo: motivoStock || (tipoMovimiento === 'entrada' ? 'Compra a proveedor' : 'Ajuste de inventario'),
                         Fecha_Accion: new Date().toISOString()
                     });
                 } catch (err) {
@@ -1117,13 +1418,14 @@ function AdminInventario() {
 
             const tallaMap = {};
             tallaSnap.docs.forEach((d) => {
+                if (esDocPlantilla(d)) return;
                 const t = d.data();
                 const tid = t.ID_Talla ?? d.id;
                 const item = {
                     ...t,
                     ID_Talla: tid,
                     _docId: d.id,
-                    Tipos_Talla: tiposTallaMap[t.ID_TipoTalla] || null
+                    Tipos_Talla: tiposTallaMap[t.ID_TipoTalla] || tiposTallaMap[String(t.ID_TipoTalla)] || null
                 };
                 tallaMap[tid] = item;
                 tallaMap[String(tid)] = item;
@@ -1133,6 +1435,7 @@ function AdminInventario() {
 
             const fotosPorProducto = {};
             fotosSnap.docs.forEach((d) => {
+                if (esDocPlantilla(d)) return;
                 const f = d.data();
                 const pid = f.ID_Producto;
                 if (pid != null) {
@@ -1148,21 +1451,30 @@ function AdminInventario() {
 
             const invPorVariante = {};
             invSnap.docs.forEach((d) => {
+                if (esDocPlantilla(d)) return;
                 const inv = d.data();
-                const vid = inv.ID_Variante;
+                const vid = inv.ID_Variante ?? d.id;
                 if (vid != null) {
-                    if (!invPorVariante[vid]) invPorVariante[vid] = [];
-                    invPorVariante[vid].push({
+                    const cantDisp = Number(inv.Cantidad_Disponible ?? 0);
+                    const itemInv = {
+                        ...inv,
                         ID_Inventario: inv.ID_Inventario ?? d.id,
+                        ID_Variante: vid,
+                        Cantidad_Disponible: isNaN(cantDisp) ? 0 : cantDisp,
                         _docId: d.id,
-                        ...inv
-                    });
+                    };
+                    if (!invPorVariante[vid]) invPorVariante[vid] = [];
+                    invPorVariante[vid].push(itemInv);
                     if (!invPorVariante[String(vid)]) invPorVariante[String(vid)] = invPorVariante[vid];
+                    if (!isNaN(Number(vid)) && !invPorVariante[Number(vid)]) {
+                        invPorVariante[Number(vid)] = invPorVariante[vid];
+                    }
                 }
             });
 
             const prodMap = {};
             prodSnap.docs.forEach((d) => {
+                if (esDocPlantilla(d)) return;
                 const p = d.data();
                 const pid = p.ID_Producto ?? d.id;
                 const fotos = ordenarFotosProducto(
@@ -1175,7 +1487,7 @@ function AdminInventario() {
                     Nombre_Producto: p.Nombre_Producto || '',
                     Descripcion: p.Descripcion || '',
                     ID_Categoria: p.ID_Categoria ?? p.ID_categoria ?? null,
-                    Marca: marcasMap[p.ID_Marca] || null,
+                    Marca: marcasMap[p.ID_Marca] || marcasMap[String(p.ID_Marca)] || null,
                     Categorias_Producto: catMap[p.ID_Categoria ?? p.ID_categoria] || null,
                     Fotos_Productos: fotos
                 };
@@ -1185,30 +1497,81 @@ function AdminInventario() {
                 prodMap[d.id] = item;
             });
 
-            const listaVariantes = varSnap.docs.map((d) => {
+            // Contar cuántas variantes con talla definida tiene cada producto para ocultar filas plantilla vacías (sin talla y con stock 0)
+            const variantesConTallaPorProducto = {};
+            varSnap.docs.forEach((d) => {
+                if (esDocPlantilla(d)) return;
                 const v = d.data();
-                const vid = v.ID_Variante ?? d.id;
-                const pid = v.ID_Producto;
-                const productoObj = prodMap[pid] || prodMap[String(pid)] || null;
-                const tallaObj = tallaMap[v.ID_Talla] || tallaMap[String(v.ID_Talla)] || null;
-                const colorObj = coloresMap[v.ID_Color] || coloresMap[String(v.ID_Color)] || null;
-                const invList = invPorVariante[vid] || invPorVariante[String(vid)] || [{ ID_Inventario: null, Cantidad_Disponible: 0 }];
-
-                return {
-                    ...v,
-                    _docId: d.id,
-                    ID_Variante: vid,
-                    ID_Producto: pid,
-                    Precio_Actual: v.Precio_Actual,
-                    ID_EstadoProducto: v.ID_EstadoProducto,
-                    Productos: productoObj,
-                    Talla: tallaObj,
-                    Inventario: invList,
-                    Colores: colorObj
-                };
+                if (v.ID_Talla != null && v.ID_Talla !== '' && v.ID_Talla !== 0) {
+                    const kProd = String(v.ID_Producto);
+                    variantesConTallaPorProducto[kProd] = (variantesConTallaPorProducto[kProd] || 0) + 1;
+                }
             });
 
-            listaVariantes.sort((a, b) => (Number(b.ID_Variante) || 0) - (Number(a.ID_Variante) || 0));
+            const listaVariantes = varSnap.docs
+                .filter((d) => !esDocPlantilla(d))
+                .map((d) => {
+                    const v = d.data();
+                    const vid = v.ID_Variante ?? d.id;
+                    const pid = v.ID_Producto;
+                    const productoObj = prodMap[pid] || prodMap[String(pid)] || null;
+                    let tallaObj = tallaMap[v.ID_Talla] || tallaMap[String(v.ID_Talla)] || null;
+                    // Fallback: si ID_Talla referencia directamente un ID_TipoTalla
+                    if (!tallaObj && v.ID_Talla != null && tiposTallaMap[v.ID_Talla]) {
+                        tallaObj = {
+                            ID_Talla: v.ID_Talla,
+                            ID_TipoTalla: v.ID_Talla,
+                            Tipos_Talla: tiposTallaMap[v.ID_Talla]
+                        };
+                    }
+                    const colorObj = coloresMap[v.ID_Color] || coloresMap[String(v.ID_Color)] || null;
+                    const rawInvList = invPorVariante[vid] || invPorVariante[String(vid)] || invPorVariante[d.id] || [];
+                    const totalDisponibleVariante = rawInvList.reduce(
+                        (sum, invItem) => sum + Number(invItem.Cantidad_Disponible ?? 0),
+                        0
+                    );
+                    const invList = rawInvList.length > 0
+                        ? [{ ...rawInvList[0], Cantidad_Disponible: totalDisponibleVariante }]
+                        : [{ ID_Inventario: null, Cantidad_Disponible: 0 }];
+
+                    return {
+                        ...v,
+                        _docId: d.id,
+                        ID_Variante: vid,
+                        ID_Producto: pid,
+                        Precio_Actual: v.Precio_Actual,
+                        ID_EstadoProducto: v.ID_EstadoProducto ?? productoObj?.ID_EstadoProducto ?? 1,
+                        Productos: productoObj,
+                        Talla: tallaObj,
+                        Inventario: invList,
+                        Colores: colorObj
+                    };
+                })
+                .filter((v) => {
+                    // Excluir variantes huérfanas sin producto válido
+                    if (!v.Productos || !v.Productos.Nombre_Producto) return false;
+                    // Si el producto ya tiene variantes con talla asignada (ej. S, M, L, XL) y esta fila es un placeholder sin talla y sin stock (0), ocultarla para mostrar solo las variantes reales con sus tallas
+                    const tieneTalla = Boolean(v.Talla?.Tipos_Talla?.Nombre_TipoTalla);
+                    const stockDisp = Number(v.Inventario?.[0]?.Cantidad_Disponible ?? 0);
+                    const tieneHermanasConTalla = (variantesConTallaPorProducto[String(v.ID_Producto)] || 0) > 0;
+                    if (!tieneTalla && stockDisp === 0 && tieneHermanasConTalla) {
+                        return false;
+                    }
+                    return true;
+                });
+
+            const ordenTallasTabla = { XS: 1, S: 2, M: 3, L: 4, XL: 5, XXL: 6 };
+            listaVariantes.sort((a, b) => {
+                const prodA = (a.Productos?.Nombre_Producto || '').toLowerCase();
+                const prodB = (b.Productos?.Nombre_Producto || '').toLowerCase();
+                if (prodA !== prodB) return prodA.localeCompare(prodB);
+                const tallaA = (a.Talla?.Tipos_Talla?.Nombre_TipoTalla || '').toUpperCase();
+                const tallaB = (b.Talla?.Tipos_Talla?.Nombre_TipoTalla || '').toUpperCase();
+                const pesoA = ordenTallasTabla[tallaA] || 99;
+                const pesoB = ordenTallasTabla[tallaB] || 99;
+                if (pesoA !== pesoB) return pesoA - pesoB;
+                return String(b.ID_Variante).localeCompare(String(a.ID_Variante));
+            });
             setVariantes(listaVariantes);
         } catch (error) {
             console.log('❌ Error al cargar variantes desde Firestore:', error.message);
@@ -1259,7 +1622,7 @@ function AdminInventario() {
     async function crearCategoria() {
         try {
             const idUser = await obtenerIdUsuario();
-            const nuevoId = Date.now();
+            const nuevoId = doc(collection(db, 'Categorias_Producto')).id;
             const nuevaCat = {
                 ID_categoria: nuevoId,
                 ID_User: idUser,
@@ -1281,7 +1644,7 @@ function AdminInventario() {
     async function crearSubcategoria() {
         try {
             const idUser = await obtenerIdUsuario();
-            const nuevoId = Date.now();
+            const nuevoId = doc(collection(db, 'Categorias_Producto')).id;
             const nuevaSub = {
                 ID_categoria: nuevoId,
                 ID_User: idUser,
@@ -1300,13 +1663,25 @@ function AdminInventario() {
         }
     }
 
-    // ---------- MANEJO DE FOTOS ----------
-    function manejarSeleccionFotos(event) {
-        const archivos = Array.from(event.target.files);
-        setFotosSeleccionadas((prev) => [...prev, ...archivos]);
+    // ---------- MANEJO DE FOTOS CON CLOUDINARY + FIREBASE FIRESTORE ----------
+    async function manejarSubidaCloudinaryAgregar(result) {
+        const secureUrl = result?.info?.secure_url;
+        if (!secureUrl) return;
 
-        const nuevasPreviews = archivos.map((archivo) => URL.createObjectURL(archivo));
-        setPreviews((prev) => [...prev, ...nuevasPreviews]);
+        setFotosSeleccionadas((prev) => [...prev, secureUrl]);
+        setPreviews((prev) => [...prev, secureUrl]);
+
+        try {
+            await addDoc(collection(db, 'products'), {
+                name: nombreProducto || 'Producto en creación',
+                imageUrl: secureUrl,
+                images: [secureUrl],
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+        } catch (err) {
+            console.error('Error guardando URL de Cloudinary en colección products:', err);
+        }
     }
 
     function quitarFoto(index) {
@@ -1314,40 +1689,30 @@ function AdminInventario() {
         setPreviews((prev) => prev.filter((_, i) => i !== index));
     }
 
-    // ---------------- SUBIR FOTOS A STORAGE & FIRESTORE -----------------//
-    async function subirFotos(idProducto, archivos = fotosSeleccionadas) {
-        if (!archivos || archivos.length === 0) return;
+    // ---------------- GUARDAR FOTOS DE CLOUDINARY EN FIRESTORE -----------------//
+    async function subirFotos(idProducto, urlsCloudinary = fotosSeleccionadas) {
+        if (!urlsCloudinary || urlsCloudinary.length === 0) return;
 
         const idUser = await obtenerIdUsuario();
-        const timestampBase = Date.now();
-        let urlPrincipal = null;
+        const urlPrincipal = urlsCloudinary[0] || null;
 
-        // Optimizar y subir todas las fotos en paralelo para máxima velocidad
         await Promise.all(
-            archivos.map(async (archivo, i) => {
-                const extension = archivo.name.split('.').pop() || 'jpg';
-                const nombreArchivo = `${idProducto}_${timestampBase}_${i}.${extension}`;
-
+            urlsCloudinary.map(async (secureUrl, i) => {
                 try {
-                    // Subida rápida (Supabase Storage / Firebase fallback)
-                    const publicUrl = await subirImagenStorage(archivo, nombreArchivo);
-                    if (i === 0) urlPrincipal = publicUrl;
-
-                    // Registrar en Fotos_Productos de Firestore
-                    const idFoto = timestampBase + i;
+                    const idFoto = doc(collection(db, 'Fotos_Productos')).id;
                     await setDoc(doc(db, 'Fotos_Productos', String(idFoto)), {
                         ID_Foto: idFoto,
                         ID_Producto: idProducto,
                         ID_User: idUser,
-                        URL_Foto: publicUrl,
+                        URL_Foto: secureUrl,
                         Orden: i,
                         Es_Principal: i === 0,
                         Fecha_Carga: new Date().toISOString()
                     });
 
-                    console.log(`✅ Foto ${i} guardada correctamente:`, publicUrl);
+                    console.log(`✅ Foto ${i} registrada en Firestore:`, secureUrl);
                 } catch (errorSubida) {
-                    console.error('❌ Error guardando foto:', errorSubida);
+                    console.error('❌ Error guardando foto en Firestore:', errorSubida);
                 }
             })
         );
@@ -1356,6 +1721,21 @@ function AdminInventario() {
             await actualizarDocPorId('Productos', 'ID_Producto', idProducto, {
                 Imagen_Principal: urlPrincipal
             });
+
+            await setDoc(
+                doc(db, 'products', String(idProducto)),
+                {
+                    ID_Producto: idProducto,
+                    name: nombreProducto,
+                    description: descripcionProducto,
+                    price: parseFloat(precioProducto) || 0,
+                    imageUrl: urlPrincipal,
+                    images: urlsCloudinary,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                },
+                { merge: true }
+            );
         }
     }
 
@@ -1386,7 +1766,7 @@ function AdminInventario() {
         setMarcaSeleccionada('');
     }
 
-    // ---------- GUARDAR EL PRODUCTO COMPLETO ----------
+    // ---------- GUARDAR EL PRODUCTO COMPLETO (CATÁLOGO MAESTRO SIN TALLA INICIAL) ----------
     async function guardarProductoNuevo() {
         const idCategoriaFinal = subcategoriaSeleccionada || categoriaSeleccionada;
 
@@ -1403,11 +1783,11 @@ function AdminInventario() {
         setGuardandoProducto(true);
 
         try {
-            const idProducto = Date.now();
-            const idVariante = idProducto + 1;
-            const idInventario = idProducto + 2;
+            const idProducto = doc(collection(db, 'Productos')).id;
+            const idVariante = doc(collection(db, 'Variante_Producto')).id;
+            const idInventario = doc(collection(db, 'Inventario')).id;
 
-            // 1. Crear producto, variante e inventario en Firestore en una sola operación atómica (writeBatch)
+            // 1. Crear producto maestro y su registro base en Firestore (las tallas y su stock se agregan después en "Ajustar stock")
             const nuevoProducto = {
                 ID_Producto: idProducto,
                 Nombre_Producto: nombreProducto,
@@ -1459,6 +1839,10 @@ function AdminInventario() {
         }
     }
 
+    if (verificandoAcceso) {
+        return null;
+    }
+
     return (
         <div className="admin-layout">
             <SidebarAdmin />
@@ -1478,7 +1862,13 @@ function AdminInventario() {
                         className={`admin-tab-btn ${pestana === 'inventario' ? 'activo' : ''}`}
                         onClick={() => setPestana('inventario')}
                     >
-                        Productos
+                        Productos ({productosActivos})
+                    </button>
+                    <button 
+                        className={`admin-tab-btn ${pestana === 'inactivos' ? 'activo' : ''}`}
+                        onClick={() => setPestana('inactivos')}
+                    >
+                        Prendas desactivadas ({productosInactivos})
                     </button>
                     <button 
                         className={`admin-tab-btn ${pestana === 'historial' ? 'activo' : ''}`}
@@ -1501,8 +1891,9 @@ function AdminInventario() {
                             </div>
 
                             <div
-                                className={`stat-card ${filtroActivo === 'inactivos' ? 'stat-card-activa' : ''}`}
-                                onClick={() => setFiltroActivo(filtroActivo === 'inactivos' ? 'todos' : 'inactivos')}
+                                className="stat-card"
+                                onClick={() => setPestana('inactivos')}
+                                title="Ir a la pestaña de prendas desactivadas"
                             >
                                 <p className="stat-titulo">Productos inactivos</p>
                                 <p className="stat-valor" style={{ color: 'orange' }}>{productosInactivos}</p>
@@ -1567,7 +1958,7 @@ function AdminInventario() {
                         <tbody>
                             {filtrados.map((v) => {
                                 const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
-                                const estaInactivo = v.ID_EstadoProducto === 2;
+                                const estaInactivo = esVarianteInactiva(v);
     
     return (
         // Determina si el producto está inactivo para aplicar estilo de opacidad
@@ -1603,9 +1994,21 @@ function AdminInventario() {
             </td>
             
             <td className={stock === 0 ? 'sin-stock' : stock < 5 ? 'stock-bajo' : ''}>
-                {stock}
+                <strong>{stock}</strong> <span style={{ fontSize: '0.78rem', color: '#666' }}>uds.</span>
             </td>
-            <td>{v.Talla?.Tipos_Talla?.Nombre_TipoTalla}</td>
+            <td>
+                <span style={{
+                    display: 'inline-block',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: v.Talla?.Tipos_Talla?.Nombre_TipoTalla ? '#f0f0f0' : '#fff3e0',
+                    color: v.Talla?.Tipos_Talla?.Nombre_TipoTalla ? '#111' : '#e65100',
+                    fontWeight: 600,
+                    fontSize: '0.82rem'
+                }}>
+                    {v.Talla?.Tipos_Talla?.Nombre_TipoTalla || 'Sin talla'}
+                </span>
+            </td>
             <td>{v.Colores?.Nombre_Color || '-'}</td>
             <td>{v.Productos?.Marca?.Nombre_Marca || '-'}</td>
             
@@ -1638,11 +2041,11 @@ function AdminInventario() {
                     </button>
                     <button 
                         type="button" 
-                        title={estaInactivo ? "Activar producto" : "Desactivar producto"} 
+                        title="Desactivar producto (mover a Prendas desactivadas)" 
                         onClick={() => alternarEstadoProducto(v)}
                         className="btn-accion-tabla"
                     >
-                        <span className="icono-estado-tabla">{estaInactivo ? '👁️' : '❌'}</span>
+                        <span className="icono-estado-tabla">❌</span>
                     </button>
                 </div>
             </td>
@@ -1650,11 +2053,158 @@ function AdminInventario() {
                                 );
                             })}
                         
-                            
+                            {filtrados.length === 0 && (
+                                <tr>
+                                    <td colSpan={8} style={{ textAlign: 'center', color: '#777', padding: '36px' }}>
+                                        No hay productos activos que coincidan con la búsqueda.
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 )}
                 </>
+                ) : pestana === 'inactivos' ? (
+                    <>
+                        {/* Tarjetas resumen en la pestaña de Prendas desactivadas */}
+                        <div className="stats-row">
+                            <div className="stat-card stat-card-activa">
+                                <p className="stat-titulo">Prendas desactivadas</p>
+                                <p className="stat-valor" style={{ color: 'orange' }}>{productosInactivos}</p>
+                            </div>
+                            <div
+                                className="stat-card"
+                                onClick={() => setPestana('inventario')}
+                                title="Volver a productos activos"
+                            >
+                                <p className="stat-titulo">Productos activos</p>
+                                <p className="stat-valor" style={{ color: 'green' }}>{productosActivos}</p>
+                            </div>
+                        </div>
+
+                        <input
+                            className="buscador"
+                            placeholder="Buscar prenda desactivada por nombre, marca, talla o ID..."
+                            value={busquedaInactivos}
+                            onChange={(e) => setBusquedaInactivos(e.target.value)}
+                        />
+
+                        {cargando ? (
+                            <p>Cargando prendas desactivadas...</p>
+                        ) : (
+                            <table className="tabla-productos">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Producto</th>
+                                        <th>Precio</th>
+                                        <th>Stock</th>
+                                        <th>Talla</th>
+                                        <th>Color</th>
+                                        <th>Marca</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {inactivosFiltrados.map((v) => {
+                                        const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
+
+                                        return (
+                                            <tr key={v.ID_Variante}>
+                                                <td>{v.ID_Variante}</td>
+                                                <td>
+                                                    {v.Productos?.Nombre_Producto}
+                                                    <span style={{
+                                                        fontSize: '0.72rem',
+                                                        backgroundColor: '#fff3e0',
+                                                        color: '#e65100',
+                                                        border: '1px solid #ffcc80',
+                                                        borderRadius: '4px',
+                                                        padding: '2px 6px',
+                                                        marginLeft: '8px',
+                                                        fontWeight: 600
+                                                    }}>
+                                                        Desactivada
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    {(esOfertaActiva(v) || esOfertaActiva(v.Productos)) ? (
+                                                        <div>
+                                                            <span style={{ textDecoration: 'line-through', color: '#888', fontSize: '0.85em' }}>${v.Precio_Actual}</span>{' '}
+                                                            <strong style={{ color: '#d32f2f' }}>
+                                                                ${calcularPrecioConDescuento(Number(v.Precio_Actual), Number(v.Porcentaje_Descuento || v.Productos?.Porcentaje_Descuento || 0)).toFixed(2)}
+                                                            </strong>
+                                                        </div>
+                                                    ) : (
+                                                        <span>${v.Precio_Actual}</span>
+                                                    )}
+                                                </td>
+                                                <td className={stock === 0 ? 'sin-stock' : stock < 5 ? 'stock-bajo' : ''}>
+                                                    <strong>{stock}</strong> <span style={{ fontSize: '0.78rem', color: '#666' }}>uds.</span>
+                                                </td>
+                                                <td>
+                                                    <span style={{
+                                                        display: 'inline-block',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '4px',
+                                                        backgroundColor: v.Talla?.Tipos_Talla?.Nombre_TipoTalla ? '#f0f0f0' : '#fff3e0',
+                                                        color: v.Talla?.Tipos_Talla?.Nombre_TipoTalla ? '#111' : '#e65100',
+                                                        fontWeight: 600,
+                                                        fontSize: '0.82rem'
+                                                    }}>
+                                                        {v.Talla?.Tipos_Talla?.Nombre_TipoTalla || 'Sin talla'}
+                                                    </span>
+                                                </td>
+                                                <td>{v.Colores?.Nombre_Color || '-'}</td>
+                                                <td>{v.Productos?.Marca?.Nombre_Marca || '-'}</td>
+                                                <td>
+                                                    <div className="acciones-tabla-wrap">
+                                                        <button
+                                                            type="button"
+                                                            title="Editar producto"
+                                                            onClick={() => abrirModalEditar(v)}
+                                                            className="btn-accion-tabla"
+                                                        >
+                                                            <img src="/ICONOS/PENCIL.png" alt="Editar producto" width={20} height={20} />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            title="Volver a activar prenda"
+                                                            onClick={() => alternarEstadoProducto(v)}
+                                                            style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '6px',
+                                                                backgroundColor: '#2e7d32',
+                                                                color: '#ffffff',
+                                                                border: 'none',
+                                                                borderRadius: '6px',
+                                                                padding: '6px 12px',
+                                                                fontSize: '0.8rem',
+                                                                fontWeight: 600,
+                                                                cursor: 'pointer',
+                                                                whiteSpace: 'nowrap'
+                                                            }}
+                                                        >
+                                                            <span>👁️</span> Activar
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+
+                                    {inactivosFiltrados.length === 0 && (
+                                        <tr>
+                                            <td colSpan={8} style={{ textAlign: 'center', color: '#777', padding: '36px' }}>
+                                                No hay prendas desactivadas en este momento.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        )}
+                    </>
                 ) : (
                     <>
                         {/* Tarjetas de estadísticas de movimientos */}
@@ -1907,7 +2457,6 @@ function AdminInventario() {
                                     onChange={(e) => setPrecioProducto(e.target.value)}
                                 />
                             </div>
-                            
                         </div>
 
                         <label>Fotos del producto</label>
@@ -1934,16 +2483,20 @@ function AdminInventario() {
                                 </div>
                             ))}
                            
-                            <label className="foto-box agregar">
-                                + Agregar
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    onChange={manejarSeleccionFotos}
-                                    style={{ display: 'none' }}
-                                />
-                            </label>
+                            <CldUploadWidget
+                                uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET}
+                                onSuccess={manejarSubidaCloudinaryAgregar}
+                            >
+                                {({ open }) => (
+                                    <button
+                                        type="button"
+                                        className="foto-box agregar"
+                                        onClick={() => open()}
+                                    >
+                                        + Agregar
+                                    </button>
+                                )}
+                            </CldUploadWidget>
                                     {/* casillas vacias de guia visual, solo se muestran si aun no hay 3 fotos */}
                             {Array.from({ length: Math.max(0, 3 - previews.length) }).map((_, i) => (
                               <div key={`vacia-${i}`} className="foto-box foto-vacia">
@@ -2028,7 +2581,7 @@ function AdminInventario() {
                             <button type="button" onClick={async () => {
                                 try {
                                     const idUser = await obtenerIdUsuario();
-                                    const nuevoId = Date.now();
+                                    const nuevoId = doc(collection(db, 'Categorias_Producto')).id;
                                     const data = {
                                         ID_categoria: nuevoId,
                                         ID_User: idUser,
@@ -2108,7 +2661,7 @@ function AdminInventario() {
                     <button type="button" onClick={async () => {
                         try {
                             const idUser = await obtenerIdUsuario();
-                            const nuevoId = Date.now();
+                            const nuevoId = doc(collection(db, 'Marca')).id;
                             const nuevaMarca = {
                                 ID_Marca: nuevoId,
                                 ID_User: idUser,
@@ -2182,17 +2735,21 @@ function AdminInventario() {
                     );
                 })}
 
-                {/* Botón agregar foto */}
-                <label className="foto-box agregar">
-                    + Agregar
-                    <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={manejarSeleccionFotosEditar}
-                        style={{ display: 'none' }}
-                    />
-                </label>
+                {/* Botón agregar foto con Cloudinary */}
+                <CldUploadWidget
+                    uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET}
+                    onSuccess={manejarSubidaCloudinaryEditar}
+                >
+                    {({ open }) => (
+                        <button
+                            type="button"
+                            className="foto-box agregar"
+                            onClick={() => open()}
+                        >
+                            + Agregar
+                        </button>
+                    )}
+                </CldUploadWidget>
             </div>
 
             <button 
@@ -2215,16 +2772,64 @@ function AdminInventario() {
                 <button onClick={() => setModalAbierto(null)}>✕</button>
             </div>
 
-            <p style={{ fontSize: '0.9rem', color: '#555', textDecoration: 'underline', marginBottom: '14px' }}>
-                {varianteStock?.Productos?.Nombre_Producto || 'Producto'} | Talla {varianteStock?.Talla?.Tipos_Talla?.Nombre_TipoTalla || 'Única'}
+            <p style={{ fontSize: '0.9rem', color: '#555', textDecoration: 'underline', marginBottom: '10px' }}>
+                {varianteStock?.Productos?.Nombre_Producto || 'Producto'} | Talla actual: {varianteStock?.Talla?.Tipos_Talla?.Nombre_TipoTalla || 'Pendiente de asignar'}
             </p>
 
-            <label>Stock Actual</label>
-            <p style={{ fontWeight: '600', marginBottom: '10px',color: '#0f0808' }}>
-                {varianteStock?.Inventario?.[0]?.Cantidad_Disponible ?? 0} Unidades
-            </p>
-
-           
+            {/* Resumen de todas las tallas registradas de esta prenda y su stock actual */}
+            {(() => {
+                const variantesMismaPrenda = variantes.filter(
+                    (item) =>
+                        String(item.ID_Producto) === String(varianteStock?.ID_Producto) &&
+                        item.Talla?.Tipos_Talla?.Nombre_TipoTalla
+                );
+                return (
+                    <div style={{
+                        backgroundColor: '#f5f5f5',
+                        border: '1px solid #ddd',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        marginBottom: '12px',
+                        fontSize: '0.82rem'
+                    }}>
+                        <strong style={{ display: 'block', marginBottom: '6px', color: '#222' }}>
+                            Stock actual por talla de esta prenda:
+                        </strong>
+                        {variantesMismaPrenda.length > 0 ? (
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                {variantesMismaPrenda.map((vp) => {
+                                    const nomTalla = vp.Talla?.Tipos_Talla?.Nombre_TipoTalla;
+                                    const cantTalla = vp.Inventario?.[0]?.Cantidad_Disponible ?? 0;
+                                    const idTipo = vp.Talla?.Tipos_Talla?.ID_TipoTalla;
+                                    const seleccionada = String(idTipo) === String(tipoTallaSeleccionada);
+                                    return (
+                                        <span
+                                            key={vp.ID_Variante}
+                                            onClick={() => idTipo && setTipoTallaSeleccionada(idTipo)}
+                                            style={{
+                                                padding: '3px 8px',
+                                                borderRadius: '4px',
+                                                cursor: 'pointer',
+                                                backgroundColor: seleccionada ? '#111' : '#fff',
+                                                color: seleccionada ? '#fff' : '#111',
+                                                border: '1px solid #bbb',
+                                                fontWeight: 600
+                                            }}
+                                            title={`ID Variante: ${vp.ID_Variante} | ID Talla: ${vp.ID_Talla}`}
+                                        >
+                                            {nomTalla} (ID: {vp.ID_Variante}): {cantTalla} uds.
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <span style={{ color: '#777' }}>
+                                Sin tallas ingresadas aún. Selecciona una talla abajo para hacer el primer ingreso.
+                            </span>
+                        )}
+                    </div>
+                );
+            })()}
 
             {/* Selector: Entrada o Salida */}
           <label>Tipo de movimiento</label>
@@ -2319,11 +2924,22 @@ function AdminInventario() {
                 )}
             </select>
 
-            {/* Tarjeta de cálculo en vivo */}
+            {/* Tarjeta de cálculo en vivo según la talla seleccionada */}
             {(() => {
-                const stockActual = varianteStock?.Inventario?.[0]?.Cantidad_Disponible ?? 0;
+                const varianteTallaElegida = variantes.find(
+                    (item) =>
+                        String(item.ID_Producto) === String(varianteStock?.ID_Producto) &&
+                        String(item.Talla?.Tipos_Talla?.ID_TipoTalla ?? '') === String(tipoTallaSeleccionada ?? '')
+                );
+                const stockBaseTalla = tipoTallaSeleccionada
+                    ? Number(varianteTallaElegida?.Inventario?.[0]?.Cantidad_Disponible ?? 0)
+                    : Number(varianteStock?.Inventario?.[0]?.Cantidad_Disponible ?? 0);
+                const nombreTallaElegida =
+                    tallasDisponibles.find((t) => String(t.ID_TipoTalla) === String(tipoTallaSeleccionada))?.Nombre_TipoTalla ||
+                    varianteStock?.Talla?.Tipos_Talla?.Nombre_TipoTalla ||
+                    'Sin seleccionar';
                 const cant = parseInt(cantidadIngresar, 10) || 0;
-                const resultante = tipoMovimiento === 'entrada' ? stockActual + cant : stockActual - cant;
+                const resultante = tipoMovimiento === 'entrada' ? stockBaseTalla + cant : stockBaseTalla - cant;
                 const esInvalido = resultante < 0;
 
                 return (
@@ -2340,7 +2956,9 @@ function AdminInventario() {
                             alignItems: 'center',
                             fontSize: '0.9rem'
                         }}>
-                            <span>Stock resultante:</span>
+                            <span>
+                                Stock resultante ({nombreTallaElegida}, actual: {stockBaseTalla}):
+                            </span>
                             <strong>{resultante} Unidades</strong>
                         </div>
 

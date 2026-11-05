@@ -1,12 +1,17 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import SidebarAdmin from '@/components/SidebarAdmin.jsx';
-import { db } from '@/lib/firebaseClient';
-import { collection, getDocs, doc, getDoc, updateDoc, query, where } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebaseClient';
+import { onAuthStateChanged } from 'firebase/auth';
+import { verificarAccesoServidor, obtenerIdUsuario } from '@/lib/usuario';
+import { collection, getDocs, doc, getDoc, setDoc, updateDoc, query, where } from 'firebase/firestore';
 import './transacciones.css';
 
 function AdminTransacciones() {
+    const router = useRouter();
+    const [verificandoAcceso, setVerificandoAcceso] = useState(true);
     // estados de la tabla principal
     const [busqueda, setBusqueda] = useState('');
     const [pedidos, setPedidos] = useState([]);
@@ -22,11 +27,27 @@ function AdminTransacciones() {
     const [nuevoEstado, setNuevoEstado] = useState('');
     const [guardando, setGuardando] = useState(false);
 
-    // carga inicial
+    // Verificación obligatoria de sesión y rol en el servidor antes de cargar pedidos
     useEffect(() => {
-        cargarPedidos();
-        cargarEstados();
-    }, []);
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                router.replace('/login');
+                return;
+            }
+
+            const acceso = await verificarAccesoServidor('admin');
+            if (!acceso.autorizado) {
+                router.replace('/');
+                return;
+            }
+
+            setVerificandoAcceso(false);
+            cargarPedidos();
+            cargarEstados();
+        });
+
+        return () => unsubscribe();
+    }, [router]);
 
     // catalogo de estados para el "guardar cambios"
     async function cargarEstados() {
@@ -335,23 +356,40 @@ function AdminTransacciones() {
         setGuardando(false);
     }
 
-    // guardar cambio de estado
+    // guardar cambio de estado y registrar en "Auditoria_Cambio_Estado Pedido"
     async function guardarEstado() {
         if (!detalle || !nuevoEstado) return;
         setGuardando(true);
 
         try {
             const idEstadoNum = parseInt(nuevoEstado, 10);
+            const estadoAnterior = detalle.idEstado ?? null;
             const refDirecta = doc(db, 'Pedido', String(detalle.id));
             const snapDirecta = await getDoc(refDirecta);
             if (snapDirecta.exists()) {
-                await updateDoc(refDirecta, { ID_EstadoPedidoo: idEstadoNum });
+                await updateDoc(refDirecta, { ID_EstadoPedidoo: idEstadoNum, ID_EstadoPedido: idEstadoNum });
             } else {
                 const q = query(collection(db, 'Pedido'), where('ID_Pedido', 'in', [detalle.id, Number(detalle.id), String(detalle.id)]));
                 const snap = await getDocs(q);
                 if (!snap.empty) {
-                    await updateDoc(snap.docs[0].ref, { ID_EstadoPedidoo: idEstadoNum });
+                    await updateDoc(snap.docs[0].ref, { ID_EstadoPedidoo: idEstadoNum, ID_EstadoPedido: idEstadoNum });
                 }
+            }
+
+            // Registrar en la colección "Auditoria_Cambio_Estado Pedido"
+            try {
+                const idUserAccion = (await obtenerIdUsuario()) || auth.currentUser?.uid || 'Admin';
+                const auditPedidoRef = doc(collection(db, 'Auditoria_Cambio_Estado Pedido'));
+                await setDoc(auditPedidoRef, {
+                    ID_Auditoria: auditPedidoRef.id,
+                    ID_Pedido: detalle.id,
+                    ID_UserAccion: idUserAccion,
+                    ID_EstadoAnterior: estadoAnterior,
+                    ID_EstadoNuevo: idEstadoNum,
+                    Fecha_Cambio: new Date().toISOString()
+                });
+            } catch (errAudit) {
+                console.error('Error guardando Auditoria_Cambio_Estado Pedido:', errAudit);
             }
 
             await cargarPedidos();
@@ -387,6 +425,10 @@ function AdminTransacciones() {
             { texto: 'En camino', hora: '', hecho: enCamino },
             { texto: 'Entregado', hora: '', hecho: entregado },
         ];
+    }
+
+    if (verificandoAcceso) {
+        return null;
     }
 
     return (

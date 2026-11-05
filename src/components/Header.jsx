@@ -9,6 +9,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import PerfilPanel from './PerfilPanel';
 import Buscador from './Buscador';
 import { useCarrito } from '@/lib/CarritoContext';
+import { sincronizarSesionServidor } from '@/lib/usuario';
 
 function Header ({ siempreSolido = false }) {
     // comentario Jona
@@ -139,61 +140,40 @@ function Header ({ siempreSolido = false }) {
     return () => document.removeEventListener('click', manejarClickFuera)
     }, [] )
 
-    // guarda el usuario logueado (o null) para mostrar el botón de perfil/cerrar sesión
+    // guarda el usuario logueado (o null) validando su estado y rol contra el servidor
     useEffect(() => {
-        const verificarBaneo = async (userObj) => {
-            if (!userObj || !userObj.email) return false;
-            try {
-                const qUser = query(collection(db, 'User'), where('Correo', '==', userObj.email));
-                const snapUser = await getDocs(qUser);
-                if (!snapUser.empty) {
-                    const uData = snapUser.docs[0].data();
-                    if (Number(uData.ID_EstadoUsuario) === 2 || uData.ID_EstadoUsuario === 2) {
-                        alert('Tu cuenta fue baneada. No tienes acceso al sitio.');
-                        await signOut(auth);
-                        router.push('/login');
-                        return true;
-                    }
-                }
-            } catch (err) {
-                console.error('Error al verificar baneo:', err);
-            }
-            return false;
-        };
-
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
-                const baneado = await verificarBaneo(currentUser);
-                if (!baneado) {
-                    let esAdmin = false;
-                    try {
-                        const tokenResult = await currentUser.getIdTokenResult(true).catch(() => null);
-                        esAdmin = tokenResult?.claims?.rol === 'admin' || tokenResult?.claims?.role === 'admin';
+                const sesion = await sincronizarSesionServidor(currentUser);
+                if (sesion.baneado) {
+                    alert('Tu cuenta fue baneada. No tienes acceso al sitio.');
+                    await signOut(auth);
+                    setUsuario(null);
+                    router.push('/login');
+                    return;
+                }
 
-                        if (!esAdmin) {
-                            const qUser = query(collection(db, 'User'), where('Correo', '==', currentUser.email));
-                            const snapUser = await getDocs(qUser);
-                            if (!snapUser.empty) {
-                                const uData = snapUser.docs[0].data();
-                                if (Number(uData.ID_Rol) === 1 || (uData.Puesto || '').toLowerCase() === 'administrador') {
-                                    esAdmin = true;
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('Error resolviendo rol de usuario:', e);
-                    }
-
+                if (sesion.authenticated) {
+                    const rolAutoritativo = sesion.rol || 'usuario';
+                    const esAdmin = rolAutoritativo === 'admin';
                     const enriched = {
                         ...currentUser,
                         esAdmin,
-                        app_metadata: { rol: esAdmin ? 'admin' : 'authenticated' }
+                        app_metadata: {
+                            rol:
+                                rolAutoritativo === 'admin'
+                                    ? 'admin'
+                                    : rolAutoritativo === 'empleado'
+                                    ? 'empleado'
+                                    : 'authenticated'
+                        }
                     };
                     setUsuario(enriched);
                 } else {
                     setUsuario(null);
                 }
             } else {
+                await fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {});
                 setUsuario(null);
             }
         });
@@ -212,6 +192,7 @@ function Header ({ siempreSolido = false }) {
 
     // 🔓 FUNCIÓN PARA CERRAR SESIÓN
     const handleCerrarSesion = async () => {
+        await fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {});
         await signOut(auth);
         setUsuario(null);
         router.push('/login');

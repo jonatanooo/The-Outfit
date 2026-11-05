@@ -4,11 +4,11 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { auth, db } from '@/lib/firebaseClient';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import Footer from '@/components/Footer';
 
-/* ---------- Iconos de redes sociales  */
+/* ---------- Iconos de redes sociales ---------- */
 const IconInstagram = (props) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
     <rect x="3" y="3" width="18" height="18" rx="5" />
@@ -51,6 +51,17 @@ const IconEyeClosed = (props) => (
   </svg>
 );
 
+/**
+ * Reglas de complejidad de contraseña exigidas en Registro y Restablecimiento.
+ */
+const REQUISITOS_PASSWORD = [
+  { id: 'len', label: 'Mínimo 8 caracteres', test: (pwd) => pwd.length >= 8 },
+  { id: 'upper', label: 'Al menos una letra mayúscula (A-Z)', test: (pwd) => /[A-Z]/.test(pwd) },
+  { id: 'lower', label: 'Al menos una letra minúscula (a-z)', test: (pwd) => /[a-z]/.test(pwd) },
+  { id: 'num', label: 'Al menos un número (0-9)', test: (pwd) => /[0-9]/.test(pwd) },
+  { id: 'sym', label: 'Al menos un símbolo (!@#$%^&*...)', test: (pwd) => /[!@#$%^&*(),.?":{}|<>_\-+=/\\[\]~`';]/.test(pwd) },
+];
+
 export default function RegisterPage() {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -66,15 +77,19 @@ export default function RegisterPage() {
   const [errores, setErrores] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const validarPassword = (pwd) => {
-    const erroresPwd = [];
-    if (pwd.length < 8) erroresPwd.push('Mínimo 8 caracteres');
-    if (!/[A-Z]/.test(pwd)) erroresPwd.push('Al menos una mayúscula');
-    if (!/[a-z]/.test(pwd)) erroresPwd.push('Al menos una minúscula');
-    if (!/[0-9]/.test(pwd)) erroresPwd.push('Al menos un número');
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) erroresPwd.push('Al menos un símbolo');
-    return erroresPwd;
-  };
+  const evaluarPassword = (pwd) =>
+    REQUISITOS_PASSWORD.map((req) => ({
+      ...req,
+      cumplido: req.test(pwd || ''),
+    }));
+
+  const validarPassword = (pwd) =>
+    evaluarPassword(pwd)
+      .filter((r) => !r.cumplido)
+      .map((r) => r.label);
+
+  const estadoRequisitos = evaluarPassword(form.password);
+  const todosRequisitosCumplidos = estadoRequisitos.every((r) => r.cumplido);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -93,6 +108,8 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
+
     const nuevosErrores = {};
 
     if (!form.nombre.trim()) nuevosErrores.nombre = 'El nombre es obligatorio';
@@ -104,7 +121,9 @@ export default function RegisterPage() {
     else if (!/^\d{8}-\d$/.test(form.dui)) nuevosErrores.dui = 'Formato: 12345678-9';
 
     const erroresPwd = validarPassword(form.password);
-    if (erroresPwd.length > 0) nuevosErrores.password = erroresPwd.join(', ');
+    if (erroresPwd.length > 0) {
+      nuevosErrores.password = `Faltan requisitos: ${erroresPwd.join(', ')}`;
+    }
 
     if (!form.aceptaTerminos) nuevosErrores.aceptaTerminos = 'Debes aceptar los términos y condiciones';
 
@@ -117,35 +136,26 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, form.correo, form.password);
+      const userCredential = await createUserWithEmailAndPassword(auth, form.correo.trim(), form.password);
       const user = userCredential.user;
 
       await updateProfile(user, {
-        displayName: form.nombre
+        displayName: form.nombre.trim(),
       });
 
-      // Generar nuevo ID_User autoincremental o basado en tiempo
-      let nuevoIdUser = Date.now();
-      try {
-        const qMax = query(collection(db, 'User'), orderBy('ID_User', 'desc'), limit(1));
-        const snap = await getDocs(qMax);
-        if (!snap.empty) {
-          const maxVal = Number(snap.docs[0].data().ID_User);
-          if (!isNaN(maxVal)) nuevoIdUser = maxVal + 1;
-        }
-      } catch (e) {
-        // Fallback al valor generado por Date.now()
-      }
+      // Enviar correo de verificación para garantizar identidad verificada
+      await sendEmailVerification(user).catch(() => {});
 
-      // Guardar el perfil en la colección User de Firestore usando doc id = user.uid
-      await setDoc(doc(db, 'User', user.uid), {
-        ID_User: nuevoIdUser,
+      // Usar el UID único e inmutable de Firebase Auth como ID_User (reemplaza Date.now() y evita colisiones/IDOR)
+      const userDocRef = doc(db, 'User', user.uid);
+      await setDoc(userDocRef, {
+        ID_User: user.uid,
         auth_id: user.uid,
-        Nombres: form.nombre,
+        Nombres: form.nombre.trim(),
         Apellidos: '',
-        Usuario: form.nombre.toLowerCase().replace(/\s+/g, '_'),
-        Correo: form.correo,
-        Telefono: form.telefono,
+        Usuario: form.nombre.trim().toLowerCase().replace(/\s+/g, '_'),
+        Correo: form.correo.trim().toLowerCase(),
+        Telefono: form.telefono.trim(),
         DUI: form.dui,
         ID_Rol: 3, // Rol cliente
         ID_EstadoUsuario: 1, // Activo
@@ -160,9 +170,9 @@ export default function RegisterPage() {
       if (error.code === 'auth/email-already-in-use') {
         setErrores({ general: 'Ya existe una cuenta con este correo. Iniciá sesión o restablecé tu contraseña.' });
       } else if (error.code === 'auth/weak-password') {
-        setErrores({ password: 'La contraseña debe tener al menos 6 caracteres.' });
+        setErrores({ password: 'La contraseña no cumple con la complejidad requerida.' });
       } else if (error.code === 'auth/configuration-not-found') {
-        setErrores({ general: 'La autenticación aún no ha sido habilitada en Firebase Console. Ve a Firebase Console > Authentication > Comenzar > Métodos de acceso y activa "Correo electrónico/Contraseña".' });
+        setErrores({ general: 'La autenticación aún no ha sido habilitada en Firebase Console.' });
       } else {
         setErrores({ general: error.message || 'Error al crear la cuenta' });
       }
@@ -188,7 +198,7 @@ export default function RegisterPage() {
         <div className="w-full md:w-1/2 flex flex-col items-center justify-center px-6 sm:px-10 md:px-16 py-16">
           <div className="w-full max-w-sm flex flex-col">
 
-            {/* 🔓 THE OUTFIT */}
+            {/* THE OUTFIT */}
             <h1
               className="text-3xl md:text-5xl font-serif tracking-[0.15em] text-black text-center"
               style={{ marginBottom: '20px' }}
@@ -196,7 +206,7 @@ export default function RegisterPage() {
               THE OUTFIT
             </h1>
 
-            {/* 🔓 CREAR CUENTA  */}
+            {/* CREAR CUENTA */}
             <h2
               className="text-xl md:text-2xl font-light tracking-[0.1em] text-black text-center"
               style={{ marginBottom: '30px' }}
@@ -204,10 +214,9 @@ export default function RegisterPage() {
               CREAR CUENTA
             </h2>
 
-            
             <form onSubmit={handleSubmit} className="flex flex-col">
 
-              {/* 🔓 NOMBRE  */}
+              {/* NOMBRE */}
               <div style={{ marginBottom: '28px' }}>
                 <input
                   type="text"
@@ -220,7 +229,7 @@ export default function RegisterPage() {
                 {errores.nombre && <p className="text-red-500 text-xs" style={{ marginTop: '4px' }}>{errores.nombre}</p>}
               </div>
 
-              {/* 🔓 CORREO  */}
+              {/* CORREO */}
               <div style={{ marginBottom: '28px' }}>
                 <input
                   type="email"
@@ -233,27 +242,64 @@ export default function RegisterPage() {
                 {errores.correo && <p className="text-red-500 text-xs" style={{ marginTop: '4px' }}>{errores.correo}</p>}
               </div>
 
-              {/* 🔓 CONTRASEÑA  */}
-              <div className="relative" style={{ marginBottom: '10px' }}>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  placeholder="Contraseña"
-                  value={form.password}
-                  onChange={handleChange}
-                  className="w-full h-11 border border-gray-300 rounded-sm px-4 text-base tracking-wide focus:outline-none focus:border-black"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black transition"
+              {/* CONTRASEÑA + INDICADOR DINÁMICO DE REQUISITOS */}
+              <div style={{ marginBottom: '20px' }}>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    placeholder="Contraseña"
+                    value={form.password}
+                    onChange={handleChange}
+                    className="w-full h-11 border border-gray-300 rounded-sm px-4 text-base tracking-wide focus:outline-none focus:border-black"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black transition"
+                  >
+                    {showPassword ? <IconEyeClosed className="w-5 h-5" /> : <IconEyeOpen className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                {/* Panel visual en tiempo real con los requisitos de seguridad de la contraseña */}
+                <div
+                  style={{
+                    marginTop: '10px',
+                    padding: '10px 12px',
+                    backgroundColor: '#fafafa',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '4px',
+                  }}
                 >
-                  {showPassword ? <IconEyeClosed className="w-5 h-5" /> : <IconEyeOpen className="w-5 h-5" />}
-                </button>
-                {errores.password && <p className="text-red-500 text-xs" style={{ marginTop: '4px' }}>{errores.password}</p>}
+                  <p className="text-xs font-medium text-gray-700" style={{ marginBottom: '6px' }}>
+                    Requisitos de seguridad de la contraseña:
+                  </p>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {estadoRequisitos.map((req) => (
+                      <li
+                        key={req.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '0.75rem',
+                          color: req.cumplido ? '#15803d' : '#6b7280',
+                          fontWeight: req.cumplido ? 600 : 400,
+                          marginBottom: '2px',
+                        }}
+                      >
+                        <span>{req.cumplido ? '✓' : '○'}</span>
+                        <span>{req.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {errores.password && <p className="text-red-500 text-xs" style={{ marginTop: '6px' }}>{errores.password}</p>}
               </div>
 
-              {/* 🔓 TELÉFONO  */}
+              {/* TELÉFONO */}
               <div style={{ marginBottom: '25px' }}>
                 <label className="block text-xs uppercase tracking-wider text-gray-700" style={{ marginBottom: '6px' }}>
                   Teléfono
@@ -275,7 +321,7 @@ export default function RegisterPage() {
                 {errores.telefono && <p className="text-red-500 text-xs" style={{ marginTop: '4px' }}>{errores.telefono}</p>}
               </div>
 
-              {/* 🔓 DUI  */}
+              {/* DUI */}
               <div style={{ marginBottom: '25px' }}>
                 <label className="block text-xs uppercase tracking-wider text-gray-700" style={{ marginBottom: '6px' }}>
                   DUI
@@ -293,7 +339,7 @@ export default function RegisterPage() {
                 {errores.dui && <p className="text-red-500 text-xs" style={{ marginTop: '4px' }}>{errores.dui}</p>}
               </div>
 
-              {/* 🔓 CHECKBOXES  */}
+              {/* CHECKBOXES */}
               <div style={{ marginBottom: '28px' }}>
                 <div style={{ marginBottom: '-1px' }}>
                   <label className="flex items-start gap-2 text-xs text-gray-700 leading-relaxed">
@@ -329,10 +375,10 @@ export default function RegisterPage() {
 
               {errores.general && <p className="text-red-500 text-sm" style={{ marginBottom: '16px' }}>{errores.general}</p>}
 
-              {/* 🔓 BOTÓN CREAR CUENTA  */}
+              {/* BOTÓN CREAR CUENTA */}
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !todosRequisitosCumplidos}
                 className="w-full h-14 bg-black text-white text-base tracking-[0.3em] font-medium hover:bg-gray-800 transition disabled:opacity-50"
                 style={{ marginTop: '-15px' }}
               >
@@ -340,7 +386,7 @@ export default function RegisterPage() {
               </button>
             </form>
 
-            {/* 🔓 "¿YA TIENES CUENTA?"  */}
+            {/* "¿YA TIENES CUENTA?" */}
             <div style={{ marginTop: '10px' }}>
               <p className="text-xs tracking-wider text-gray-700 text-center">
                 ¿YA TIENES CUENTA?{' '}
