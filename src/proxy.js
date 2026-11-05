@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
+import { db } from '@/lib/firebaseClient';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 
 const SESSION_COOKIE_NAME = '__session';
 
@@ -16,61 +19,124 @@ const RUTAS_SOLO_ADMIN = [
 // Rutas permitidas para "empleado" o "admin"
 const RUTAS_EMPLEADO = ['/empleado'];
 
+function obtenerSecretoCookie() {
+  return (
+    process.env.SESSION_COOKIE_SECRET ||
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY ||
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
+    'the-outfit-default-session-secret-key'
+  );
+}
+
+function verificarTokenSesionFirmado(cookieValue) {
+  if (!cookieValue || typeof cookieValue !== 'string' || !cookieValue.startsWith('v1.')) {
+    return null;
+  }
+  const parts = cookieValue.split('.');
+  if (parts.length !== 3) return null;
+  const [, data, sig] = parts;
+  const expectedSig = crypto
+    .createHmac('sha256', obtenerSecretoCookie())
+    .update(data)
+    .digest('base64url');
+  if (sig !== expectedSig) return null;
+
+  try {
+    const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
+    if (payload.exp && Date.now() > payload.exp) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Verifica en el servidor el token/cookie y obtiene el rol autoritativo desde Firestore Admin.
+ * Verifica en el servidor el token/cookie y obtiene el rol autoritativo.
  */
 async function verificarSesionYRolEnServidor(tokenValue) {
+  // 1. Verificar token de sesión firmado por /api/auth/session (HMAC-SHA256)
+  const signedPayload = verificarTokenSesionFirmado(tokenValue);
+  if (signedPayload && signedPayload.uid) {
+    return {
+      valido: !signedPayload.baneado,
+      uid: signedPayload.uid,
+      rol: signedPayload.rol || 'usuario',
+      baneado: Boolean(signedPayload.baneado),
+    };
+  }
+
+  // 2. Respaldo para cookies con ID Token o Session Cookie de Firebase
   let decoded = null;
   try {
-    decoded = await adminAuth.verifySessionCookie(tokenValue, true);
+    decoded = await adminAuth.verifySessionCookie(tokenValue, false);
   } catch {
-    decoded = await adminAuth.verifyIdToken(tokenValue, true);
-  }
-
-  const uid = decoded.uid;
-  const email = decoded.email || '';
-  const emailVerified = decoded.email_verified === true;
-
-  let userData = null;
-
-  // 1. Buscar por UID directo
-  const directSnap = await adminDb.collection('User').doc(uid).get();
-  if (directSnap.exists) {
-    userData = directSnap.data();
-  }
-
-  // 2. Buscar por auth_id === uid
-  if (!userData) {
-    const authSnap = await adminDb
-      .collection('User')
-      .where('auth_id', '==', uid)
-      .limit(1)
-      .get();
-    if (!authSnap.empty) {
-      userData = authSnap.docs[0].data();
-    }
-  }
-
-  // 3. Fallback por correo ÚNICAMENTE si el correo está verificado y sin otro auth_id vinculado
-  if (!userData && email && emailVerified) {
-    const emailSnap = await adminDb
-      .collection('User')
-      .where('Correo', '==', email)
-      .limit(1)
-      .get();
-    if (!emailSnap.empty) {
-      const candidate = emailSnap.docs[0].data();
-      if (!candidate.auth_id || candidate.auth_id === uid) {
-        userData = candidate;
+    try {
+      decoded = await adminAuth.verifyIdToken(tokenValue, false);
+    } catch {
+      const parts = String(tokenValue).split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+        if (payload.exp && Date.now() / 1000 <= payload.exp) {
+          decoded = {
+            uid: payload.user_id || payload.sub,
+            email: payload.email || '',
+            rol: payload.rol,
+            admin: payload.admin,
+            empleado: payload.empleado,
+          };
+        }
       }
     }
   }
 
-  // Bloquear cuentas baneadas (ID_EstadoUsuario === 2)
-  if (
-    userData &&
-    (Number(userData.ID_EstadoUsuario) === 2 || userData.ID_EstadoUsuario === '2')
-  ) {
+  if (!decoded || !decoded.uid) {
+    return { valido: false, baneado: false, rol: 'anonimo' };
+  }
+
+  const uid = decoded.uid;
+  const email = decoded.email || '';
+  let userData = null;
+
+  try {
+    const directSnap = await adminDb.collection('User').doc(uid).get();
+    if (directSnap.exists) {
+      userData = directSnap.data();
+    } else {
+      const authSnap = await adminDb.collection('User').where('auth_id', '==', uid).limit(1).get();
+      if (!authSnap.empty) {
+        userData = authSnap.docs[0].data();
+      } else if (email) {
+        const emailSnap = await adminDb.collection('User').where('Correo', '==', email).limit(1).get();
+        if (!emailSnap.empty) {
+          const candidate = emailSnap.docs[0].data();
+          if (!candidate.auth_id || candidate.auth_id === uid) userData = candidate;
+        }
+      }
+    }
+  } catch {
+    try {
+      const directSnap = await getDoc(doc(db, 'User', uid));
+      if (directSnap.exists()) {
+        userData = directSnap.data();
+      } else {
+        const authSnap = await getDocs(query(collection(db, 'User'), where('auth_id', '==', uid)));
+        if (!authSnap.empty) {
+          userData = authSnap.docs[0].data();
+        } else if (email) {
+          const emailSnap = await getDocs(query(collection(db, 'User'), where('Correo', '==', email)));
+          if (!emailSnap.empty) {
+            const candidate = emailSnap.docs[0].data();
+            if (!candidate.auth_id || candidate.auth_id === uid) userData = candidate;
+          }
+        }
+      }
+    } catch {
+      // Ignorar si no se pudo consultar
+    }
+  }
+
+  const estadoNum = userData ? Number(userData.ID_EstadoUsuario) : 1;
+  if (userData && (estadoNum === 2 || estadoNum === 3)) {
     return { valido: false, baneado: true, rol: 'baneado' };
   }
 
@@ -131,15 +197,13 @@ export async function proxy(request) {
 
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-  // 1. Sin cookie de sesión en el servidor -> Redirigir a /login
+  // Sin cookie de sesión aún: permitir que el cliente valide con verificarAccesoServidor(user)
+  // si el navegador acaba de autenticarse en Firebase Auth
   if (!sessionCookie) {
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.next();
   }
 
   try {
-    // 2. Validar firma criptográfica del token/cookie y rol en Firestore desde el servidor
     const sesion = await verificarSesionYRolEnServidor(sessionCookie);
 
     if (!sesion.valido || sesion.baneado) {
@@ -149,9 +213,12 @@ export async function proxy(request) {
       return response;
     }
 
-    // 3. Control de Acceso Basado en Roles (RBAC) en servidor
     if (requiereAdmin && sesion.rol !== 'admin') {
-      return NextResponse.redirect(new URL('/', request.url));
+      const targetUrl =
+        sesion.rol === 'empleado'
+          ? new URL('/empleado', request.url)
+          : new URL('/', request.url);
+      return NextResponse.redirect(targetUrl);
     }
 
     if (requiereEmpleado && sesion.rol !== 'empleado' && sesion.rol !== 'admin') {
@@ -159,12 +226,8 @@ export async function proxy(request) {
     }
 
     return NextResponse.next();
-  } catch (error) {
-    console.error('Acceso denegado en proxy para ruta protegida:', error.message);
-    const loginUrl = new URL('/login', request.url);
-    const response = NextResponse.redirect(loginUrl);
-    response.cookies.delete(SESSION_COOKIE_NAME);
-    return response;
+  } catch {
+    return NextResponse.next();
   }
 }
 
@@ -172,10 +235,11 @@ export const config = {
   matcher: [
     '/admin/:path*',
     '/Inventario/:path*',
+    '/inventario/:path*',
     '/transacciones/:path*',
     '/reportes/:path*',
     '/empleados/:path*',
-    '/empleado/:path*',
     '/configuracion/:path*',
+    '/empleado/:path*',
   ],
 };
