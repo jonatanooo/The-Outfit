@@ -17,7 +17,7 @@ export default function PaginaPrenda() {
     return(
         <>
         <Headerv2 />
-        <main>
+        <main className="pagina-prenda-main">
             <CarruselInfinito idProducto={idProducto} />
             <PrendaIfo idProducto={idProducto} />
             <h2 className="recotittle">RECOMENDACIONES</h2>

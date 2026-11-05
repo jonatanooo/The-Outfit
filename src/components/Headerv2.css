@@ -148,16 +148,13 @@ transition: color 0.3s ease;
 
 .header-v2
 {
-    /* sale del flujo normal, se posiciona respecto a la ventana del navegador y se queda fijo aunque hagas scrolll */
     position: fixed;
     top: 0;
-    /* sobrepone la capa x100 (con el valor de 1 bastaria) es como la herramienta capas de illustrator */
+    left: 0;
     z-index: 100;
-    /* adapta el 100% del ancho */
     width: 100%;
-
-    /* para que el cambio sea leve y no brusco */
-    transition:background-color 0.3s ease;
+    height: 60px;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
     background-color: black;
 }
 
@@ -167,6 +164,7 @@ transition: color 0.3s ease;
 {
     background-color: black;
     border-bottom: 1.5px black solid; 
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .header-v2.scrolled .menuicon,
