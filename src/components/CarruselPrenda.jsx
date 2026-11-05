@@ -174,7 +174,9 @@ function CarruselPrendas({ idGenero, idExcluir } = {}) {
                     </button>
                     {prenda.imagen ? (
                       <motion.img
-                        whileHover={{ scale: 1.2 }}
+                        initial={{ scale: 1 }}
+                        whileHover={{ scale: 1.15 }}
+                        transition={{ duration: 0.3, ease: "easeOut" }}
                         src={prenda.imagen}
                         alt={prenda.nombre}
                         className="prenda-imagen"

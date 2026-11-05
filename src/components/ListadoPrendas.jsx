@@ -292,7 +292,14 @@ function ListadoPrendas({ filtros, onResultados, idCategoriaPadre, soloOfertas =
                   />
                 </button>
                 {prenda.imagen ? (
-                  <motion.img whileHover={{ scale: 1.2 }} src={prenda.imagen} alt={prenda.nombre} className="prenda-imagen" />
+                  <motion.img
+                    initial={{ scale: 1 }}
+                    whileHover={{ scale: 1.15 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    src={prenda.imagen}
+                    alt={prenda.nombre}
+                    className="prenda-imagen"
+                  />
                 ) : (
                   <div className="prenda-imagen prenda-sin-imagen" />
                 )}
