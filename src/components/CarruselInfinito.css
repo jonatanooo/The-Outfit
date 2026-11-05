@@ -75,7 +75,7 @@
 .panelprecios
 {
     display: flex;
-    top: 33em;
+    top: 55%;
     height: clamp(18em, 23vw, 23em);
     width: 35em;
     width: clamp(28em, 35vw, 35em);
@@ -177,7 +177,7 @@
     height: 2px;
     background-color: black;
     border: none;
-    width: 90%;
+    width: 95%;
     /* al ponerle el margen en 0 se centra automaticamente y los espacios vacios los reparte en la izquierda y derecha */
     margin: 0.4em auto 0 auto;
 }
@@ -283,14 +283,14 @@
     font-size: clamp(0.8rem, 0.8vw, 1rem);
     display: flex;
     align-items: center;
+    justify-content: center;
+    gap: 0.4em;
 }
 
 .disponibilidad img
 {
     width: clamp(15px,3vw,20px);
     height: clamp(15px,3vw,20px);
-    margin-right: 0.4em;
-    margin-left: 8.8em;
 }
 
 .recomendaciones
