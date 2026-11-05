@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
 
+export const dynamic = 'force-dynamic';
+
 const SESSION_COOKIE_NAME = '__session';
 
 /**

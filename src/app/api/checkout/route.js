@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
 import { esOfertaActiva, calcularPrecioConDescuento } from '@/lib/descuentos';
 
+export const dynamic = 'force-dynamic';
+
 const SESSION_COOKIE_NAME = '__session';
 
 /**

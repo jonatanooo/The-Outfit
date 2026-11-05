@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
 
+export const dynamic = 'force-dynamic';
+
 const SESSION_COOKIE_NAME = '__session';
 const SESSION_EXPIRES_IN = 60 * 60 * 24 * 5 * 1000; // 5 días en ms
 
