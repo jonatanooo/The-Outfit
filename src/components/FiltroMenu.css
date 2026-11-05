@@ -128,102 +128,154 @@
 
 
 
-/* CUADRO DESCRIPCION PRENDA */
-.descripcionprenda
-{
+.exit-btn-filtro {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* SECCIONES DEL FILTRO DESPLEGABLE */
+.menu-desplegable-filtro .descripcionprenda,
+.filtro-secciones {
     margin-left: 5%;
     display: flex;
     height: auto;
-    width: 89%;
+    width: 90%;
+    max-width: 90%;
     flex-direction: column;
-    cursor: pointer;
 }
 
-.acordeon .titulo
-{
+.menu-desplegable-filtro .contenedordescripcion,
+.filtro-contenedordescripcion {
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.menu-desplegable-filtro .acordeon,
+.filtro-acordeon {
+    margin-bottom: 1em;
+    width: 100%;
+}
+
+.menu-desplegable-filtro .acordeon .titulo,
+.filtro-acordeon-titulo {
     display: flex;
     justify-content: space-between;
     align-items: center;
     font-family: "DM Sans", sans-serif;
     font-weight: 700;
-    font-size: clamp(1rem, 1vw, 4rem);
+    font-size: clamp(0.95rem, 1.1vw, 1.15rem);
     background-color: transparent;
     border: none;
     border-bottom: 2px black solid;
-    margin-left: 1em;
-    width: 90%;
+    margin-left: 0;
+    width: 100%;
+    padding: 0.6em 0;
     cursor: pointer;
+    box-sizing: border-box;
 }
 
-.acordeon img
-{
-    width: clamp(20px,2vw,20px);
-    height: clamp(10px,2vw,11px);
+.menu-desplegable-filtro .acordeon img,
+.filtro-acordeon img {
+    width: 14px;
+    height: 8px;
     transition: transform 0.3s ease;
+    flex-shrink: 0;
 }
 
-.contenido
-{
-    display: flex;
-    width: 94%;
-    margin-left: 1.8em;
-    font-family: "DM Sans", sans-serif;
-    font-weight: 400;
-    font-size: clamp(1rem, 1vw, 2rem);
-    overflow: hidden;
-    max-height: 0;
-    transition: max-height 0.3s ease;
-    margin-bottom: 0.5rem;
-    margin-top: 0.5rem;
-    flex-direction: column;
-}
-
-.acordeon.activo img
-{
+.menu-desplegable-filtro .acordeon.activo img,
+.filtro-acordeon.activo img {
     transform: rotate(180deg);
 }
 
-.acordeon.activo .contenido
-{
-    max-height: 30rem;
-}
-
-.contenedordescripcion
-{
-    height: 100%;
+.menu-desplegable-filtro .contenido,
+.filtro-acordeon-contenido {
     display: flex;
-    /* como es columna, se centra con justify en eje vertical, si es fila es con align item */
     flex-direction: column;
-    /* para que se estiren al ancho completo */
     align-items: stretch;
+    width: 100%;
+    margin-left: 0;
+    padding: 0.5em 0.2em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 400;
+    font-size: 0.95rem;
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.35s ease;
+    box-sizing: border-box;
 }
 
-.acordeon
-{
-    margin-bottom: 1em;
+.menu-desplegable-filtro .acordeon.activo .contenido,
+.filtro-acordeon.activo .filtro-acordeon-contenido {
+    max-height: 40rem;
+    overflow-y: auto;
 }
 
-
-
-.filtrar-categorias {
-    background-color: black;
+.checkbox-opcion {
+    display: flex;
+    align-items: center;
+    gap: 0.75em;
+    padding: 0.35em 0.2em;
     cursor: pointer;
-    color: white;
-    width: 90%;
-    height: 2em;
-    border-radius: 0.5em;
-    margin-left: 5%;
-    margin-top: 1em;
+    font-family: "DM Sans", sans-serif;
+    font-size: 0.95rem;
+    font-weight: 400;
+    color: #222;
+    user-select: none;
+    line-height: 1.3;
+    transition: color 0.15s ease;
 }
 
-.checkbox-opcion input{
-    margin-right: 0.7em;
+.checkbox-opcion:hover {
+    color: #000;
 }
 
 .checkbox-opcion input[type="checkbox"],
 .checkbox-opcion input[type="radio"] {
     cursor: pointer;
     accent-color: black;
+    width: 1.15em;
+    height: 1.15em;
+    min-width: 1.15em;
+    min-height: 1.15em;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+.checkbox-texto {
+    font-family: "DM Sans", sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.3;
+}
+
+.filtrar-categorias {
+    background-color: black;
+    cursor: pointer;
+    color: white;
+    width: 100%;
+    height: 2.5em;
+    border: none;
+    border-radius: 0.5em;
+    margin-left: 0;
+    margin-top: 1.5em;
+    margin-bottom: 2em;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: 0.05em;
+    transition: opacity 0.2s ease;
+}
+
+.filtrar-categorias:hover {
+    opacity: 0.85;
 }
 
 .etiquetas-filtro {

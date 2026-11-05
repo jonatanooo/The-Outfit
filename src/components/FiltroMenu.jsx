@@ -121,37 +121,43 @@ function FiltroMenu({ onAplicarFiltros, categoriasDisponibles = [], filtrosActiv
 
     <div ref={filtroRef} className={`menu-desplegable-filtro ${filtroAbierto ? 'abierto' : ''}`}>
                 <div className="exitbuttondivfiltro" onClick={() => setFiltroAbierto(false)}>
-                    <a><img src="/ICONOS/EXIT.png" alt="salir" className="exitbutton"/></a>
+                    <button type="button" className="exit-btn-filtro" aria-label="Cerrar menú de filtros">
+                        <img src="/ICONOS/EXIT.png" alt="salir" className="exitbutton"/>
+                    </button>
                 </div>
-                <div className="descripcionprenda">
-                <div className="contenedordescripcion">
+                <div className="filtro-secciones descripcionprenda">
+                <div className="filtro-contenedordescripcion contenedordescripcion">
                     {secciones.map((seccion) => (
-                        <div className={`acordeon  ${abiertoIds.includes(seccion.id) ? 'activo' : ''}`} key={seccion.id}>
-                            <button className='titulo'
-                            onClick={() => toggleAcordeon(seccion.id)}>
+                        <div className={`filtro-acordeon acordeon ${abiertoIds.includes(seccion.id) ? 'activo' : ''}`} key={seccion.id}>
+                            <button
+                                type="button"
+                                className='filtro-acordeon-titulo titulo'
+                                onClick={() => toggleAcordeon(seccion.id)}
+                            >
                                 {seccion.titulo}
                                 <img src="/ICONOS/Flechaabajo.png" alt="desplegar" id="bajar" />
                             </button>
-                            <div className='contenido'>
+                            <div className='filtro-acordeon-contenido contenido'>
                                 {seccion.opciones.map((opcion) => (
                                     <label key={opcion} className='checkbox-opcion'>
                                         <input 
-                                        type={seccion.tipo === "unica" ? "radio" : "checkbox"}
-                                        name={seccion.tipo === "unica" ? seccion.titulo : undefined}
-                                        checked={filtrosSeleccionados[seccion.titulo]?.includes(opcion) || false}
-                                        onChange={() => 
-                                        seccion.tipo === "unica"
-                                        ? seleccionarUnica(seccion.titulo, opcion)
-                                        : toggleFiltro(seccion.titulo, opcion)}
+                                            type={seccion.tipo === "unica" ? "radio" : "checkbox"}
+                                            name={seccion.tipo === "unica" ? seccion.titulo : undefined}
+                                            checked={filtrosSeleccionados[seccion.titulo]?.includes(opcion) || false}
+                                            onChange={() => 
+                                                seccion.tipo === "unica"
+                                                ? seleccionarUnica(seccion.titulo, opcion)
+                                                : toggleFiltro(seccion.titulo, opcion)
+                                            }
                                         />
-                                        {opcion}
+                                        <span className="checkbox-texto">{opcion}</span>
                                     </label>
                                 ))}
                             </div>
                         </div>
                     ))}
                     
-                    <button className='filtrar-categorias' onClick={aplicarFiltros}>FILTRAR</button>
+                    <button type="button" className='filtrar-categorias' onClick={aplicarFiltros}>FILTRAR</button>
                 </div>
     </div>
     </div>

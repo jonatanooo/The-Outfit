@@ -1,5 +1,5 @@
 /* CUADRO DESCRIPCION PRENDA */
-.descripcionprenda
+.prendainfo .descripcionprenda
 {
     margin-left: 5%;
     display: flex;
@@ -9,7 +9,7 @@
     cursor: pointer;
 }
 
-.acordeon .titulo
+.prendainfo .acordeon .titulo
 {
     display: flex;
     justify-content: space-between;
@@ -25,14 +25,14 @@
     cursor: pointer;
 }
 
-.acordeon img
+.prendainfo .acordeon img
 {
     width: clamp(20px,2vw,20px);
     height: clamp(10px,2vw,11px);
     transition: transform 0.3s ease;
 }
 
-.contenido
+.prendainfo .contenido
 {
     display: flex;
     width: 94%;
@@ -48,17 +48,17 @@
     margin-top: 0.5rem;
 }
 
-.acordeon.activo img
+.prendainfo .acordeon.activo img
 {
     transform: rotate(180deg);
 }
 
-.acordeon.activo .contenido
+.prendainfo .acordeon.activo .contenido
 {
     max-height: 30rem;
 }
 
-.contenedordescripcion
+.prendainfo .contenedordescripcion
 {
     height: 100%;
     display: flex;
@@ -69,7 +69,7 @@
     align-items: stretch;
 }
 
-.acordeon
+.prendainfo .acordeon
 {
     margin-bottom: 1em;
 }
