@@ -45,8 +45,20 @@ function normalizarPrivateKey(rawKey) {
     /-----BEGIN (?:RSA )?PRIVATE KEY-----([\s\S]*?)-----END (?:RSA )?PRIVATE KEY-----/
   );
   if (matchPem) {
-    const base64Body = matchPem[1].replace(/\s+/g, '');
+    const base64Body = matchPem[1].replace(/\\+n/g, '').replace(/\s+/g, '');
     const lines = base64Body.match(/.{1,64}/g) || [];
+    return `-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n-----END PRIVATE KEY-----\n`;
+  }
+
+  // Si en Vercel se pegó la clave sin "-----BEGIN PRIVATE KEY-----" ni "-----END PRIVATE KEY-----"
+  const rawBody = key
+    .replace(/-----BEGIN (?:RSA )?PRIVATE KEY-----/g, '')
+    .replace(/-----END (?:RSA )?PRIVATE KEY-----/g, '')
+    .replace(/\\+n/g, '')
+    .replace(/\s+/g, '');
+
+  if (rawBody.length > 100) {
+    const lines = rawBody.match(/.{1,64}/g) || [];
     return `-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n-----END PRIVATE KEY-----\n`;
   }
 
