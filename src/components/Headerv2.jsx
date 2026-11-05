@@ -309,13 +309,6 @@ function Headerv2 () {
                         <li className="part3">CONTACTANOS</li>
                         <li><a href="" className="partinfo">+503 2261-3004</a></li>
                     </ul>
-                    <div className="logout-container">
-                        {!sesionActiva && (
-                            <a className="logout" href="/login">
-                                INICIAR SESI�N
-                            </a>
-                        )}
-                    </div>
                 </div>
             </div>
 
