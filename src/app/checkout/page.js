@@ -1,11 +1,21 @@
 "use client"
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { db } from '@/lib/firebaseClient'
-import { collection, doc, getDocs, setDoc, updateDoc, query, where, limit } from 'firebase/firestore'
+import { db, auth } from '@/lib/firebaseClient'
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  runTransaction,
+  query,
+  where,
+  limit
+} from 'firebase/firestore'
 import { obtenerIdUsuario } from '@/lib/usuario'
+import { esOfertaActiva, calcularPrecioConDescuento } from '@/lib/descuentos'
 import { useCarrito } from '@/lib/CarritoContext'
 import './checkout.css'
 
@@ -36,7 +46,15 @@ function textoDireccion(dir) {
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, cargado, subtotal, subtotalOriginal, totalAhorro, vaciarCarrito } = useCarrito();
+  const {
+    items,
+    cargado,
+    subtotal,
+    subtotalOriginal,
+    totalAhorro,
+    vaciarCarrito,
+    sincronizarPreciosConBD
+  } = useCarrito();
 
   const [idUsuario, setIdUsuario] = useState(null);
   const [verificandoSesion, setVerificandoSesion] = useState(true);
@@ -47,6 +65,7 @@ export default function CheckoutPage() {
   const [cargandoDirecciones, setCargandoDirecciones] = useState(true);
   const [metodoEntrega, setMetodoEntrega] = useState(null); // 'domicilio' | 'tienda'
   const [idDireccionSeleccionada, setIdDireccionSeleccionada] = useState(null);
+  const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState('Tarjeta de crédito');
 
   const [mostrarFormDireccion, setMostrarFormDireccion] = useState(false);
   const [nuevaCalle, setNuevaCalle] = useState('');
@@ -54,7 +73,9 @@ export default function CheckoutPage() {
   const [guardandoDireccion, setGuardandoDireccion] = useState(false);
   const [errorDireccion, setErrorDireccion] = useState('');
 
-  const [procesandoCompra, setProcesandoCompra] = useState(false);
+  // Estados y cerrojo síncrono (useRef) para PREVENCIÓN DE DOBLE COBRO
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const compraEnCursoRef = useRef(false);
   const [errorCompra, setErrorCompra] = useState('');
   const [pedidoResumen, setPedidoResumen] = useState(null);
 
@@ -70,12 +91,20 @@ export default function CheckoutPage() {
     });
   }, [router]);
 
+  // Revalidar precios reales desde Firestore al entrar al checkout
+  useEffect(() => {
+    if (cargado && items.length > 0) {
+      sincronizarPreciosConBD();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargado, paso]);
+
   // Sin productos en el carrito no hay nada que pagar.
   useEffect(() => {
-    if (cargado && items.length === 0 && !pedidoResumen) {
+    if (cargado && items.length === 0 && !pedidoResumen && !isSubmitting) {
       router.push('/carrito');
     }
-  }, [cargado, items.length, pedidoResumen, router]);
+  }, [cargado, items.length, pedidoResumen, isSubmitting, router]);
 
   useEffect(() => {
     if (!idUsuario) return;
@@ -116,7 +145,9 @@ export default function CheckoutPage() {
     setErrorDireccion('');
 
     try {
-      const nuevoId = Date.now();
+      // Generación de ID único y seguro mediante doc(collection(db, ...)).id (reemplaza Date.now())
+      const dirRef = doc(collection(db, 'Direcciones'));
+      const nuevoId = dirRef.id;
       const nuevaDir = {
         ID_Direccion: nuevoId,
         ID_User: idUsuario,
@@ -124,7 +155,7 @@ export default function CheckoutPage() {
         Departamento: nuevoDepartamento.trim(),
         Fecha_Creacion: new Date().toISOString()
       };
-      await setDoc(doc(db, 'Direcciones', String(nuevoId)), nuevaDir);
+      await setDoc(dirRef, nuevaDir);
 
       setDirecciones((prev) => [...prev, nuevaDir]);
       setMetodoEntrega('domicilio');
@@ -140,86 +171,222 @@ export default function CheckoutPage() {
     }
   }
 
-  async function comprar(metodoPago) {
-    setProcesandoCompra(true);
-    setErrorCompra('');
+  /**
+   * Respaldo transaccional en cliente con runTransaction en caso de que el endpoint de servidor
+   * no esté disponible. Recalcula precios desde Firestore y descuenta stock atómicamente.
+   */
+  async function ejecutarTransaccionSeguraFirestore(metodoPago) {
+    let idEstado = 1;
+    const qEstado = query(collection(db, 'Estado_Pedido'), where('Estado', '==', 'Pendiente'), limit(1));
+    const snapEstado = await getDocs(qEstado);
+    if (!snapEstado.empty) {
+      idEstado = snapEstado.docs[0].data().ID_EstadoPedido ?? 1;
+    }
 
-    try {
-      // 1. Obtener ID de estado pendiente
-      let idEstado = 1;
-      const qEstado = query(collection(db, 'Estado_Pedido'), where('Estado', '==', 'Pendiente'), limit(1));
-      const snapEstado = await getDocs(qEstado);
-      if (!snapEstado.empty) {
-        idEstado = snapEstado.docs[0].data().ID_EstadoPedido ?? 1;
+    // Localizar referencias de Variante_Producto e Inventario
+    const referenciasItems = [];
+    for (const item of items) {
+      const opcionesVar = [item.idVariante, String(item.idVariante)];
+      if (!isNaN(Number(item.idVariante))) opcionesVar.push(Number(item.idVariante));
+
+      const [varSnap, invSnap] = await Promise.all([
+        getDocs(query(collection(db, 'Variante_Producto'), where('ID_Variante', 'in', Array.from(new Set(opcionesVar))), limit(1))),
+        getDocs(query(collection(db, 'Inventario'), where('ID_Variante', 'in', Array.from(new Set(opcionesVar))), limit(1))),
+      ]);
+
+      if (varSnap.empty || invSnap.empty) {
+        throw new Error(`No se encontró información o inventario para "${item.nombre}".`);
       }
 
-      // 2. Crear Pedido
-      const idPedido = Date.now();
-      const nuevoPedido = {
+      const varData = varSnap.docs[0].data();
+      let prodRef = null;
+      if (varData.ID_Producto != null) {
+        const opcionesProd = [varData.ID_Producto, String(varData.ID_Producto)];
+        if (!isNaN(Number(varData.ID_Producto))) opcionesProd.push(Number(varData.ID_Producto));
+        const prodSnap = await getDocs(query(collection(db, 'Productos'), where('ID_Producto', 'in', Array.from(new Set(opcionesProd))), limit(1)));
+        if (!prodSnap.empty) prodRef = prodSnap.docs[0].ref;
+      }
+
+      referenciasItems.push({
+        item,
+        varRef: varSnap.docs[0].ref,
+        invRef: invSnap.docs[0].ref,
+        prodRef,
+      });
+    }
+
+    return await runTransaction(db, async (transaction) => {
+      const datosLeidos = [];
+      for (const refObj of referenciasItems) {
+        const varDoc = await transaction.get(refObj.varRef);
+        const invDoc = await transaction.get(refObj.invRef);
+        const prodDoc = refObj.prodRef ? await transaction.get(refObj.prodRef) : null;
+        datosLeidos.push({
+          ...refObj,
+          varData: varDoc.data(),
+          invData: invDoc.data(),
+          prodData: prodDoc?.exists() ? prodDoc.data() : null,
+        });
+      }
+
+      let subtotalOrigCalc = 0;
+      let subtotalFinalCalc = 0;
+      const itemsValidados = [];
+
+      for (const entry of datosLeidos) {
+        const cantidadSolicitada = Math.floor(Number(entry.item.cantidad ?? 1));
+        const stockActual = Number(entry.invData?.Cantidad_Disponible ?? 0);
+        const nombreReal = entry.prodData?.Nombre_Producto || entry.item.nombre;
+
+        if (stockActual < cantidadSolicitada) {
+          throw new Error(`Stock insuficiente para "${nombreReal}". Disponible: ${stockActual}.`);
+        }
+
+        const precioBase = Number(entry.varData?.Precio_Actual ?? 0);
+        let enOferta = false;
+        let porcentaje = 0;
+        if (esOfertaActiva(entry.varData)) {
+          enOferta = true;
+          porcentaje = Number(entry.varData.Porcentaje_Descuento ?? 0);
+        } else if (entry.prodData && esOfertaActiva(entry.prodData)) {
+          enOferta = true;
+          porcentaje = Number(entry.prodData.Porcentaje_Descuento ?? 0);
+        }
+
+        const precioReal = enOferta ? calcularPrecioConDescuento(precioBase, porcentaje) : precioBase;
+        subtotalOrigCalc = Math.round((subtotalOrigCalc + precioBase * cantidadSolicitada) * 100) / 100;
+        subtotalFinalCalc = Math.round((subtotalFinalCalc + precioReal * cantidadSolicitada) * 100) / 100;
+
+        itemsValidados.push({
+          ...entry.item,
+          nombre: nombreReal,
+          precioOriginal: precioBase,
+          precio: precioReal,
+          enOferta,
+          porcentajeDescuento: enOferta ? porcentaje : 0,
+          cantidad: cantidadSolicitada,
+          invRef: entry.invRef,
+          stockAnterior: stockActual,
+          nuevoStock: stockActual - cantidadSolicitada,
+        });
+      }
+
+      const ahorroCalc = Math.max(0, Math.round((subtotalOrigCalc - subtotalFinalCalc) * 100) / 100);
+      const ahoraIso = new Date().toISOString();
+
+      const pedidoRef = doc(collection(db, 'Pedido'));
+      const idPedido = pedidoRef.id;
+
+      transaction.set(pedidoRef, {
         ID_Pedido: idPedido,
         ID_User: idUsuario,
         ID_Direccion: metodoEntrega === 'domicilio' ? idDireccionSeleccionada : null,
-        Fecha_Pedido: new Date().toISOString(),
-        Subtotal: subtotalOriginal,
-        Descuento: totalAhorro,
-        Total: subtotal,
+        Fecha_Pedido: ahoraIso,
+        Subtotal: subtotalOrigCalc,
+        Descuento: ahorroCalc,
+        Total: subtotalFinalCalc,
         ID_EstadoPedidoo: idEstado
-      };
-      await setDoc(doc(db, 'Pedido', String(idPedido)), nuevoPedido);
+      });
 
-      // 3. Crear detalles de pedido y descontar inventario
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const idDetalle = Date.now() + i;
-        await setDoc(doc(db, 'Pedido_Detalle', String(idDetalle)), {
-          ID_PedidoDetalle: idDetalle,
+      for (const itemVal of itemsValidados) {
+        const detalleRef = doc(collection(db, 'Pedido_Detalle'));
+        transaction.set(detalleRef, {
+          ID_PedidoDetalle: detalleRef.id,
           ID_Pedido: idPedido,
-          ID_Variante: item.idVariante,
-          Cantidad: item.cantidad,
-          Precio_Unitario: item.precio,
-          Subtotal: item.precio * item.cantidad
+          ID_Variante: itemVal.idVariante,
+          Cantidad: itemVal.cantidad,
+          Precio_Unitario: itemVal.precio,
+          Precio_Original: itemVal.precioOriginal,
+          Subtotal: Math.round(itemVal.precio * itemVal.cantidad * 100) / 100,
         });
 
-        // Descontar inventario para cada variante
-        try {
-          const qInv = query(
-            collection(db, 'Inventario'),
-            where('ID_Variante', 'in', [item.idVariante, Number(item.idVariante), String(item.idVariante)])
-          );
-          const snapInv = await getDocs(qInv);
-          if (!snapInv.empty) {
-            const invDoc = snapInv.docs[0];
-            const actual = Number(invDoc.data().Cantidad_Disponible ?? 0);
-            const nuevaCantidad = Math.max(0, actual - Number(item.cantidad ?? 1));
-            await updateDoc(invDoc.ref, {
-              Cantidad_Disponible: nuevaCantidad,
-              Fecha_Actualizacion: new Date().toISOString()
-            });
-          }
-        } catch (errInv) {
-          console.error('Error al descontar inventario:', errInv);
-        }
+        transaction.update(itemVal.invRef, {
+          Cantidad_Disponible: itemVal.nuevoStock,
+          Fecha_Actualizacion: ahoraIso,
+        });
+
+        const auditInvRef = doc(collection(db, 'Auditoria_Inventario'));
+        transaction.set(auditInvRef, {
+          ID_Auditoria: auditInvRef.id,
+          ID_Variante: itemVal.idVariante,
+          ID_UserAccion: idUsuario,
+          Cantidad_Anterior: itemVal.stockAnterior,
+          Cantidad_Nueva: itemVal.nuevoStock,
+          Tipo_Movimiento: 'Salida',
+          Motivo: `Venta en línea (Pedido #${idPedido})`,
+          Fecha_Accion: ahoraIso,
+        });
       }
 
-      // 4. Registrar Transacción de Pago
-      const idTrans = Date.now() + 50;
-      await setDoc(doc(db, 'Transacciones_Pago', String(idTrans)), {
-        ID_Transaccion: idTrans,
+      const transRef = doc(collection(db, 'Transacciones_Pago'));
+      transaction.set(transRef, {
+        ID_Transaccion: transRef.id,
         ID_Pedido: idPedido,
-        Monto: subtotal,
+        Monto: subtotalFinalCalc,
         Metodo_Pago: metodoPago,
-        Fecha_Transaccion: new Date().toISOString(),
+        Fecha_Transaccion: ahoraIso,
         Estado_transaccion: 'Aprobado'
       });
+
+      return {
+        idPedido,
+        subtotalOriginal: subtotalOrigCalc,
+        totalAhorro: ahorroCalc,
+        total: subtotalFinalCalc,
+        items: itemsValidados.map(({ invRef, nuevoStock, ...rest }) => rest),
+      };
+    });
+  }
+
+  async function comprar(metodoPago = metodoPagoSeleccionado) {
+    // Bloqueo inmediato síncrono y de estado para impedir doble o triple clic (Prevención de Doble Cobro)
+    if (compraEnCursoRef.current || isSubmitting) return;
+    compraEnCursoRef.current = true;
+    setIsSubmitting(true);
+    setErrorCompra('');
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          items: items.map((i) => ({
+            idVariante: i.idVariante,
+            cantidad: i.cantidad,
+            nombre: i.nombre,
+            talla: i.talla,
+            imagen: i.imagen,
+          })),
+          metodoEntrega,
+          idDireccionSeleccionada,
+          metodoPago,
+        }),
+      });
+
+      let resultadoCompra = null;
+      if (response.ok) {
+        resultadoCompra = await response.json();
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        if (response.status >= 400 && response.status < 500 && errData.error) {
+          throw new Error(errData.error);
+        }
+        // Fallback transaccional atómico con runTransaction si el servidor API devolvió error 500
+        resultadoCompra = await ejecutarTransaccionSeguraFirestore(metodoPago);
+      }
 
       const direccionElegida = direcciones.find((d) => d.ID_Direccion === idDireccionSeleccionada);
 
       setPedidoResumen({
-        id: idPedido,
-        items: [...items],
-        subtotalOriginal,
-        totalAhorro,
-        total: subtotal,
+        id: resultadoCompra.idPedido,
+        items: resultadoCompra.items,
+        subtotalOriginal: resultadoCompra.subtotalOriginal,
+        totalAhorro: resultadoCompra.totalAhorro,
+        total: resultadoCompra.total,
         entrega: metodoEntrega === 'tienda' ? DIRECCION_TIENDA : textoDireccion(direccionElegida),
         metodoEntrega,
         pago: metodoPago,
@@ -230,12 +397,13 @@ export default function CheckoutPage() {
     } catch (err) {
       console.error('Error en proceso de compra:', err);
       setErrorCompra('Hubo un error al procesar la compra: ' + err.message);
-    } finally {
-      setProcesandoCompra(false);
+      compraEnCursoRef.current = false;
+      setIsSubmitting(false);
     }
   }
 
   function atras() {
+    if (isSubmitting) return;
     if (paso === 1) router.push('/carrito');
     else setPaso((p) => p - 1);
   }
@@ -413,8 +581,11 @@ export default function CheckoutPage() {
                       <button
                         type="button"
                         className="checkout-metodo-pago"
-                        onClick={() => comprar('Tarjeta de crédito')}
-                        disabled={procesandoCompra}
+                        style={{
+                          outline: metodoPagoSeleccionado === 'Tarjeta de crédito' ? '2px solid #000' : 'none',
+                        }}
+                        onClick={() => setMetodoPagoSeleccionado('Tarjeta de crédito')}
+                        disabled={isSubmitting}
                       >
                         <IconTarjeta className="checkout-metodo-icono" />
                         TARJETA DE CRÉDITO
@@ -422,14 +593,18 @@ export default function CheckoutPage() {
                       <button
                         type="button"
                         className="checkout-metodo-pago"
-                        onClick={() => comprar('Tarjeta de regalo')}
-                        disabled={procesandoCompra}
+                        style={{
+                          outline: metodoPagoSeleccionado === 'Tarjeta de regalo' ? '2px solid #000' : 'none',
+                        }}
+                        onClick={() => setMetodoPagoSeleccionado('Tarjeta de regalo')}
+                        disabled={isSubmitting}
                       >
                         <IconRegalo className="checkout-metodo-icono" />
                         TARJETA DE REGALO
                       </button>
                     </div>
-                    {procesandoCompra && <p className="checkout-cargando">Procesando compra...</p>}
+
+                    {isSubmitting && <p className="checkout-cargando">Verificando stock y procesando compra de forma segura...</p>}
                     {errorCompra && <p className="checkout-error">{errorCompra}</p>}
                   </div>
                 )}
@@ -492,7 +667,7 @@ export default function CheckoutPage() {
             </div>
 
             <div className="checkout-barra-inferior">
-              <button type="button" className="checkout-atras" onClick={atras}>
+              <button type="button" className="checkout-atras" onClick={atras} disabled={isSubmitting}>
                 ATRÁS
               </button>
               <div className="checkout-total-inferior">
@@ -509,7 +684,14 @@ export default function CheckoutPage() {
                   CONTINUAR
                 </button>
               ) : (
-                <span className="checkout-hint">Elige un método de pago para completar la compra</span>
+                <button
+                  type="button"
+                  className="checkout-continuar"
+                  disabled={isSubmitting}
+                  onClick={() => comprar(metodoPagoSeleccionado)}
+                >
+                  {isSubmitting ? 'PROCESANDO...' : 'REALIZAR COMPRA'}
+                </button>
               )}
             </div>
           </>

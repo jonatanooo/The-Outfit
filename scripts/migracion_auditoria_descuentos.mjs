@@ -1,27 +1,49 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import fs from 'fs';
-import path from 'path';
 
-// Cargar serviceAccountKey.json
-const serviceAccountPath = path.resolve(process.cwd(), 'serviceAccountKey.json');
-if (!fs.existsSync(serviceAccountPath)) {
-  console.error('❌ No se encontró serviceAccountKey.json en la raíz del proyecto.');
+function inicializarAdminDesdeEntorno() {
+  if (getApps().length > 0) return;
+
+  const projectId =
+    process.env.FIREBASE_ADMIN_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY
+    ? process.env.FIREBASE_ADMIN_PRIVATE_KEY.replace(/\\n/g, '\n')
+    : undefined;
+
+  if (projectId && clientEmail && privateKey) {
+    initializeApp({
+      credential: cert({ projectId, clientEmail, privateKey }),
+      projectId,
+    });
+    return;
+  }
+
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    if (serviceAccount.private_key) {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
+    initializeApp({
+      credential: cert(serviceAccount),
+      projectId: serviceAccount.project_id || projectId,
+    });
+    return;
+  }
+
+  console.error(
+    '❌ Faltan las variables de entorno FIREBASE_ADMIN_PROJECT_ID, FIREBASE_ADMIN_CLIENT_EMAIL y FIREBASE_ADMIN_PRIVATE_KEY (ejecuta con node --env-file=.env.local).'
+  );
   process.exit(1);
 }
 
-const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
-
-if (!getApps().length) {
-  initializeApp({
-    credential: cert(serviceAccount)
-  });
-}
+inicializarAdminDesdeEntorno();
 
 const db = getFirestore();
 
 async function migrarAuditoriaDescuentos() {
-  console.log('🚀 Iniciando verificación y migración de tabla/colección Auditoria_Descuentos...');
+  console.log('🚀 Iniciando verificación y migración de colección Auditoria_Descuentos...');
 
   const colRef = db.collection('Auditoria_Descuentos');
   const snap = await colRef.limit(1).get();
@@ -54,7 +76,7 @@ async function migrarAuditoriaDescuentos() {
     });
     console.log(`✅ Colección "Auditoria_Descuentos" inicializada con documento de control #${idInicial}.`);
   } else {
-    console.log(`✅ Colección "Auditoria_Descuentos" ya existe y cuenta con registros.`);
+    console.log('✅ Colección "Auditoria_Descuentos" ya existe y cuenta con registros.');
   }
 
   console.log('🎉 Migración completada.');
@@ -64,4 +86,3 @@ migrarAuditoriaDescuentos().catch((err) => {
   console.error('❌ Error en la migración:', err);
   process.exit(1);
 });
-

@@ -3,7 +3,7 @@ import { forwardRef, useImperativeHandle, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebaseClient';
 import { signOut, updateProfile } from 'firebase/auth';
-import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import './PerfilPanel.css';
 
 // El padre (Header) llama a ref.current.refrescar() justo antes de abrir el panel,
@@ -33,21 +33,47 @@ const PerfilPanel = forwardRef(function PerfilPanel({ abierto, usuario, onClose,
             if (auth.currentUser) {
                 await updateProfile(auth.currentUser, { displayName: nombre });
 
-                // Actualizar en Firestore colección User
+                // Actualizar en Firestore colección User y registrar en Auditoria_Actualizacion_User
+                let datosPrevios = null;
+                let idUserTarget = auth.currentUser.uid;
                 try {
-                    await updateDoc(doc(db, 'User', auth.currentUser.uid), {
-                        Nombres: nombre,
-                        Telefono: telefono,
-                    });
+                    const directRef = doc(db, 'User', auth.currentUser.uid);
+                    const directSnap = await getDoc(directRef);
+                    if (directSnap.exists()) {
+                        datosPrevios = directSnap.data();
+                        idUserTarget = datosPrevios.ID_User ?? directSnap.id;
+                        await updateDoc(directRef, {
+                            Nombres: nombre,
+                            Telefono: telefono,
+                        });
+                    } else {
+                        throw new Error('Buscar por auth_id');
+                    }
                 } catch (errDoc) {
                     const q = query(collection(db, 'User'), where('auth_id', '==', auth.currentUser.uid));
                     const snap = await getDocs(q);
                     if (!snap.empty) {
+                        datosPrevios = snap.docs[0].data();
+                        idUserTarget = datosPrevios.ID_User ?? snap.docs[0].id;
                         await updateDoc(doc(db, 'User', snap.docs[0].id), {
                             Nombres: nombre,
                             Telefono: telefono,
                         });
                     }
+                }
+
+                try {
+                    const auditRef = doc(collection(db, 'Auditoria_Actualizacion_User'));
+                    await setDoc(auditRef, {
+                        ID_Auditoria: auditRef.id,
+                        ID_User: idUserTarget,
+                        ID_UserAccion: idUserTarget,
+                        ValorAntiguo: `Nombre: ${datosPrevios?.Nombres || ''}, Teléfono: ${datosPrevios?.Telefono || ''}`,
+                        ValorNuevo: `Nombre: ${nombre}, Teléfono: ${telefono}`,
+                        Fecha_Registro: new Date().toISOString(),
+                    });
+                } catch (errAudit) {
+                    console.error('Error guardando Auditoria_Actualizacion_User:', errAudit);
                 }
             }
             setMensaje({ tipo: 'ok', texto: 'Perfil actualizado.' });

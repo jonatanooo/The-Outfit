@@ -1,0 +1,145 @@
+================================================================================
+AUDITORÍA DE CIBERSEGURIDAD - PROYECTO: THE OUTFIT (the-outfit-next)
+Fecha del análisis: 2026-11-03
+Alcance: Revisión estática exhaustiva del código fuente y configuración
+================================================================================
+
+--------------------------------------------------------------------------------
+1. CATEGORÍA: CONTROL DE ACCESO ROTO Y AUTORIZACIÓN (OWASP A01)
+--------------------------------------------------------------------------------
+
+1.1. Bypass total del Middleware / Proxy de protección de rutas administrativas
+- Archivo afectado: src/proxy.js (Líneas 13-17)
+- Riesgo: La función proxy() retorna incondicionalmente NextResponse.next() sin validar tokens de sesión, cookies ni roles en el servidor para las rutas /admin, /Inventario, /transacciones, /reportes, /empleados y /empleado. Cualquier usuario anónimo recibe el código HTML y los bundles JavaScript de los paneles administrativos directamente desde el servidor.
+
+1.2. Ausencia total de verificación de autenticación y rol en el panel de Inventario
+- Archivo afectado: src/app/Inventario/page.js (Líneas 93-335 y 264-266)
+- Riesgo: El componente AdminInventario nunca verifica si existe un usuario autenticado en Firebase Auth ni comprueba si posee el rol de administrador antes de ejecutar cargarVariantes() o renderizar la interfaz. Cualquier visitante no autenticado que navegue a /Inventario visualiza el inventario completo, historial de auditoría y los controles administrativos.
+
+1.3. Ausencia total de verificación de autenticación y rol en el panel de Transacciones
+- Archivo afectado: src/app/transacciones/page.js (Líneas 9-30 y 46-227)
+- Riesgo: El componente AdminTransacciones ejecuta cargarPedidos() y cargarEstados() al montarse sin comprobar sesión ni permisos. Permite a cualquier usuario acceder a la vista de pedidos, estados financieros y datos personales de los clientes (nombres, teléfonos, DUI y direcciones de entrega).
+
+1.4. Ausencia total de verificación de autenticación y rol en el panel de Empleados / Usuarios
+- Archivo afectado: src/app/empleados/page.js (Líneas 56-91)
+- Riesgo: El componente EmpleadosPage descarga y muestra la colección completa "User" al montarse sin validar autenticación ni privilegios de administrador, exponiendo la gestión de usuarios, roles, estados de cuenta (activo/baneado) y datos sensibles (DUI y correos) en el cliente.
+
+1.5. Verificación de roles insegura basada en correo electrónico y atributos mutables en cliente
+- Archivos afectados:
+  * src/app/admin/page.js (Líneas 23-45)
+  * src/app/empleado/page.js (Líneas 22-47)
+  * src/app/reportes/page.js (Líneas 202-224)
+  * src/app/configuracion/page.js (Líneas 26-48)
+  * src/app/login/page.js (Líneas 118-145)
+- Riesgo: La autorización administrativa depende de lecturas ejecutadas en el navegador sobre la colección "User" buscando por UID, auth_id o Correo electrónico, y evaluando campos de documento como Puesto, Rol, ID_Rol o Es_Empleado. Al realizarse en el cliente y permitir emparejamiento por correo electrónico sin verificar email_verified, se expone la lógica de autorización a manipulación del lado del cliente o suplantación de cuenta.
+
+1.6. Vinculación de identidad (ID_User) mediante correo electrónico no verificado (Account Takeover / IDOR)
+- Archivo afectado: src/lib/usuario.js (Líneas 33-41 y 78-85)
+- Riesgo: Las funciones obtenerIdUsuario() y obtenerPerfilUsuario() utilizan el correo electrónico (user.email) como mecanismo de respaldo cuando no encuentran coincidencia por UID. Si existe un registro precreado en la colección "User" (por ejemplo, creado desde el panel de empleados sin auth_id), un atacante que registre ese correo sin verificación previa asume automáticamente el ID_User, historial, direcciones y privilegios asociados a ese perfil.
+
+--------------------------------------------------------------------------------
+2. CATEGORÍA: FALLOS CRIPTOGRÁFICOS Y GESTIÓN DE SECRETOS (OWASP A02)
+--------------------------------------------------------------------------------
+
+2.1. Almacenamiento de contraseñas por defecto en texto plano y hardcodeadas
+- Archivo afectado: src/app/empleados/page.js (Línea 160)
+- Riesgo: Al crear un nuevo usuario/empleado desde el panel administrativo, se almacena literalmente el campo Contrasena: '12345' en texto plano dentro del documento de la colección "User" en Firestore. Expone credenciales predecibles y sin hash a cualquier lector de la colección.
+
+2.2. Clave privada de cuenta de servicio de Firebase Admin almacenada en la raíz del proyecto
+- Archivos afectados:
+  * serviceAccountKey.json (Raíz del proyecto)
+  * src/lib/firebaseAdmin.js (Líneas 26-44)
+  * scripts/migracion_auditoria_descuentos.mjs (Líneas 7-18)
+- Riesgo: El archivo serviceAccountKey.json reside físicamente en el directorio de trabajo con privilegios administrativos totales (bypass completo de reglas de seguridad de Firestore y Firebase Auth). Cualquier filtración del entorno local, empaquetado accidental en contenedores/builds o lectura de archivos compromete la totalidad de la infraestructura en la nube.
+
+2.3. Credenciales y claves de API hardcodeadas en el código fuente
+- Archivos afectados:
+  * src/lib/firebaseClient.js (Líneas 6-13)
+  * src/lib/storage.js (Líneas 5-7)
+  * script.mjs (Línea 3)
+  * fix-tallas.mjs (Línea 3)
+- Riesgo: Las claves de conexión a Firebase y Supabase se encuentran escritas directamente en el código fuente como valores por defecto o constantes en scripts versionados en Git, impidiendo la rotación limpia de credenciales por entorno y exponiendo los endpoints de almacenamiento en el historial del repositorio.
+
+--------------------------------------------------------------------------------
+3. CATEGORÍA: DISEÑO INSEGURO Y LÓGICA DE NEGOCIO (OWASP A04)
+--------------------------------------------------------------------------------
+
+3.1. Manipulación de precios, descuentos y totales desde localStorage en el proceso de compra
+- Archivos afectados:
+  * src/lib/CarritoContext.js (Líneas 14-35 y 72-85)
+  * src/app/checkout/page.js (Líneas 39, 158-181 y 205-213)
+- Riesgo: El carrito de compras se almacena íntegramente en localStorage bajo la clave 'the-outfit-carrito' incluyendo precio, precioOriginal y stockDisponible. Durante el checkout (función comprar()), el cliente toma directamente esos precios del estado local (derivado de localStorage) sin recalcularlos ni validarlos en el servidor contra la base de datos. Un usuario malintencionado puede modificar el precio en localStorage (por ejemplo, a $0.01 o $0.00) antes de confirmar la compra y registrar el pedido a ese monto alterado.
+
+3.2. Simulación de pago sin pasarela ni verificación transaccional en servidor
+- Archivo afectado: src/app/checkout/page.js (Líneas 204-213)
+- Riesgo: El cliente escribe directamente en la colección "Transacciones_Pago" un documento con Estado_transaccion: 'Aprobado' sin que medie ninguna validación de cobro real ni webhook firmado por un procesador de pagos. Permite generar pedidos marcados como pagados y descontar stock sin haber realizado ningún pago real.
+
+3.3. Condición de carrera (Race Condition) y manipulación directa de stock desde el cliente
+- Archivo afectado: src/app/checkout/page.js (Líneas 184-201)
+- Riesgo: El descuento de inventario se ejecuta desde el navegador leyendo Cantidad_Disponible y sobrescribiéndola mediante updateDoc() sin transacciones atómicas en servidor. Además de permitir condiciones de carrera en compras simultáneas, no impide finalizar la compra aunque el stock real en base de datos ya sea cero (solo aplica Math.max(0, actual - cantidad) después de haber creado el pedido).
+
+3.4. Generación predecible de identificadores mediante Date.now() y riesgo de colisión/IDOR
+- Archivos afectados:
+  * src/app/checkout/page.js (Líneas 119, 157, 173 y 205)
+  * src/app/Inventario/page.js (Líneas 197, 579, 898, 911, 934, 1204, 1228 y 1338)
+  * src/app/empleados/page.js (Líneas 153 y 218)
+  * src/app/register/page.js (Líneas 128-138)
+- Riesgo: El uso de timestamps en milisegundos (Date.now()) o contadores secuenciales calculados en el cliente para ID_Pedido, ID_User, ID_Direccion, ID_Variante e ID_Foto genera identificadores predecibles y enumerables, además de provocar colisiones de documentos si dos usuarios ejecutan una operación en el mismo milisegundo.
+
+3.5. Verificación de cuentas baneadas realizada únicamente en el cliente después de autenticar
+- Archivos afectados:
+  * src/app/login/page.js (Líneas 112-135)
+  * src/components/Header.jsx (Líneas 144-160)
+- Riesgo: Un usuario con ID_EstadoUsuario === 2 (Baneado) logra autenticarse exitosamente en Firebase Auth (obteniendo un ID Token válido) y solo después el código JavaScript del navegador consulta Firestore y ejecuta signOut(auth). Un usuario baneado puede utilizar directamente el token de Firebase Auth contra las APIs de Firebase/Firestore sin pasar por la interfaz web.
+
+3.6. Política de complejidad de contraseña omitida en el flujo de restablecimiento de contraseña
+- Archivo afectado: src/app/restablecer-password/page.js (Líneas 39-42)
+- Riesgo: Mientras el registro (src/app/register/page.js, líneas 69-77) exige mayúsculas, minúsculas, números y símbolos, la página de restablecimiento solo valida password.length < 8. Permite a cualquier usuario evadir los requisitos de complejidad cambiando su contraseña mediante el flujo de recuperación.
+
+3.7. Funcionalidad de "Mantener Sesión" declarada pero no implementada en la gestión de persistencia
+- Archivo afectado: src/app/login/page.js (Líneas 74 y 248-253)
+- Riesgo: El estado mantenerSesion captura el valor del checkbox en la interfaz, pero nunca se utiliza con setPersistence() de Firebase Auth. Por defecto, Firebase Auth persiste la sesión de forma indefinida en IndexedDB/localStorage incluso en equipos compartidos aunque el usuario deje desmarcado el checkbox.
+
+--------------------------------------------------------------------------------
+4. CATEGORÍA: CONFIGURACIÓN INCORRECTA DE SEGURIDAD Y EXPOSICIÓN DE DATOS (OWASP A05)
+--------------------------------------------------------------------------------
+
+4.1. Descarga masiva de colecciones completas al cliente (Exposición excesiva de datos y DoS lógico)
+- Archivos afectados:
+  * src/app/transacciones/page.js (Líneas 52-76)
+  * src/app/reportes/page.js (Líneas 63-77)
+  * src/app/favoritos/page.js (Líneas 90-106)
+  * src/components/ListadoPrendas.jsx (Líneas 14-32)
+  * src/components/Buscador.jsx (Líneas 32-35)
+- Riesgo: Múltiples vistas (incluyendo vistas de cliente como Favoritos, ListadoPrendas y Buscador) ejecutan getDocs(collection(db, ...)) sin filtros ni límites sobre colecciones enteras (Productos, Variante_Producto, Inventario, Pedido, User, Direcciones, Transacciones_Pago) para filtrarlas en memoria en el navegador. Esto expone todos los campos de los documentos en el tráfico de red del cliente y degrada severamente el rendimiento o agota la cuota de lecturas de Firestore.
+
+4.2. Subida directa de archivos desde el cliente a un bucket público con clave compartida y sin validación en servidor
+- Archivos afectados:
+  * src/lib/storage.js (Líneas 18-38)
+  * src/lib/imagenes.js (Líneas 12-15)
+  * src/app/Inventario/page.js (Líneas 651-658 y 1245-1253)
+- Riesgo: La subida a Supabase Storage se realiza directamente desde el navegador usando una API key pública compartida mediante una petición POST sin autenticación de usuario administrador en Supabase. Además, la validación de tipo MIME (archivo.type.startsWith('image/')) y extensión ocurre únicamente en el cliente, permitiendo que un atacante utilice la clave expuesta para subir archivos arbitrarios o sobrescribir objetos en el bucket fotos-productos.
+
+4.3. Ausencia de cabeceras de seguridad HTTP en la configuración de Next.js
+- Archivo afectado: next.config.mjs (Líneas 1-6)
+- Riesgo: La configuración de Next.js está vacía y no define cabeceras de seguridad críticas como Content-Security-Policy (CSP), X-Frame-Options, X-Content-Type-Options, Referrer-Policy ni Strict-Transport-Security (HSTS), dejando la aplicación expuesta a ataques de clickjacking e inyección de recursos externos.
+
+4.4. Filtración de identificadores de pedidos hacia un servicio externo de terceros
+- Archivo afectado: src/app/transacciones/page.js (Líneas 600-605)
+- Riesgo: El código genera códigos QR invocando directamente la URL externa https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=PEDIDO-${detalle.id}, enviando metadatos de pedidos internos y direcciones IP de los administradores a un servidor de terceros fuera del control de la organización.
+
+4.5. Exposición de mensajes de error internos de base de datos y autenticación al usuario final
+- Archivos afectados:
+  * src/app/login/page.js (Líneas 94 y 153)
+  * src/app/register/page.js (Línea 167)
+  * src/app/checkout/page.js (Líneas 137 y 232)
+  * src/app/empleados/page.js (Líneas 173, 233 y 258)
+  * src/app/transacciones/page.js (Líneas 222, 369 y 470)
+  * src/app/reportes/page.js (Líneas 184 y 376)
+- Riesgo: Se concatenan y renderizan directamente en la interfaz (o mediante alert()) las propiedades error.message devueltas por Firebase Auth y Firestore, revelando detalles internos de la estructura de colecciones, permisos y configuración del backend a los usuarios finales.
+
+4.6. Ausencia de archivo de reglas de seguridad de Firestore y Storage versionado en el proyecto
+- Archivo afectado: Raíz del proyecto (ausencia de firestore.rules y storage.rules)
+- Riesgo: No existe definición versionada ni auditada de las reglas de seguridad de Firestore ni de Firebase Storage en el repositorio, dificultando garantizar que las colecciones sensibles (User, Pedido, Transacciones_Pago, Auditoria, Auditoria_Descuentos, Auditoria_Inventario) tengan restringida la lectura y escritura directa desde clientes no autorizados.
+================================================================================
+
