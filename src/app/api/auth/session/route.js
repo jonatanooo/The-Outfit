@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
-import { db } from '@/lib/firebaseClient';
-import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
 
@@ -160,6 +158,8 @@ async function buscarDocumentoUsuario(uid, email) {
   } catch {
     // Intento B: Respaldo con Firebase SDK (`db`) cuando Admin SDK no tiene llave en Preview/Production
     try {
+      const { db } = await import('@/lib/firebaseClient');
+      const { collection, doc, getDoc, getDocs, query, setDoc, where } = await import('firebase/firestore');
       const directSnap = await getDoc(doc(db, 'User', uid));
       if (directSnap.exists()) {
         return { userData: directSnap.data(), docId: directSnap.id };

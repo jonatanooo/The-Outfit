@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
-import { db } from '@/lib/firebaseClient';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 
 const SESSION_COOKIE_NAME = '__session';
 
@@ -115,6 +113,8 @@ async function verificarSesionYRolEnServidor(tokenValue) {
     }
   } catch {
     try {
+      const { db } = await import('@/lib/firebaseClient');
+      const { collection, doc, getDoc, getDocs, query, where } = await import('firebase/firestore');
       const directSnap = await getDoc(doc(db, 'User', uid));
       if (directSnap.exists()) {
         userData = directSnap.data();
