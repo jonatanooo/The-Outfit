@@ -12,7 +12,7 @@ export default function Home() {
                 {/* <!-- section lo ocupamos porque es uan division tematica --> */}
         <section className="videobanner">
             <video className="hero-video" autoPlay muted loop playsInline preload="auto">
-                <source src="/Videos/VideoPasarela.mov" type="video/mp4"/>
+                <source src="https://res.cloudinary.com/elcfbtuk/video/upload/f_auto,q_auto:best/v1793894591/VideoPasarela.mov" type="video/mp4" />
             </video>
         </section>
 
@@ -23,21 +23,15 @@ export default function Home() {
         </section>
 
         <section className="promobanner">
-        <div className="bannerfotos">
-            {/* <!-- foto 1 --> */}
-            <div>
-                <a href="#">
-                    <img src="/Fotos/02142004104-a5.jpg" alt="" className="banners"/>
-                </a>
-
-                <a href="">
-                </a>
-            </div> 
-            {/* <!-- foto 2 --> */}
-            <div>
-                <a href="#"><img src="/Fotos/04813802712-a2.jpg" alt="" className="banners"/></a>
-            </div>
-        </div>
+            <video 
+                autoPlay 
+                loop 
+                muted 
+                playsInline 
+                style={{ pointerEvents: 'none', objectFit: 'cover', width: '100%', height: '100%' }}
+            >
+                <source src="https://res.cloudinary.com/elcfbtuk/video/upload/f_auto,q_auto:best/v1793893721/BannerWeb-Invierno.mp4" />
+            </video>
         
         </section>
             </main>
