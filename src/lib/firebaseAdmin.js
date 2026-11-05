@@ -2,10 +2,12 @@ import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 
+let credencialesAdminActivas = false;
+
 /**
  * Normaliza la clave privada de Firebase Admin para soportar cualquier formato
  * configurado en Vercel o .env.local (con comillas envolventes, \\n escapados,
- * saltos CRLF, JSON completo o base64 en una sola línea).
+ * saltos CRLF, JSON completo o base64 sin encabezados BEGIN/END).
  */
 function normalizarPrivateKey(rawKey) {
   if (!rawKey || typeof rawKey !== 'string') return undefined;
@@ -88,10 +90,10 @@ export function getAdminApp() {
 
   const privateKey = normalizarPrivateKey(process.env.FIREBASE_ADMIN_PRIVATE_KEY);
 
-  // 1. Inicialización mediante variables de entorno separadas (Recomendado en producción/Vercel)
+  // 1. Inicialización mediante variables de entorno separadas
   if (projectId && clientEmail && privateKey) {
     try {
-      return initializeApp({
+      const app = initializeApp({
         credential: cert({
           projectId,
           clientEmail,
@@ -100,9 +102,11 @@ export function getAdminApp() {
         projectId,
         storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
       });
+      credencialesAdminActivas = true;
+      return app;
     } catch (error) {
       console.error(
-        'Advertencia: No se pudo inicializar cert() con FIREBASE_ADMIN_PRIVATE_KEY, verificando alternativa:',
+        'Advertencia: No se pudo inicializar cert() con FIREBASE_ADMIN_PRIVATE_KEY:',
         error?.message
       );
     }
@@ -119,21 +123,33 @@ export function getAdminApp() {
       if (serviceAccount.private_key) {
         serviceAccount.private_key = normalizarPrivateKey(serviceAccount.private_key);
       }
-      return initializeApp({
+      const app = initializeApp({
         credential: cert(serviceAccount),
         projectId: serviceAccount.project_id || projectId,
         storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
       });
+      credencialesAdminActivas = true;
+      return app;
     } catch (error) {
       console.error('Error parseando la variable de entorno FIREBASE_SERVICE_ACCOUNT_KEY:', error);
     }
   }
 
-  // 3. Fallback seguro (permite que `next build` recolecte rutas sin romper el build)
+  // 3. Fallback sin credenciales para no romper next build
+  credencialesAdminActivas = false;
   return initializeApp({
     projectId: projectId || 'the-outfit-2480c',
     storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   });
+}
+
+/**
+ * Indica si Firebase Admin cuenta con credenciales de servicio (`cert`) válidas.
+ * Evita que en Vercel se intente consultar Google Compute Metadata Server (lo cual causa 500 timeout).
+ */
+export function tieneCredencialesAdmin() {
+  getAdminApp();
+  return credencialesAdminActivas;
 }
 
 function createLazyProxy(getter) {

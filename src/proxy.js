@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
 
 const SESSION_COOKIE_NAME = '__session';
 
@@ -17,163 +15,75 @@ const RUTAS_SOLO_ADMIN = [
 // Rutas permitidas para "empleado" o "admin"
 const RUTAS_EMPLEADO = ['/empleado'];
 
-function obtenerSecretoCookie() {
-  return (
-    process.env.SESSION_COOKIE_SECRET ||
-    process.env.NEXT_PUBLIC_FIREBASE_API_KEY ||
-    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
-    'the-outfit-default-session-secret-key'
-  );
-}
-
-function verificarTokenSesionFirmado(cookieValue) {
-  if (!cookieValue || typeof cookieValue !== 'string' || !cookieValue.startsWith('v1.')) {
-    return null;
-  }
-  const parts = cookieValue.split('.');
-  if (parts.length !== 3) return null;
-  const [, data, sig] = parts;
-  const expectedSig = crypto
-    .createHmac('sha256', obtenerSecretoCookie())
-    .update(data)
-    .digest('base64url');
-  if (sig !== expectedSig) return null;
-
+/**
+ * Decodifica Base64URL de forma compatible con Edge y Node.js sin dependencias pesadas.
+ */
+function decodificarBase64Url(str) {
   try {
-    const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
-    if (payload.exp && Date.now() > payload.exp) return null;
-    return payload;
+    const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = base64.length % 4;
+    const padded = pad ? base64 + '='.repeat(4 - pad) : base64;
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
   } catch {
     return null;
   }
 }
 
 /**
- * Verifica en el servidor el token/cookie y obtiene el rol autoritativo.
+ * Lee el payload del token de sesión (`v1.<payload>.<sig>` o JWT) en el proxy
+ * sin cargar `firebase-admin` (gRPC) que causa 500 Internal Server Error en Vercel Middleware.
  */
-async function verificarSesionYRolEnServidor(tokenValue) {
-  // 1. Verificar token de sesión firmado por /api/auth/session (HMAC-SHA256)
-  const signedPayload = verificarTokenSesionFirmado(tokenValue);
-  if (signedPayload && signedPayload.uid) {
-    return {
-      valido: !signedPayload.baneado,
-      uid: signedPayload.uid,
-      rol: signedPayload.rol || 'usuario',
-      baneado: Boolean(signedPayload.baneado),
-    };
-  }
+function leerSesionDesdeCookie(cookieValue) {
+  if (!cookieValue || typeof cookieValue !== 'string') return null;
 
-  // 2. Respaldo para cookies con ID Token o Session Cookie de Firebase
-  let decoded = null;
-  try {
-    decoded = await adminAuth.verifySessionCookie(tokenValue, false);
-  } catch {
+  // Formato emitido por /api/auth/session: v1.<base64urlPayload>.<hmac>
+  if (cookieValue.startsWith('v1.')) {
+    const parts = cookieValue.split('.');
+    if (parts.length !== 3) return null;
+    const jsonStr = decodificarBase64Url(parts[1]);
+    if (!jsonStr) return null;
     try {
-      decoded = await adminAuth.verifyIdToken(tokenValue, false);
+      const payload = JSON.parse(jsonStr);
+      if (payload.exp && Date.now() > payload.exp) return null;
+      return {
+        valido: !payload.baneado && Boolean(payload.uid),
+        uid: payload.uid,
+        rol: payload.rol || 'usuario',
+        baneado: Boolean(payload.baneado),
+      };
     } catch {
-      const parts = String(tokenValue).split('.');
-      if (parts.length === 3) {
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-        if (payload.exp && Date.now() / 1000 <= payload.exp) {
-          decoded = {
-            uid: payload.user_id || payload.sub,
-            email: payload.email || '',
-            rol: payload.rol,
-            admin: payload.admin,
-            empleado: payload.empleado,
-          };
-        }
-      }
+      return null;
     }
   }
 
-  if (!decoded || !decoded.uid) {
-    return { valido: false, baneado: false, rol: 'anonimo' };
-  }
-
-  const uid = decoded.uid;
-  const email = decoded.email || '';
-  let userData = null;
-
-  try {
-    const directSnap = await adminDb.collection('User').doc(uid).get();
-    if (directSnap.exists) {
-      userData = directSnap.data();
-    } else {
-      const authSnap = await adminDb.collection('User').where('auth_id', '==', uid).limit(1).get();
-      if (!authSnap.empty) {
-        userData = authSnap.docs[0].data();
-      } else if (email) {
-        const emailSnap = await adminDb.collection('User').where('Correo', '==', email).limit(1).get();
-        if (!emailSnap.empty) {
-          const candidate = emailSnap.docs[0].data();
-          if (!candidate.auth_id || candidate.auth_id === uid) userData = candidate;
-        }
-      }
-    }
-  } catch {
+  // Respaldo si la cookie contiene un JWT de Firebase
+  const jwtParts = cookieValue.split('.');
+  if (jwtParts.length === 3) {
+    const jsonStr = decodificarBase64Url(jwtParts[1]);
+    if (!jsonStr) return null;
     try {
-      const { db } = await import('@/lib/firebaseClient');
-      const { collection, doc, getDoc, getDocs, query, where } = await import('firebase/firestore');
-      const directSnap = await getDoc(doc(db, 'User', uid));
-      if (directSnap.exists()) {
-        userData = directSnap.data();
-      } else {
-        const authSnap = await getDocs(query(collection(db, 'User'), where('auth_id', '==', uid)));
-        if (!authSnap.empty) {
-          userData = authSnap.docs[0].data();
-        } else if (email) {
-          const emailSnap = await getDocs(query(collection(db, 'User'), where('Correo', '==', email)));
-          if (!emailSnap.empty) {
-            const candidate = emailSnap.docs[0].data();
-            if (!candidate.auth_id || candidate.auth_id === uid) userData = candidate;
-          }
-        }
+      const payload = JSON.parse(jsonStr);
+      if (payload.exp && Date.now() / 1000 > payload.exp) return null;
+      const uid = payload.user_id || payload.sub;
+      if (!uid) return null;
+      let rol = 'usuario';
+      if (payload.rol === 'admin' || payload.admin === true) {
+        rol = 'admin';
+      } else if (payload.rol === 'empleado' || payload.empleado === true) {
+        rol = 'empleado';
       }
+      return { valido: true, uid, rol, baneado: false };
     } catch {
-      // Ignorar si no se pudo consultar
+      return null;
     }
   }
 
-  const estadoNum = userData ? Number(userData.ID_EstadoUsuario) : 1;
-  if (userData && (estadoNum === 2 || estadoNum === 3)) {
-    return { valido: false, baneado: true, rol: 'baneado' };
-  }
-
-  let rol = 'usuario';
-  if (userData) {
-    const puesto = String(userData.Puesto || '').trim().toLowerCase();
-    const rolCampo = String(userData.Rol || '').trim().toLowerCase();
-    const idRol = Number(userData.ID_Rol);
-
-    if (
-      idRol === 1 ||
-      puesto === 'admin' ||
-      puesto === 'administrador' ||
-      rolCampo === 'admin' ||
-      rolCampo === 'administrador'
-    ) {
-      rol = 'admin';
-    } else if (
-      idRol === 2 ||
-      userData.Es_Empleado === true ||
-      puesto === 'empleado' ||
-      rolCampo === 'empleado'
-    ) {
-      rol = 'empleado';
-    }
-  }
-
-  if (decoded.rol === 'admin' || decoded.admin === true) {
-    rol = 'admin';
-  } else if (
-    rol === 'usuario' &&
-    (decoded.rol === 'empleado' || decoded.empleado === true)
-  ) {
-    rol = 'empleado';
-  }
-
-  return { valido: true, uid, rol, baneado: false };
+  return null;
 }
 
 export async function proxy(request) {
@@ -197,38 +107,37 @@ export async function proxy(request) {
 
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-  // Sin cookie de sesión aún: permitir que el cliente valide con verificarAccesoServidor(user)
-  // si el navegador acaba de autenticarse en Firebase Auth
+  // Si aún no hay cookie (o el cliente está sincronizando tras login), la página
+  // ejecutará verificarAccesoServidor(user) para autorizar o redirigir sin producir error 500
   if (!sessionCookie) {
     return NextResponse.next();
   }
 
-  try {
-    const sesion = await verificarSesionYRolEnServidor(sessionCookie);
-
-    if (!sesion.valido || sesion.baneado) {
-      const loginUrl = new URL('/login', request.url);
-      const response = NextResponse.redirect(loginUrl);
-      response.cookies.delete(SESSION_COOKIE_NAME);
-      return response;
-    }
-
-    if (requiereAdmin && sesion.rol !== 'admin') {
-      const targetUrl =
-        sesion.rol === 'empleado'
-          ? new URL('/empleado', request.url)
-          : new URL('/', request.url);
-      return NextResponse.redirect(targetUrl);
-    }
-
-    if (requiereEmpleado && sesion.rol !== 'empleado' && sesion.rol !== 'admin') {
-      return NextResponse.redirect(new URL('/', request.url));
-    }
-
-    return NextResponse.next();
-  } catch {
+  const sesion = leerSesionDesdeCookie(sessionCookie);
+  if (!sesion) {
     return NextResponse.next();
   }
+
+  if (!sesion.valido || sesion.baneado) {
+    const loginUrl = new URL('/login', request.url);
+    const response = NextResponse.redirect(loginUrl);
+    response.cookies.delete(SESSION_COOKIE_NAME);
+    return response;
+  }
+
+  if (requiereAdmin && sesion.rol !== 'admin') {
+    const targetUrl =
+      sesion.rol === 'empleado'
+        ? new URL('/empleado', request.url)
+        : new URL('/', request.url);
+    return NextResponse.redirect(targetUrl);
+  }
+
+  if (requiereEmpleado && sesion.rol !== 'empleado' && sesion.rol !== 'admin') {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {

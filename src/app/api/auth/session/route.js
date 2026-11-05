@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
+import { adminAuth, adminDb, tieneCredencialesAdmin } from '@/lib/firebaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,11 +75,13 @@ function decodificarJwtFirebase(idToken) {
  * de Google Identity Toolkit (`accounts:lookup`) o decodifica el JWT válido.
  */
 async function verificarTokenFirebase(idToken) {
-  // 1. Intentar con Firebase Admin SDK
-  try {
-    return await adminAuth.verifyIdToken(idToken, false);
-  } catch {
-    // Continúa al respaldo oficial REST de Firebase Auth
+  // 1. Intentar con Firebase Admin SDK solo si tiene credenciales válidas
+  if (tieneCredencialesAdmin()) {
+    try {
+      return await adminAuth.verifyIdToken(idToken, false);
+    } catch {
+      // Continúa al respaldo oficial REST de Firebase Auth
+    }
   }
 
   // 2. Respaldo con la API oficial de Google Identity Toolkit
@@ -123,72 +125,76 @@ async function verificarTokenFirebase(idToken) {
  * Intenta con `adminDb` y, si falla por credenciales en Vercel, usa `db` (Firebase SDK).
  */
 async function buscarDocumentoUsuario(uid, email) {
-  // Intento A: Firebase Admin Firestore
-  try {
-    const directRef = adminDb.collection('User').doc(uid);
-    const directSnap = await directRef.get();
-    if (directSnap.exists) {
-      return { userData: directSnap.data(), docId: directSnap.id };
-    }
-
-    const authSnap = await adminDb
-      .collection('User')
-      .where('auth_id', '==', uid)
-      .limit(1)
-      .get();
-    if (!authSnap.empty) {
-      return { userData: authSnap.docs[0].data(), docId: authSnap.docs[0].id };
-    }
-
-    if (email) {
-      const emailSnap = await adminDb
-        .collection('User')
-        .where('Correo', '==', email)
-        .limit(1)
-        .get();
-      if (!emailSnap.empty) {
-        const candidateData = emailSnap.docs[0].data();
-        if (!candidateData.auth_id || candidateData.auth_id === uid) {
-          await emailSnap.docs[0].ref.set({ auth_id: uid }, { merge: true }).catch(() => {});
-          return { userData: candidateData, docId: emailSnap.docs[0].id };
-        }
-      }
-    }
-    return { userData: null, docId: null };
-  } catch {
-    // Intento B: Respaldo con Firebase SDK (`db`) cuando Admin SDK no tiene llave en Preview/Production
+  // Intento A: Firebase Admin Firestore (solo si tiene credenciales válidas en el entorno)
+  if (tieneCredencialesAdmin()) {
     try {
-      const { db } = await import('@/lib/firebaseClient');
-      const { collection, doc, getDoc, getDocs, query, setDoc, where } = await import('firebase/firestore');
-      const directSnap = await getDoc(doc(db, 'User', uid));
-      if (directSnap.exists()) {
+      const directRef = adminDb.collection('User').doc(uid);
+      const directSnap = await directRef.get();
+      if (directSnap.exists) {
         return { userData: directSnap.data(), docId: directSnap.id };
       }
 
-      const authSnap = await getDocs(
-        query(collection(db, 'User'), where('auth_id', '==', uid))
-      );
+      const authSnap = await adminDb
+        .collection('User')
+        .where('auth_id', '==', uid)
+        .limit(1)
+        .get();
       if (!authSnap.empty) {
         return { userData: authSnap.docs[0].data(), docId: authSnap.docs[0].id };
       }
 
       if (email) {
-        const emailSnap = await getDocs(
-          query(collection(db, 'User'), where('Correo', '==', email))
-        );
+        const emailSnap = await adminDb
+          .collection('User')
+          .where('Correo', '==', email)
+          .limit(1)
+          .get();
         if (!emailSnap.empty) {
           const candidateData = emailSnap.docs[0].data();
           if (!candidateData.auth_id || candidateData.auth_id === uid) {
-            await setDoc(emailSnap.docs[0].ref, { auth_id: uid }, { merge: true }).catch(() => {});
+            await emailSnap.docs[0].ref.set({ auth_id: uid }, { merge: true }).catch(() => {});
             return { userData: candidateData, docId: emailSnap.docs[0].id };
           }
         }
       }
-    } catch (errClient) {
-      console.error('Error buscando usuario en Firestore:', errClient);
+      return { userData: null, docId: null };
+    } catch {
+      // Caer al Intento B
     }
-    return { userData: null, docId: null };
   }
+
+  // Intento B: Respaldo con Firebase SDK (`db`) cuando Admin SDK no tiene llave en Preview/Production
+  try {
+    const { db } = await import('@/lib/firebaseClient');
+    const { collection, doc, getDoc, getDocs, query, setDoc, where } = await import('firebase/firestore');
+    const directSnap = await getDoc(doc(db, 'User', uid));
+    if (directSnap.exists()) {
+      return { userData: directSnap.data(), docId: directSnap.id };
+    }
+
+    const authSnap = await getDocs(
+      query(collection(db, 'User'), where('auth_id', '==', uid))
+    );
+    if (!authSnap.empty) {
+      return { userData: authSnap.docs[0].data(), docId: authSnap.docs[0].id };
+    }
+
+    if (email) {
+      const emailSnap = await getDocs(
+        query(collection(db, 'User'), where('Correo', '==', email))
+      );
+      if (!emailSnap.empty) {
+        const candidateData = emailSnap.docs[0].data();
+        if (!candidateData.auth_id || candidateData.auth_id === uid) {
+          await setDoc(emailSnap.docs[0].ref, { auth_id: uid }, { merge: true }).catch(() => {});
+          return { userData: candidateData, docId: emailSnap.docs[0].id };
+        }
+      }
+    }
+  } catch (errClient) {
+    console.error('Error buscando usuario en Firestore:', errClient);
+  }
+  return { userData: null, docId: null };
 }
 
 async function resolverAutorizacionUsuario(decodedToken) {
@@ -274,8 +280,10 @@ export async function POST(request) {
     const authInfo = await resolverAutorizacionUsuario(decodedToken);
 
     if (authInfo.baneado) {
-      await adminAuth.revokeRefreshTokens(authInfo.uid).catch(() => {});
-      await adminAuth.updateUser(authInfo.uid, { disabled: true }).catch(() => {});
+      if (tieneCredencialesAdmin()) {
+        await adminAuth.revokeRefreshTokens(authInfo.uid).catch(() => {});
+        await adminAuth.updateUser(authInfo.uid, { disabled: true }).catch(() => {});
+      }
 
       const response = NextResponse.json(
         {
@@ -290,7 +298,7 @@ export async function POST(request) {
     }
 
     // Sincronizar Custom Claims si Admin SDK está activo
-    if (decodedToken.rol !== authInfo.rol) {
+    if (tieneCredencialesAdmin() && decodedToken.rol !== authInfo.rol) {
       await adminAuth
         .setCustomUserClaims(authInfo.uid, {
           rol: authInfo.rol,
