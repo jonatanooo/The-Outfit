@@ -49,6 +49,27 @@ function indexarColeccion(snap, campoId) {
     return map;
 }
 
+// Generador universal de IDs 100% numéricos enteros para colecciones de Firestore
+async function generarSiguienteIdNumerico(nombreColeccion, campoId, baseMinima = 1) {
+    try {
+        const snap = await getDocs(collection(db, nombreColeccion));
+        let maxId = baseMinima - 1;
+        snap.docs.forEach((d) => {
+            if (esDocPlantilla(d)) return;
+            const data = d.data();
+            const raw = data[campoId] ?? d.id;
+            const val = Number(raw);
+            if (!isNaN(val) && Number.isInteger(val) && val > maxId && val < 2000000000) {
+                maxId = val;
+            }
+        });
+        return maxId + 1;
+    } catch (err) {
+        console.error(`Error generando ID numérico para ${nombreColeccion}:`, err);
+        return Math.max(baseMinima, (Date.now() % 100000000));
+    }
+}
+
 async function actualizarDocPorId(nombreColeccion, campoId, idValor, camposActualizar) {
     if (idValor == null) return;
     try {
@@ -196,9 +217,11 @@ function AdminInventario() {
     //------ ESTADOS DE MODAL DE INGRESO DE STOCK ----------//
     const [varianteStock, setVarianteStock] = useState(null);
     const tieneTallaAsignadaStock = Boolean(
-        varianteStock?.Talla?.Tipos_Talla?.Nombre_TipoTalla ||
-        varianteStock?.Talla?.Nombre_TipoTalla ||
-        (varianteStock?.ID_Talla != null && varianteStock?.ID_Talla !== '' && varianteStock?.ID_Talla !== 0)
+        !varianteStock?.esProductoBase && (
+            varianteStock?.Talla?.Tipos_Talla?.Nombre_TipoTalla ||
+            varianteStock?.Talla?.Nombre_TipoTalla ||
+            (varianteStock?.ID_Talla != null && varianteStock?.ID_Talla !== '' && varianteStock?.ID_Talla !== 0)
+        )
     );
     const [cantidadIngresar, setCantidadIngresar] = useState('');
     const [motivoStock, setMotivoStock] = useState('Compra a proveedor');
@@ -209,6 +232,12 @@ function AdminInventario() {
     const [tipoTallaSeleccionada, setTipoTallaSeleccionada] = useState('');
     const [coloresDisponibles, setColoresDisponibles] = useState([]);
     const [colorSeleccionado, setColorSeleccionado] = useState('');
+    const [dropdownColorAbierto, setDropdownColorAbierto] = useState(false);
+    const [creandoColor, setCreandoColor] = useState(false);
+    const [nombreNuevoColor, setNombreNuevoColor] = useState('');
+    const [hexNuevoColor, setHexNuevoColor] = useState('#000000');
+    const [guardandoColor, setGuardandoColor] = useState(false);
+    const [colorEditar, setColorEditar] = useState('');
     const [tipoMovimiento, setTipoMovimiento] = useState('entrada'); // 'entrada' | 'salida'
     const [marcas, setMarcas] = useState([]);
     const [marcaSeleccionada, setMarcaSeleccionada] = useState('');
@@ -226,6 +255,7 @@ function AdminInventario() {
         if (modalAbierto === 'agregar') {
             cargarCategorias();
             cargarMarcas();
+            cargarColoresDisponibles();
         }
     }, [modalAbierto]);
 
@@ -249,11 +279,11 @@ function AdminInventario() {
     async function crearMarca() {
         try {
             const idUser = await obtenerIdUsuario();
-            const nuevoId = doc(collection(db, 'Marca')).id;
+            const nuevoId = await generarSiguienteIdNumerico('Marca', 'ID_Marca', 1);
             const nuevaMarca = {
                 ID_Marca: nuevoId,
                 ID_User: idUser,
-                Nombre_Marca: nombreNuevaMarca,
+                Nombre_Marca: nombreNuevaMarca.trim(),
                 Fecha_Creacion: new Date().toISOString()
             };
 
@@ -271,47 +301,86 @@ function AdminInventario() {
     useEffect(() => {
         if (modalAbierto === 'stock') {
             cargarTallasDisponibles();
-            cargarColoresDisponibles();
         }
     }, [modalAbierto]);
 
     async function cargarTallasDisponibles() {
         try {
-            const snap = await getDocs(collection(db, 'Tipos_Talla'));
-            const docsValidos = snap.docs.filter((d) => !esDocPlantilla(d));
-            const mapaExistente = new Map();
-            docsValidos.forEach((d) => {
-                const nom = (d.data().Nombre_TipoTalla || '').trim().toUpperCase();
-                if (nom) {
-                    mapaExistente.set(nom, {
+            const [tallaSnap, tiposSnap] = await Promise.all([
+                getDocs(collection(db, 'Talla')),
+                getDocs(collection(db, 'Tipos_Talla'))
+            ]);
+
+            const tiposMap = {};
+            tiposSnap.docs.forEach((d) => {
+                if (esDocPlantilla(d)) return;
+                const td = d.data();
+                const idTipo = td.ID_TipoTalla ?? d.id;
+                tiposMap[String(idTipo)] = td.Nombre_TipoTalla;
+                tiposMap[String(d.id)] = td.Nombre_TipoTalla;
+            });
+
+            const tallasMap = new Map();
+            tallaSnap.docs.forEach((d) => {
+                if (esDocPlantilla(d)) return;
+                const tdata = d.data();
+                const rawIdTalla = tdata.ID_Talla ?? d.id;
+                const numIdTalla = Number(rawIdTalla);
+                if (isNaN(numIdTalla)) return;
+
+                const idTipo = tdata.ID_TipoTalla;
+                const nombreTipo = (tiposMap[String(idTipo)] || '').trim().toUpperCase();
+                if (nombreTipo && !tallasMap.has(nombreTipo)) {
+                    tallasMap.set(nombreTipo, {
                         _docId: d.id,
-                        ID_TipoTalla: d.data().ID_TipoTalla ?? d.id,
-                        Nombre_TipoTalla: nom,
-                        ...d.data()
+                        ID_Talla: numIdTalla,
+                        ID_TipoTalla: Number(idTipo) || numIdTalla,
+                        Nombre_TipoTalla: nombreTipo
                     });
                 }
             });
 
-            const tallasOrdenadas = [];
             const listaOrden = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
             for (const nom of listaOrden) {
-                if (mapaExistente.has(nom)) {
-                    tallasOrdenadas.push(mapaExistente.get(nom));
-                } else {
-                    try {
-                        const nuevoId = doc(collection(db, 'Tipos_Talla')).id;
-                        const nuevoDoc = {
-                            ID_TipoTalla: nuevoId,
+                if (!tallasMap.has(nom)) {
+                    const tipoEntry = tiposSnap.docs.find((td) => {
+                        if (esDocPlantilla(td)) return false;
+                        return (td.data().Nombre_TipoTalla || '').trim().toUpperCase() === nom;
+                    });
+                    let idTipoNum = tipoEntry ? Number(tipoEntry.data().ID_TipoTalla ?? tipoEntry.id) : null;
+                    if (!idTipoNum || isNaN(idTipoNum)) {
+                        idTipoNum = await generarSiguienteIdNumerico('Tipos_Talla', 'ID_TipoTalla', 1);
+                        await setDoc(doc(db, 'Tipos_Talla', String(idTipoNum)), {
+                            ID_TipoTalla: idTipoNum,
                             Nombre_TipoTalla: nom
-                        };
-                        await setDoc(doc(db, 'Tipos_Talla', String(nuevoId)), nuevoDoc);
-                        tallasOrdenadas.push(nuevoDoc);
-                        mapaExistente.set(nom, nuevoDoc);
-                    } catch (e) {
-                        console.error('Error creando tipo talla:', nom, e);
+                        });
                     }
+                    const nuevoIdTalla = await generarSiguienteIdNumerico('Talla', 'ID_Talla', 1);
+                    const nuevoDocTalla = {
+                        ID_Talla: nuevoIdTalla,
+                        ID_TipoTalla: idTipoNum
+                    };
+                    await setDoc(doc(db, 'Talla', String(nuevoIdTalla)), nuevoDocTalla);
+                    tallasMap.set(nom, {
+                        _docId: String(nuevoIdTalla),
+                        ID_Talla: nuevoIdTalla,
+                        ID_TipoTalla: idTipoNum,
+                        Nombre_TipoTalla: nom
+                    });
                 }
             }
+
+            const tallasOrdenadas = [];
+            listaOrden.forEach((nom) => {
+                if (tallasMap.has(nom)) {
+                    tallasOrdenadas.push(tallasMap.get(nom));
+                }
+            });
+            tallasMap.forEach((val, key) => {
+                if (!listaOrden.includes(key)) {
+                    tallasOrdenadas.push(val);
+                }
+            });
 
             setTallasDisponibles(tallasOrdenadas);
         } catch (err) {
@@ -324,15 +393,52 @@ function AdminInventario() {
             const snap = await getDocs(collection(db, 'Colores'));
             const data = snap.docs
                 .filter((d) => !esDocPlantilla(d))
-                .map((d) => ({
-                    _docId: d.id,
-                    ID_Color: d.data().ID_Color ?? d.id,
-                    Nombre_Color: d.data().Nombre_Color,
-                    ...d.data()
-                }));
+                .map((d) => {
+                    const docData = d.data();
+                    const rawId = docData.ID_Color ?? d.id;
+                    const numId = Number(rawId);
+                    return {
+                        _docId: d.id,
+                        ID_Color: !isNaN(numId) ? numId : rawId,
+                        Nombre_Color: docData.Nombre_Color || 'Sin nombre',
+                        Codigo_Hex: docData.Codigo_Hex || '#4b5563',
+                        ...docData
+                    };
+                })
+                .filter((c) => c.Nombre_Color && c.Nombre_Color.trim() !== '');
+
+            data.sort((a, b) => (a.Nombre_Color || '').localeCompare(b.Nombre_Color || ''));
             setColoresDisponibles(data);
         } catch (err) {
             console.error('Error al cargar colores disponibles:', err);
+        }
+    }
+
+    async function crearNuevoColor() {
+        if (!nombreNuevoColor.trim()) {
+            alert('Por favor ingresa el nombre del nuevo color.');
+            return;
+        }
+        setGuardandoColor(true);
+        try {
+            const nuevoIdColor = await generarSiguienteIdNumerico('Colores', 'ID_Color', 1);
+            const nuevoColor = {
+                ID_Color: nuevoIdColor,
+                Nombre_Color: nombreNuevoColor.trim(),
+                Codigo_Hex: hexNuevoColor.trim() || '#000000',
+                Fecha_Creacion: new Date().toISOString()
+            };
+            await setDoc(doc(db, 'Colores', String(nuevoIdColor)), nuevoColor);
+            setColoresDisponibles((prev) => [...prev, nuevoColor]);
+            setColorSeleccionado(nuevoIdColor);
+            setNombreNuevoColor('');
+            setHexNuevoColor('#000000');
+            setCreandoColor(false);
+        } catch (err) {
+            console.error('Error al registrar nuevo color:', err);
+            alert('Error al registrar nuevo color: ' + (err?.message || 'Error desconocido'));
+        } finally {
+            setGuardandoColor(false);
         }
     }
 
@@ -557,6 +663,7 @@ function AdminInventario() {
 
     useEffect(() => {
         if (pestana === 'historial') {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             cargarAuditoria();
         }
     }, [pestana]);
@@ -565,10 +672,12 @@ function AdminInventario() {
     function abrirModalEditar(v) {
         setVarianteEditando(v);
         setNombreEditar(v.Productos?.Nombre_Producto || '');
-        setPrecioEditar(v.Precio_Actual || '');
-        setMarcaEditar(v.Marca?.ID_Marca || '');
+        setPrecioEditar(v.Precio_Actual ?? v.Productos?.Precio ?? '');
+        setMarcaEditar(v.Marca?.ID_Marca ?? v.Productos?.ID_Marca ?? '');
+        setColorEditar(v.Productos?.ID_Color ?? v.Colores?.ID_Color ?? '');
         cargarMarcas();
         cargarCategorias();
+        cargarColoresDisponibles();
         
         let idPadre = v.Productos?.Categorias_Producto?.ID_CategoriaPadre;
         let idSub = v.Productos?.ID_Categoria;
@@ -604,14 +713,13 @@ function AdminInventario() {
     function abrirModalStock(v) {
         setVarianteStock(v);
         setCantidadIngresar('');
-        const idTipoDirecto = v.Talla?.Tipos_Talla?.ID_TipoTalla || v.Talla?.ID_TipoTalla || v.ID_Talla || '';
-        const nomTalla = (v.Talla?.Tipos_Talla?.Nombre_TipoTalla || v.Talla?.Nombre_TipoTalla || '').trim().toUpperCase();
-        const encontradaPorNombre = nomTalla
-            ? tallasDisponibles.find((t) => (t.Nombre_TipoTalla || '').trim().toUpperCase() === nomTalla)
-            : null;
-        const idTipoFinal = idTipoDirecto || encontradaPorNombre?.ID_TipoTalla || '';
-        setTipoTallaSeleccionada(idTipoFinal);
-        setColorSeleccionado(v.Colores?.ID_Color || '');
+        const esBase = v.esProductoBase || !v.ID_Talla;
+        if (esBase) {
+            setTipoTallaSeleccionada('');
+        } else {
+            const idTallaDir = v.Talla?.ID_Talla || v.ID_Talla || '';
+            setTipoTallaSeleccionada(String(idTallaDir));
+        }
         setModalAbierto('stock');
         setMotivoStock('Compra a proveedor');
         setMotivoPersonalizado('');
@@ -968,21 +1076,47 @@ function AdminInventario() {
         try {
             const idUserAudit = (await obtenerIdUsuario()) || auth.currentUser?.uid || 'Admin';
 
-            // 1. Actualiza el nombre, marca y categoría del producto
+            // 1. Actualiza el nombre, marca, categoría, precio y color del producto
             if (idProducto) {
                 const idCatUpdate = subcategoriaEditar ? subcategoriaEditar : (categoriaEditar || null);
                 const idCatFinal = idCatUpdate ? (Number(idCatUpdate) || idCatUpdate) : null;
-                await actualizarDocPorId('Productos', 'ID_Producto', idProducto, {
+                const nuevoPrecioNum = parseFloat(precioEditar);
+                const datosUpdateProd = {
                     Nombre_Producto: nombreEditar,
-                    ID_Marca: marcaEditar || null,
+                    ID_Marca: marcaEditar ? (Number(marcaEditar) || marcaEditar) : null,
                     ID_Categoria: idCatFinal
-                });
+                };
+                if (!isNaN(nuevoPrecioNum)) {
+                    datosUpdateProd.Precio = nuevoPrecioNum;
+                }
+                if (colorEditar) {
+                    datosUpdateProd.ID_Color = Number(colorEditar) || colorEditar;
+                }
+                await actualizarDocPorId('Productos', 'ID_Producto', idProducto, datosUpdateProd);
+
+                // Si se cambió el color, heredar a todas las variantes del producto
+                if (colorEditar) {
+                    try {
+                        const qVarsProd = query(
+                            collection(db, 'Variante_Producto'),
+                            where('ID_Producto', 'in', [idProducto, Number(idProducto), String(idProducto)])
+                        );
+                        const snapVarsProd = await getDocs(qVarsProd);
+                        for (const vd of snapVarsProd.docs) {
+                            if (!esDocPlantilla(vd)) {
+                                await updateDoc(vd.ref, { ID_Color: Number(colorEditar) || colorEditar });
+                            }
+                        }
+                    } catch (errColorHer) {
+                        console.error('Error heredando color a variantes:', errColorHer);
+                    }
+                }
 
                 // Registrar en Auditoria_CambioCategoria si cambió la categoría
                 if (idCatFinal != null && String(idCatFinal) !== String(categoriaAnterior ?? '')) {
                     try {
-                        const idAuditCat = doc(collection(db, 'Auditoria_CambioCategoria')).id;
-                        await setDoc(doc(db, 'Auditoria_CambioCategoria', idAuditCat), {
+                        const idAuditCat = await generarSiguienteIdNumerico('Auditoria_CambioCategoria', 'ID_Auditoria', 1);
+                        await setDoc(doc(db, 'Auditoria_CambioCategoria', String(idAuditCat)), {
                             ID_Auditoria: idAuditCat,
                             ID_Producto: idProducto,
                             ID_UserAccion: idUserAudit,
@@ -1005,8 +1139,8 @@ function AdminInventario() {
 
                 if (!isNaN(nuevoPrecioNum) && Number(nuevoPrecioNum) !== Number(precioAnterior)) {
                     try {
-                        const idAuditPrecio = doc(collection(db, 'Auditoria_Precio_Variante')).id;
-                        await setDoc(doc(db, 'Auditoria_Precio_Variante', idAuditPrecio), {
+                        const idAuditPrecio = await generarSiguienteIdNumerico('Auditoria_Precio_Variante', 'ID_Auditoria', 1);
+                        await setDoc(doc(db, 'Auditoria_Precio_Variante', String(idAuditPrecio)), {
                             ID_Auditoria: idAuditPrecio,
                             ID_Variante: idVariante,
                             ID_UserAccion: idUserAudit,
@@ -1052,7 +1186,7 @@ function AdminInventario() {
                 );
             }
 
-            // 7. Registra las nuevas fotos subidas con Cloudinary en Firestore
+            // 7. Registra las nuevas fotos subidas con Cloudinary en Firestore con IDs numéricos
             let urlNuevaPrincipal = null;
             if (fotosNuevasEditar.length > 0) {
                 if (!idProducto) {
@@ -1062,18 +1196,19 @@ function AdminInventario() {
 
                 const idUser = await obtenerIdUsuario();
                 const ordenBase = usarNuevaComoPrincipal ? 0 : fotosExistentes.length;
+                const baseFotoId = await generarSiguienteIdNumerico('Fotos_Productos', 'ID_Foto', 1);
 
                 await Promise.all(
                     fotosNuevasEditar.map(async (secureUrl, i) => {
                         try {
-                            const idFoto = doc(collection(db, 'Fotos_Productos')).id;
+                            const idFoto = baseFotoId + i;
                             const ordenFoto = ordenBase + i;
                             const esPrincipal = (usarNuevaComoPrincipal && i === 0) || (fotosExistentes.length === 0 && i === 0);
                             if (esPrincipal) urlNuevaPrincipal = secureUrl;
 
                             await setDoc(doc(db, 'Fotos_Productos', String(idFoto)), {
                                 ID_Foto: idFoto,
-                                ID_Producto: idProducto,
+                                ID_Producto: Number(idProducto),
                                 ID_User: idUser,
                                 URL_Foto: secureUrl,
                                 Orden: ordenFoto,
@@ -1143,28 +1278,35 @@ function AdminInventario() {
         try {
             // REGLA 1: Independencia absoluta del Producto Base (CERO eliminaciones)
             // El Producto Base padre (Productos) queda intacto como entidad independiente.
-            const idProductoPadre = varianteStock.ID_Producto;
-            if (!idProductoPadre) {
-                alert('Error: No se encontró el ID del Producto Base padre.');
+            const idProductoPadre = Number(varianteStock.ID_Producto ?? varianteStock.Productos?.ID_Producto);
+            if (!idProductoPadre || isNaN(idProductoPadre)) {
+                alert('Error: No se encontró el ID numérico del Producto Base padre.');
                 return;
             }
 
             // REGLA 2: Códigos 100% Numéricos
-            // Obtener el código numérico del Producto Base padre
-            const idProdNumerico = extraerCodigoNumericoProducto(varianteStock.Productos || varianteStock);
+            const idProdNumerico = idProductoPadre;
 
-            // Leer el ID numérico de la talla directamente de la tabla Tipos_Talla (sin diccionarios estáticos)
+            // Leer el ID numérico de la talla directamente de la tabla Talla
             const tallaDoc = tallasDisponibles.find(
-                (t) => String(t.ID_TipoTalla) === String(tipoTallaSeleccionada)
+                (t) => String(t.ID_Talla) === String(tipoTallaSeleccionada) || String(t.ID_TipoTalla) === String(tipoTallaSeleccionada)
             );
-            const idTallaNumerico = Number(tallaDoc?.ID_TipoTalla ?? tipoTallaSeleccionada);
+            const idTallaNumerico = Number(tallaDoc?.ID_Talla ?? tipoTallaSeleccionada);
             if (isNaN(idTallaNumerico) || idTallaNumerico <= 0) {
-                alert('Error: El ID de la talla seleccionada no es numérico.');
+                alert('Error: Por favor selecciona una talla válida.');
                 return;
             }
 
-            // Concatenar código numérico del Producto Base + ID numérico de la tabla de Tallas
-            const skuNumerico = Number(`${idProdNumerico}${idTallaNumerico}`);
+            // Concatenar código numérico del Producto Base + ID numérico de la tabla Talla como número entero puro
+            const skuNumerico = parseInt(`${idProdNumerico}${idTallaNumerico}`, 10);
+            if (isNaN(skuNumerico)) {
+                alert('Error: No se pudo generar el SKU numérico.');
+                return;
+            }
+
+            // El color se hereda exclusivamente del Producto Base padre (sin selector en este modal)
+            const idColorPadre = varianteStock.Productos?.ID_Color ?? varianteStock.ID_Color ?? null;
+            const idColorFinal = idColorPadre != null && !isNaN(Number(idColorPadre)) ? Number(idColorPadre) : null;
 
             // REGLAS 3 & 4: Integridad Estricta y Verificación de Flujo de Entrada de Stock
             // Consultar si ya existe este código numérico de variante para este producto
@@ -1184,13 +1326,11 @@ function AdminInventario() {
                 const vd = d.data();
                 const vid = vd.ID_Variante ?? d.id;
 
-                const coincideSku = String(vid) === String(skuNumerico) || Number(vid) === skuNumerico;
-                const coincideTalla = 
-                    vd.ID_TipoTalla != null && 
-                    Number(vd.ID_TipoTalla) === idTallaNumerico;
+                const coincideSku = Number(vid) === skuNumerico || String(vid) === String(skuNumerico);
+                const coincideTalla = vd.ID_Talla != null && Number(vd.ID_Talla) === idTallaNumerico;
 
                 if (coincideSku || coincideTalla) {
-                    varExistente = { ...vd, ID_Variante: vid, _docId: d.id };
+                    varExistente = { ...vd, ID_Variante: Number(vid) || vid, _docId: d.id };
                     break;
                 }
             }
@@ -1200,20 +1340,10 @@ function AdminInventario() {
             let stockAnteriorAudit = 0;
             let nuevoStock = 0;
 
-            const idColorFinal = colorSeleccionado 
-                ? (Number(colorSeleccionado) || colorSeleccionado) 
-                : (varianteStock.Colores?.ID_Color ?? null);
-
             if (varExistente) {
-                // Caso A: Ya existe el código numérico de la variante -> La talla es inmutable.
+                // Caso A: Ya existe la variante -> La talla es inmutable.
                 // Sumar (o restar) la cantidad al stock existente en Inventario.
-                idVarianteFinal = varExistente.ID_Variante;
-
-                if (colorSeleccionado && idColorFinal != null && idColorFinal !== varExistente.ID_Color) {
-                    await actualizarDocPorId('Variante_Producto', 'ID_Variante', idVarianteFinal, {
-                        ID_Color: idColorFinal
-                    });
-                }
+                idVarianteFinal = Number(varExistente.ID_Variante) || skuNumerico;
 
                 const qInv = query(
                     collection(db, 'Inventario'),
@@ -1240,7 +1370,7 @@ function AdminInventario() {
                         Fecha_Actualizacion: new Date().toISOString()
                     });
                 } else {
-                    const nuevoInvId = doc(collection(db, 'Inventario')).id;
+                    const nuevoInvId = await generarSiguienteIdNumerico('Inventario', 'ID_Inventario', 1);
                     stockAnteriorAudit = 0;
                     nuevoStock = tipoMovimiento === 'entrada' ? cant : 0;
                     await setDoc(doc(db, 'Inventario', String(nuevoInvId)), {
@@ -1257,26 +1387,11 @@ function AdminInventario() {
                 // CERO eliminaciones: El registro del Producto Base jamás se elimina ni se sobreescribe.
                 const idDocVariante = String(skuNumerico);
 
-                let idTallaAsociada = idTallaNumerico;
-                try {
-                    const qTalla = query(
-                        collection(db, 'Talla'),
-                        where('ID_TipoTalla', 'in', [idTallaNumerico, String(idTallaNumerico), Number(idTallaNumerico)])
-                    );
-                    const snapTalla = await getDocs(qTalla);
-                    const docsT = snapTalla.docs.filter((td) => !esDocPlantilla(td));
-                    if (docsT.length > 0) {
-                        idTallaAsociada = docsT[0].data().ID_Talla ?? docsT[0].id;
-                    }
-                } catch {
-                    idTallaAsociada = idTallaNumerico;
-                }
-
                 const nuevaVariante = {
                     ID_Variante: skuNumerico,
                     ID_Producto: idProductoPadre, // Llave foránea hacia el producto base
-                    ID_Talla: idTallaAsociada,
-                    ID_TipoTalla: idTallaNumerico,
+                    ID_Talla: idTallaNumerico,
+                    ID_TipoTalla: tallaDoc?.ID_TipoTalla ? Number(tallaDoc.ID_TipoTalla) : idTallaNumerico,
                     ID_Color: idColorFinal,
                     Precio_Actual: Number(varianteStock.Precio_Actual) || Number(varianteStock.Productos?.Precio) || 0,
                     ID_EstadoProducto: 1,
@@ -1290,12 +1405,12 @@ function AdminInventario() {
                     } : {})
                 };
 
-                // INSERT estricto en Variante_Producto con el SKU numérico
+                // INSERT estricto en Variante_Producto con el SKU numérico entero
                 await setDoc(doc(db, 'Variante_Producto', idDocVariante), nuevaVariante);
                 idVarianteFinal = skuNumerico;
 
-                // INSERT estricto en Inventario
-                const nuevoInvId = doc(collection(db, 'Inventario')).id;
+                // INSERT estricto en Inventario con ID_Inventario entero puro
+                const nuevoInvId = await generarSiguienteIdNumerico('Inventario', 'ID_Inventario', 1);
                 stockAnteriorAudit = 0;
                 nuevoStock = tipoMovimiento === 'entrada' ? cant : 0;
                 await setDoc(doc(db, 'Inventario', String(nuevoInvId)), {
@@ -1308,10 +1423,10 @@ function AdminInventario() {
                 idInventarioObjetivo = nuevoInvId;
             }
 
-            // Registrar en Auditoria_Inventario
+            // Registrar en Auditoria_Inventario con ID_Auditoria numérico entero
             try {
                 const idUserAccion = (await obtenerIdUsuario()) || auth.currentUser?.uid || 'Admin';
-                const nuevoAuditId = doc(collection(db, 'Auditoria_Inventario')).id;
+                const nuevoAuditId = await generarSiguienteIdNumerico('Auditoria_Inventario', 'ID_Auditoria', 1);
                 const motivoFinal = motivoStock === 'Otro'
                     ? (motivoPersonalizado.trim() || 'Otro (sin especificar)')
                     : (motivoStock || (tipoMovimiento === 'entrada' ? 'Compra a proveedor' : 'Ajuste de inventario'));
@@ -1355,7 +1470,7 @@ function AdminInventario() {
                 tallaSnap,
                 tiposTallaSnap,
                 invSnap,
-                coloresSnap
+                coloresSnap,
             ] = await Promise.all([
                 getDocs(collection(db, 'Variante_Producto')),
                 getDocs(collection(db, 'Productos')),
@@ -1429,16 +1544,17 @@ function AdminInventario() {
                         Cantidad_Disponible: isNaN(cantDisp) ? 0 : cantDisp,
                         _docId: d.id,
                     };
-                    if (!invPorVariante[vid]) invPorVariante[vid] = [];
-                    invPorVariante[vid].push(itemInv);
-                    if (!invPorVariante[String(vid)]) invPorVariante[String(vid)] = invPorVariante[vid];
+                    const k = String(vid);
+                    if (!invPorVariante[k]) invPorVariante[k] = [];
+                    invPorVariante[k].push(itemInv);
                     if (!isNaN(Number(vid)) && !invPorVariante[Number(vid)]) {
-                        invPorVariante[Number(vid)] = invPorVariante[vid];
+                        invPorVariante[Number(vid)] = invPorVariante[k];
                     }
                 }
             });
 
             const prodMap = {};
+            const productosValidos = [];
             prodSnap.docs.forEach((d) => {
                 if (esDocPlantilla(d)) return;
                 const p = d.data();
@@ -1446,6 +1562,7 @@ function AdminInventario() {
                 const fotos = ordenarFotosProducto(
                     fotosPorProducto[String(pid)] || fotosPorProducto[String(d.id)] || []
                 );
+                const colorObj = coloresMap[p.ID_Color] || coloresMap[String(p.ID_Color)] || null;
                 const item = {
                     ...p,
                     ID_Producto: pid,
@@ -1455,107 +1572,119 @@ function AdminInventario() {
                     ID_Categoria: p.ID_Categoria ?? p.ID_categoria ?? null,
                     Marca: marcasMap[p.ID_Marca] || marcasMap[String(p.ID_Marca)] || null,
                     Categorias_Producto: catMap[p.ID_Categoria ?? p.ID_categoria] || null,
-                    Fotos_Productos: fotos
+                    Fotos_Productos: fotos,
+                    Colores: colorObj
                 };
                 prodMap[pid] = item;
                 prodMap[String(pid)] = item;
                 if (!isNaN(Number(pid))) prodMap[Number(pid)] = item;
                 prodMap[d.id] = item;
+                productosValidos.push(item);
             });
 
-            // Contar cuántas variantes con talla definida tiene cada producto para ocultar filas plantilla vacías (sin talla y con stock 0)
-            const variantesConTallaPorProducto = {};
+            // Agrupar variantes por producto
+            const variantesPorProducto = {};
             varSnap.docs.forEach((d) => {
                 if (esDocPlantilla(d)) return;
                 const v = d.data();
-                if (v.ID_Talla != null && v.ID_Talla !== '' && v.ID_Talla !== 0) {
-                    const kProd = String(v.ID_Producto);
-                    variantesConTallaPorProducto[kProd] = (variantesConTallaPorProducto[kProd] || 0) + 1;
+                const vid = v.ID_Variante ?? d.id;
+                const pid = v.ID_Producto;
+                if (pid == null) return;
+                const k = String(pid);
+                if (!variantesPorProducto[k]) variantesPorProducto[k] = [];
+
+                let tallaObj = tallaMap[v.ID_Talla] || tallaMap[String(v.ID_Talla)] || null;
+                if (!tallaObj && v.ID_TipoTalla != null && tiposTallaMap[v.ID_TipoTalla]) {
+                    tallaObj = {
+                        ID_Talla: v.ID_Talla,
+                        ID_TipoTalla: v.ID_TipoTalla,
+                        Tipos_Talla: tiposTallaMap[v.ID_TipoTalla]
+                    };
                 }
+
+                const rawInvList = invPorVariante[String(vid)] || invPorVariante[vid] || [];
+                const totalStock = rawInvList.reduce(
+                    (sum, item) => sum + Number(item.Cantidad_Disponible ?? 0),
+                    0
+                );
+                const invList = rawInvList.length > 0
+                    ? [{ ...rawInvList[0], Cantidad_Disponible: totalStock }]
+                    : [{ ID_Inventario: null, Cantidad_Disponible: 0 }];
+
+                const parentProd = prodMap[String(pid)];
+                const colorObj = coloresMap[v.ID_Color ?? parentProd?.ID_Color] ||
+                    coloresMap[String(v.ID_Color ?? parentProd?.ID_Color)] || null;
+
+                variantesPorProducto[k].push({
+                    ...v,
+                    _docId: d.id,
+                    esProductoBase: false,
+                    ID_Variante: vid,
+                    ID_Producto: pid,
+                    Precio_Actual: v.Precio_Actual ?? parentProd?.Precio ?? 0,
+                    ID_EstadoProducto: v.ID_EstadoProducto ?? parentProd?.ID_EstadoProducto ?? 1,
+                    Productos: parentProd,
+                    Talla: tallaObj,
+                    ID_Talla: v.ID_Talla,
+                    ID_TipoTalla: v.ID_TipoTalla ?? tallaObj?.ID_TipoTalla ?? null,
+                    Inventario: invList,
+                    Colores: colorObj
+                });
             });
 
-            const listaVariantes = varSnap.docs
-                .filter((d) => !esDocPlantilla(d))
-                .map((d) => {
-                    const v = d.data();
-                    const vid = v.ID_Variante ?? d.id;
-                    const pid = v.ID_Producto;
-                    const productoObj = prodMap[pid] || prodMap[String(pid)] || null;
-                    let tallaObj = tallaMap[v.ID_Talla] || tallaMap[String(v.ID_Talla)] || null;
-                    // Fallback: si ID_Talla referencia directamente un ID_TipoTalla
-                    if (!tallaObj && v.ID_Talla != null && tiposTallaMap[v.ID_Talla]) {
-                        tallaObj = {
-                            ID_Talla: v.ID_Talla,
-                            ID_TipoTalla: v.ID_Talla,
-                            Tipos_Talla: tiposTallaMap[v.ID_Talla]
-                        };
-                    }
-                    const colorObj = coloresMap[v.ID_Color] || coloresMap[String(v.ID_Color)] || null;
-                    const rawInvList = invPorVariante[vid] || invPorVariante[String(vid)] || invPorVariante[d.id] || [];
-                    const totalDisponibleVariante = rawInvList.reduce(
-                        (sum, invItem) => sum + Number(invItem.Cantidad_Disponible ?? 0),
-                        0
-                    );
-                    const invList = rawInvList.length > 0
-                        ? [{ ...rawInvList[0], Cantidad_Disponible: totalDisponibleVariante }]
-                        : [{ ID_Inventario: null, Cantidad_Disponible: 0 }];
+            // Ensamblar la lista con Producto Base (Modelo Base) + Variantes hijas con talla
+            const ordenTallas = { XS: 1, S: 2, M: 3, L: 4, XL: 5, XXL: 6 };
+            const listaCompleta = [];
 
-                    return {
-                        ...v,
-                        _docId: d.id,
-                        ID_Variante: vid,
-                        ID_Producto: pid,
-                        Precio_Actual: v.Precio_Actual,
-                        ID_EstadoProducto: v.ID_EstadoProducto ?? productoObj?.ID_EstadoProducto ?? 1,
-                        Productos: productoObj,
-                        Talla: tallaObj,
-                        Inventario: invList,
-                        Colores: colorObj
-                    };
-                })
-                .filter((v) => {
-                    // Excluir variantes huérfanas sin producto válido
-                    if (!v.Productos || !v.Productos.Nombre_Producto) return false;
-                    // Si el producto ya tiene variantes con talla asignada (ej. S, M, L, XL) y esta fila es un placeholder sin talla y sin stock (0), ocultarla para mostrar solo las variantes reales con sus tallas
-                    const tieneTalla = Boolean(v.Talla?.Tipos_Talla?.Nombre_TipoTalla);
-                    const stockDisp = Number(v.Inventario?.[0]?.Cantidad_Disponible ?? 0);
-                    const tieneHermanasConTalla = (variantesConTallaPorProducto[String(v.ID_Producto)] || 0) > 0;
-                    if (!tieneTalla && stockDisp === 0 && tieneHermanasConTalla) {
-                        return false;
-                    }
-                    return true;
+            // Ordenar alfabéticamente por nombre de producto
+            productosValidos.sort((a, b) => {
+                const na = (a.Nombre_Producto || '').toLowerCase();
+                const nb = (b.Nombre_Producto || '').toLowerCase();
+                return na.localeCompare(nb);
+            });
+
+            productosValidos.forEach((p) => {
+                const k = String(p.ID_Producto);
+
+                // 1. Fila de Producto Base (Modelo Base) - SIEMPRE presente, no se borra ni se oculta
+                const filaBase = {
+                    esProductoBase: true,
+                    _docId: p._docId,
+                    ID_Variante: p.ID_Producto,
+                    ID_Producto: p.ID_Producto,
+                    Precio_Actual: p.Precio || 0,
+                    ID_EstadoProducto: p.ID_EstadoProducto ?? 1,
+                    Productos: p,
+                    Talla: null,
+                    ID_Talla: null,
+                    Inventario: [{ ID_Inventario: null, Cantidad_Disponible: null }],
+                    Colores: p.Colores
+                };
+                listaCompleta.push(filaBase);
+
+                // 2. Variantes con talla del producto
+                const hijas = (variantesPorProducto[k] || []).filter(
+                    (v) => v.ID_Talla != null && v.ID_Talla !== '' && v.ID_Talla !== 0
+                );
+
+                hijas.sort((a, b) => {
+                    const ta = (a.Talla?.Tipos_Talla?.Nombre_TipoTalla || a.Talla?.Nombre_TipoTalla || '').toUpperCase();
+                    const tb = (b.Talla?.Tipos_Talla?.Nombre_TipoTalla || b.Talla?.Nombre_TipoTalla || '').toUpperCase();
+                    const pa = ordenTallas[ta] || 99;
+                    const pb = ordenTallas[tb] || 99;
+                    if (pa !== pb) return pa - pb;
+                    return Number(a.ID_Variante) - Number(b.ID_Variante);
                 });
 
-            // Incluir productos base que no tengan variantes registradas todavía (como entidad independiente lista para stock)
-            const productosConVariante = new Set(listaVariantes.map((v) => String(v.ID_Producto)));
-            Object.values(prodMap).forEach((p) => {
-                if (p && p.Nombre_Producto && !productosConVariante.has(String(p.ID_Producto))) {
-                    listaVariantes.push({
-                        ID_Variante: p.ID_Producto,
-                        ID_Producto: p.ID_Producto,
-                        Precio_Actual: p.Precio || 0,
-                        ID_EstadoProducto: p.ID_EstadoProducto ?? 1,
-                        Productos: p,
-                        Talla: null,
-                        Inventario: [{ ID_Inventario: null, Cantidad_Disponible: 0 }],
-                        Colores: null
+                hijas.forEach((vh) => {
+                    listaCompleta.push({
+                        ...vh,
+                        Productos: p
                     });
-                }
+                });
             });
 
-            const ordenTallasTabla = { XS: 1, S: 2, M: 3, L: 4, XL: 5, XXL: 6 };
-            listaVariantes.sort((a, b) => {
-                const prodA = (a.Productos?.Nombre_Producto || '').toLowerCase();
-                const prodB = (b.Productos?.Nombre_Producto || '').toLowerCase();
-                if (prodA !== prodB) return prodA.localeCompare(prodB);
-                const tallaA = (a.Talla?.Tipos_Talla?.Nombre_TipoTalla || '').toUpperCase();
-                const tallaB = (b.Talla?.Tipos_Talla?.Nombre_TipoTalla || '').toUpperCase();
-                const pesoA = ordenTallasTabla[tallaA] || 99;
-                const pesoB = ordenTallasTabla[tallaB] || 99;
-                if (pesoA !== pesoB) return pesoA - pesoB;
-                return String(b.ID_Variante).localeCompare(String(a.ID_Variante));
-            });
-            setVariantes(listaVariantes);
+            setVariantes(listaCompleta);
         } catch (error) {
             console.log('❌ Error al cargar variantes desde Firestore:', error.message);
         } finally {
@@ -1605,11 +1734,11 @@ function AdminInventario() {
     async function crearCategoria() {
         try {
             const idUser = await obtenerIdUsuario();
-            const nuevoId = doc(collection(db, 'Categorias_Producto')).id;
+            const nuevoId = await generarSiguienteIdNumerico('Categorias_Producto', 'ID_categoria', 100);
             const nuevaCat = {
                 ID_categoria: nuevoId,
                 ID_User: idUser,
-                Nombre_Categoria: nombreNuevaCategoria,
+                Nombre_Categoria: nombreNuevaCategoria.trim(),
                 ID_CategoriaPadre: null,
                 Fecha_Creacion: new Date().toISOString()
             };
@@ -1627,11 +1756,11 @@ function AdminInventario() {
     async function crearSubcategoria() {
         try {
             const idUser = await obtenerIdUsuario();
-            const nuevoId = doc(collection(db, 'Categorias_Producto')).id;
+            const nuevoId = await generarSiguienteIdNumerico('Categorias_Producto', 'ID_categoria', 100);
             const nuevaSub = {
                 ID_categoria: nuevoId,
                 ID_User: idUser,
-                Nombre_Categoria: nombreNuevaSubcategoria,
+                Nombre_Categoria: nombreNuevaSubcategoria.trim(),
                 ID_CategoriaPadre: categoriaSeleccionada,
                 Fecha_Creacion: new Date().toISOString()
             };
@@ -1678,14 +1807,15 @@ function AdminInventario() {
 
         const idUser = await obtenerIdUsuario();
         const urlPrincipal = urlsCloudinary[0] || null;
+        const baseFotoId = await generarSiguienteIdNumerico('Fotos_Productos', 'ID_Foto', 1);
 
         await Promise.all(
             urlsCloudinary.map(async (secureUrl, i) => {
                 try {
-                    const idFoto = doc(collection(db, 'Fotos_Productos')).id;
+                    const idFoto = baseFotoId + i;
                     await setDoc(doc(db, 'Fotos_Productos', String(idFoto)), {
                         ID_Foto: idFoto,
-                        ID_Producto: idProducto,
+                        ID_Producto: Number(idProducto),
                         ID_User: idUser,
                         URL_Foto: secureUrl,
                         Orden: i,
@@ -1708,7 +1838,7 @@ function AdminInventario() {
             await setDoc(
                 doc(db, 'products', String(idProducto)),
                 {
-                    ID_Producto: idProducto,
+                    ID_Producto: Number(idProducto),
                     name: nombreProducto,
                     description: descripcionProducto,
                     price: parseFloat(precioProducto) || 0,
@@ -1744,12 +1874,17 @@ function AdminInventario() {
         setPrecioProducto('');
         setCategoriaSeleccionada('');
         setSubcategoriaSeleccionada('');
+        setMarcaSeleccionada('');
+        setColorSeleccionado('');
+        setNombreNuevoColor('');
+        setHexNuevoColor('#000000');
+        setCreandoColor(false);
+        setDropdownColorAbierto(false);
         setFotosSeleccionadas([]);
         setPreviews([]);
-        setMarcaSeleccionada('');
     }
 
-    // ---------- GUARDAR EL PRODUCTO COMPLETO (CATÁLOGO MAESTRO SIN TALLA INICIAL) ----------
+    // ---------- GUARDAR EL PRODUCTO COMPLETO (PRODUCTO BASE 100% NUMÉRICO) ----------
     async function guardarProductoNuevo() {
         const idCategoriaFinal = subcategoriaSeleccionada || categoriaSeleccionada;
 
@@ -1763,73 +1898,48 @@ function AdminInventario() {
             return;
         }
 
+        if (!colorSeleccionado) {
+            alert('Por favor selecciona un color para el Producto Base.');
+            return;
+        }
+
         setGuardandoProducto(true);
 
         try {
-            // 1. Obtener siguiente código numérico secuencial para garantizar producto base 100% numérico
-            const snapProd = await getDocs(collection(db, 'Productos'));
-            let maxCodigo = 10000;
-            snapProd.docs.forEach((d) => {
-                const data = d.data();
-                const num = Number(data.Codigo_Producto ?? data.ID_Producto);
-                if (!isNaN(num) && num >= 10000 && num < 1000000 && num > maxCodigo) {
-                    maxCodigo = num;
-                }
-            });
-            const nuevoCodigoNumerico = maxCodigo + 1;
-            const idProducto = nuevoCodigoNumerico;
-            const idVariante = nuevoCodigoNumerico;
-            const idInventario = doc(collection(db, 'Inventario')).id;
+            // 1. Obtener siguiente código numérico secuencial garantizando ID_Producto 100% entero
+            const idProducto = await generarSiguienteIdNumerico('Productos', 'ID_Producto', 10001);
+            const nuevoCodigoNumerico = idProducto;
 
-            // 2. Crear producto maestro independiente y su registro base
+            // 2. Crear registro del Producto Base en la colección Productos (con su ID_Color)
             const nuevoProducto = {
                 ID_Producto: idProducto,
                 Codigo_Producto: nuevoCodigoNumerico,
-                Nombre_Producto: nombreProducto,
-                Descripcion: descripcionProducto,
+                Nombre_Producto: nombreProducto.trim(),
+                Descripcion: descripcionProducto.trim(),
                 Precio: parseFloat(precioProducto) || 0,
                 ID_Categoria: Number(idCategoriaFinal) || idCategoriaFinal,
                 ID_Marca: marcaSeleccionada ? (Number(marcaSeleccionada) || marcaSeleccionada) : null,
+                ID_Color: Number(colorSeleccionado) || colorSeleccionado,
                 ID_EstadoProducto: 1,
                 Fecha_Creacion: new Date().toISOString()
             };
 
-            const nuevaVariante = {
-                ID_Variante: idVariante,
-                ID_Producto: idProducto,
-                ID_Talla: null,
-                Precio_Actual: parseFloat(precioProducto) || 0,
-                ID_EstadoProducto: 1
-            };
+            await setDoc(doc(db, 'Productos', String(idProducto)), nuevoProducto);
 
-            const nuevoInventario = {
-                ID_Inventario: idInventario,
-                ID_Variante: idVariante,
-                Cantidad_Disponible: 0,
-                Cantidad_Reservada: 0,
-                Fecha_Actualizacion: new Date().toISOString()
-            };
-
-            const batch = writeBatch(db);
-            batch.set(doc(db, 'Productos', String(idProducto)), nuevoProducto);
-            batch.set(doc(db, 'Variante_Producto', String(idVariante)), nuevaVariante);
-            batch.set(doc(db, 'Inventario', String(idInventario)), nuevoInventario);
-            await batch.commit();
-
-            // 3. Subir fotos en paralelo con optimización de imagen
+            // 3. Subir fotos en paralelo con IDs numéricos
             if (fotosSeleccionadas.length > 0) {
                 await subirFotos(idProducto, fotosSeleccionadas);
             }
 
-            // 3. Cerrar modal y limpiar formulario inmediatamente
+            // 4. Cerrar modal y limpiar formulario
             setModalAbierto(null);
             limpiarFormulario();
 
-            // 4. Actualizar inventario en segundo plano
+            // 5. Actualizar catálogo e inventario
             await cargarVariantes();
         } catch (err) {
             console.error('Error general en guardarProductoNuevo:', err);
-            alert('Error al guardar el producto');
+            alert('Error al guardar el producto: ' + (err?.message || 'Error desconocido'));
         } finally {
             setGuardandoProducto(false);
         }
@@ -1955,96 +2065,116 @@ function AdminInventario() {
                             {filtrados.map((v) => {
                                 const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
                                 const estaInactivo = esVarianteInactiva(v);
+                                const esBase = v.esProductoBase || !v.ID_Talla;
     
-    return (
-        // Determina si el producto está inactivo para aplicar estilo de opacidad
-        /*Muestra "(Inactivo)" si el producto está desactivado*/
-        <tr key={v.ID_Variante} style={{ opacity: estaInactivo ? 0.45 : 1 }}>
-            <td>{v.ID_Variante}</td>
-            <td>
-                
-                {v.Productos?.Nombre_Producto} 
-                
-                {estaInactivo && (
-                    <span style={{ fontSize: '0.75rem', color: '#777', marginLeft: '6px' }}>
-                        (Inactivo)
-                    </span>
-                )}
-            </td>
+                                return (
+                                    <tr 
+                                        key={`${v.ID_Producto}_${v.ID_Variante}_${esBase ? 'base' : 'var'}`} 
+                                        className={`fila-tabla-inventario ${esBase ? 'fila-modelo-base' : 'fila-variante-talla'} ${estaInactivo ? 'fila-inactiva' : ''}`}
+                                        style={{ opacity: estaInactivo ? 0.45 : 1 }}
+                                    >
+                                        <td><strong>{v.ID_Variante}</strong></td>
+                                        <td>
+                                            <span>{v.Productos?.Nombre_Producto || '—'}</span>
+                                            {estaInactivo && (
+                                                <span style={{ fontSize: '0.75rem', color: '#777', marginLeft: '6px' }}>
+                                                    (Inactivo)
+                                                </span>
+                                            )}
+                                        </td>
 
-            
-            <td>
-                {(esOfertaActiva(v) || esOfertaActiva(v.Productos)) ? (
-                    <div>
-                        <span style={{ textDecoration: 'line-through', color: '#888', fontSize: '0.85em' }}>${v.Precio_Actual}</span>{' '}
-                        <strong style={{ color: '#d32f2f' }}>
-                            ${calcularPrecioConDescuento(Number(v.Precio_Actual), Number(v.Porcentaje_Descuento || v.Productos?.Porcentaje_Descuento || 0)).toFixed(2)}
-                        </strong>
-                        <span className="badge-descuento-admin" title="Oferta activa" style={{ marginLeft: '4px' }}>
-                            -{v.Porcentaje_Descuento || v.Productos?.Porcentaje_Descuento}%
-                        </span>
-                    </div>
-                ) : (
-                    <span>${v.Precio_Actual}</span>
-                )}
-            </td>
-            
-            <td className={stock === 0 ? 'sin-stock' : stock < 5 ? 'stock-bajo' : ''}>
-                <strong>{stock}</strong> <span style={{ fontSize: '0.78rem', color: '#666' }}>uds.</span>
-            </td>
-            <td>
-                <span style={{
-                    display: 'inline-block',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    backgroundColor: v.Talla?.Tipos_Talla?.Nombre_TipoTalla ? '#f0f0f0' : '#fff3e0',
-                    color: v.Talla?.Tipos_Talla?.Nombre_TipoTalla ? '#111' : '#e65100',
-                    fontWeight: 600,
-                    fontSize: '0.82rem'
-                }}>
-                    {v.Talla?.Tipos_Talla?.Nombre_TipoTalla || 'Sin talla'}
-                </span>
-            </td>
-            <td>{v.Colores?.Nombre_Color || '-'}</td>
-            <td>{v.Productos?.Marca?.Nombre_Marca || '-'}</td>
-            
-{/*---------------- Botones para alterar stock, editar, aplicar descuento y activar/desactivar producto ----------------*/}
-            <td>
-                <div className="acciones-tabla-wrap">
-                    <button 
-                        type="button" 
-                        title="Entrada de stock" 
-                        onClick={() => abrirModalStock(v)}
-                        className="btn-accion-tabla"
-                    >
-                        <img src="/ICONOS/Box.png" alt="Agregar stock" width={20} height={20} />
-                    </button>
-                    <button 
-                        type="button" 
-                        title="Editar producto" 
-                        onClick={() => abrirModalEditar(v)}
-                        className="btn-accion-tabla"
-                    >
-                        <img src="/ICONOS/PENCIL.png" alt="Editar producto" width={20} height={20} />
-                    </button>
-                    <button 
-                        type="button" 
-                        title="Aplicar descuento / oferta" 
-                        onClick={() => abrirModalDescuento(v)}
-                        className="btn-accion-tabla"
-                    >
-                        <img src="/ICONOS/SALES.png" alt="Descuento" width={20} height={20} />
-                    </button>
-                    <button 
-                        type="button" 
-                        title="Desactivar producto (mover a Prendas desactivadas)" 
-                        onClick={() => alternarEstadoProducto(v)}
-                        className="btn-accion-tabla"
-                    >
-                        <span className="icono-estado-tabla">❌</span>
-                    </button>
-                </div>
-            </td>
+                                        <td>
+                                            {(esOfertaActiva(v) || esOfertaActiva(v.Productos)) ? (
+                                                <div>
+                                                    <span style={{ textDecoration: 'line-through', color: '#888', fontSize: '0.85em' }}>
+                                                        ${Number(v.Precio_Actual).toFixed(2)}
+                                                    </span>{' '}
+                                                    <strong style={{ color: '#d32f2f' }}>
+                                                        ${calcularPrecioConDescuento(Number(v.Precio_Actual), Number(v.Porcentaje_Descuento || v.Productos?.Porcentaje_Descuento || 0)).toFixed(2)}
+                                                    </strong>
+                                                    <span className="badge-descuento-admin" title="Oferta activa" style={{ marginLeft: '4px' }}>
+                                                        -{v.Porcentaje_Descuento || v.Productos?.Porcentaje_Descuento}%
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span>${Number(v.Precio_Actual || 0).toFixed(2)}</span>
+                                            )}
+                                        </td>
+                                        
+                                        <td>
+                                            {esBase ? (
+                                                <span className="stock-modelo-base" title="Plantilla de catálogo maestro. El stock físico vive en sus variantes por talla.">
+                                                    N/A (Catálogo)
+                                                </span>
+                                            ) : (
+                                                <span className={stock === 0 ? 'sin-stock' : stock < 5 ? 'stock-bajo' : ''}>
+                                                    <strong>{stock}</strong> <span style={{ fontSize: '0.78rem', color: '#666' }}>uds.</span>
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td>
+                                            {esBase ? (
+                                                <span className="badge-modelo-base">
+                                                    Modelo Base
+                                                </span>
+                                            ) : (
+                                                <span className="badge-talla-normal">
+                                                    {v.Talla?.Tipos_Talla?.Nombre_TipoTalla || v.Talla?.Nombre_TipoTalla || `Talla #${v.ID_Talla}`}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td>
+                                            {v.Colores ? (
+                                                <div className="color-celda-tabla">
+                                                    <span 
+                                                        className="color-dot-tabla" 
+                                                        style={{ backgroundColor: v.Colores.Codigo_Hex || '#666' }} 
+                                                        title={v.Colores.Nombre_Color}
+                                                    />
+                                                    <span>{v.Colores.Nombre_Color}</span>
+                                                </div>
+                                            ) : (
+                                                <span style={{ color: '#999' }}>—</span>
+                                            )}
+                                        </td>
+                                        <td>{v.Productos?.Marca?.Nombre_Marca || '—'}</td>
+                                        
+                                        <td>
+                                            <div className="acciones-tabla-wrap">
+                                                <button 
+                                                    type="button" 
+                                                    title={esBase ? "Registrar entrada de stock para este modelo base" : "Ajustar stock de esta variante"} 
+                                                    onClick={() => abrirModalStock(v)}
+                                                    className="btn-accion-tabla"
+                                                >
+                                                    <img src="/ICONOS/Box.png" alt="Agregar stock" width={20} height={20} />
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    title="Editar producto" 
+                                                    onClick={() => abrirModalEditar(v)}
+                                                    className="btn-accion-tabla"
+                                                >
+                                                    <img src="/ICONOS/PENCIL.png" alt="Editar producto" width={20} height={20} />
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    title="Aplicar descuento / oferta" 
+                                                    onClick={() => abrirModalDescuento(v)}
+                                                    className="btn-accion-tabla"
+                                                >
+                                                    <img src="/ICONOS/SALES.png" alt="Descuento" width={20} height={20} />
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    title="Desactivar producto (mover a Prendas desactivadas)" 
+                                                    onClick={() => alternarEstadoProducto(v)}
+                                                    className="btn-accion-tabla"
+                                                >
+                                                    <span className="icono-estado-tabla">❌</span>
+                                                </button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 );
                             })}
@@ -2104,12 +2234,16 @@ function AdminInventario() {
                                 <tbody>
                                     {inactivosFiltrados.map((v) => {
                                         const stock = v.Inventario?.[0]?.Cantidad_Disponible ?? 0;
+                                        const esBase = v.esProductoBase || !v.ID_Talla;
 
                                         return (
-                                            <tr key={v.ID_Variante}>
-                                                <td>{v.ID_Variante}</td>
+                                            <tr 
+                                                key={`${v.ID_Producto}_${v.ID_Variante}_inactivo_${esBase ? 'base' : 'var'}`}
+                                                className={`fila-tabla-inventario ${esBase ? 'fila-modelo-base' : 'fila-variante-talla'} fila-inactiva`}
+                                            >
+                                                <td><strong>{v.ID_Variante}</strong></td>
                                                 <td>
-                                                    {v.Productos?.Nombre_Producto}
+                                                    <span>{v.Productos?.Nombre_Producto || '—'}</span>
                                                     <span style={{
                                                         fontSize: '0.72rem',
                                                         backgroundColor: '#fff3e0',
@@ -2126,33 +2260,54 @@ function AdminInventario() {
                                                 <td>
                                                     {(esOfertaActiva(v) || esOfertaActiva(v.Productos)) ? (
                                                         <div>
-                                                            <span style={{ textDecoration: 'line-through', color: '#888', fontSize: '0.85em' }}>${v.Precio_Actual}</span>{' '}
+                                                            <span style={{ textDecoration: 'line-through', color: '#888', fontSize: '0.85em' }}>
+                                                                ${Number(v.Precio_Actual).toFixed(2)}
+                                                            </span>{' '}
                                                             <strong style={{ color: '#d32f2f' }}>
                                                                 ${calcularPrecioConDescuento(Number(v.Precio_Actual), Number(v.Porcentaje_Descuento || v.Productos?.Porcentaje_Descuento || 0)).toFixed(2)}
                                                             </strong>
                                                         </div>
                                                     ) : (
-                                                        <span>${v.Precio_Actual}</span>
+                                                        <span>${Number(v.Precio_Actual || 0).toFixed(2)}</span>
                                                     )}
                                                 </td>
-                                                <td className={stock === 0 ? 'sin-stock' : stock < 5 ? 'stock-bajo' : ''}>
-                                                    <strong>{stock}</strong> <span style={{ fontSize: '0.78rem', color: '#666' }}>uds.</span>
+                                                <td>
+                                                    {esBase ? (
+                                                        <span className="stock-modelo-base" title="Plantilla de catálogo maestro. El stock físico vive en sus variantes por talla.">
+                                                            N/A (Catálogo)
+                                                        </span>
+                                                    ) : (
+                                                        <span className={stock === 0 ? 'sin-stock' : stock < 5 ? 'stock-bajo' : ''}>
+                                                            <strong>{stock}</strong> <span style={{ fontSize: '0.78rem', color: '#666' }}>uds.</span>
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 <td>
-                                                    <span style={{
-                                                        display: 'inline-block',
-                                                        padding: '2px 8px',
-                                                        borderRadius: '4px',
-                                                        backgroundColor: v.Talla?.Tipos_Talla?.Nombre_TipoTalla ? '#f0f0f0' : '#fff3e0',
-                                                        color: v.Talla?.Tipos_Talla?.Nombre_TipoTalla ? '#111' : '#e65100',
-                                                        fontWeight: 600,
-                                                        fontSize: '0.82rem'
-                                                    }}>
-                                                        {v.Talla?.Tipos_Talla?.Nombre_TipoTalla || 'Sin talla'}
-                                                    </span>
+                                                    {esBase ? (
+                                                        <span className="badge-modelo-base">
+                                                            Modelo Base
+                                                        </span>
+                                                    ) : (
+                                                        <span className="badge-talla-normal">
+                                                            {v.Talla?.Tipos_Talla?.Nombre_TipoTalla || v.Talla?.Nombre_TipoTalla || `Talla #${v.ID_Talla}`}
+                                                        </span>
+                                                    )}
                                                 </td>
-                                                <td>{v.Colores?.Nombre_Color || '-'}</td>
-                                                <td>{v.Productos?.Marca?.Nombre_Marca || '-'}</td>
+                                                <td>
+                                                    {v.Colores ? (
+                                                        <div className="color-celda-tabla">
+                                                            <span 
+                                                                className="color-dot-tabla" 
+                                                                style={{ backgroundColor: v.Colores.Codigo_Hex || '#666' }} 
+                                                                title={v.Colores.Nombre_Color}
+                                                            />
+                                                            <span>{v.Colores.Nombre_Color}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span style={{ color: '#999' }}>—</span>
+                                                    )}
+                                                </td>
+                                                <td>{v.Productos?.Marca?.Nombre_Marca || '—'}</td>
                                                 <td>
                                                     <div className="acciones-tabla-wrap">
                                                         <button
@@ -2441,6 +2596,140 @@ function AdminInventario() {
                             
                         )}
 
+                        {/* Selector de Color del Producto Base con bolita visual y modal rápido para agregar colores */}
+                        <label>Color del Producto Base</label>
+                        {creandoColor && (
+                            <div className="box-nuevo-color">
+                                <div className="box-nuevo-color-header">
+                                    <span>+ Registrar Nuevo Color</span>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setCreandoColor(false)}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#666' }}
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                                <div className="box-nuevo-color-body">
+                                    <div style={{ flex: 1, minWidth: '150px' }}>
+                                        <input
+                                            type="text"
+                                            placeholder="Nombre del color (Ej: Azul Marino)"
+                                            value={nombreNuevoColor}
+                                            onChange={(e) => setNombreNuevoColor(e.target.value)}
+                                            style={{ width: '100%', padding: '7px 10px', fontSize: '0.88rem', boxSizing: 'border-box' }}
+                                        />
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <input
+                                            type="color"
+                                            value={hexNuevoColor}
+                                            onChange={(e) => setHexNuevoColor(e.target.value)}
+                                            className="input-color-picker"
+                                            title="Seleccionar tonalidad exacta"
+                                        />
+                                        <span style={{ fontSize: '0.82rem', fontFamily: 'monospace', color: '#475569' }}>{hexNuevoColor}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '6px', width: '100%', marginTop: '6px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={crearNuevoColor}
+                                            disabled={guardandoColor}
+                                            style={{
+                                                padding: '6px 14px',
+                                                backgroundColor: '#16a34a',
+                                                color: '#ffffff',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                fontWeight: 600,
+                                                fontSize: '0.82rem',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {guardandoColor ? 'Guardando...' : 'Guardar Color'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setCreandoColor(false);
+                                                setNombreNuevoColor('');
+                                            }}
+                                            style={{
+                                                padding: '6px 12px',
+                                                backgroundColor: '#e2e8f0',
+                                                color: '#334155',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                fontWeight: 600,
+                                                fontSize: '0.82rem',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="selector-color-con-boton">
+                            <div className="selector-color-custom-wrap">
+                                <div 
+                                    className="selector-color-trigger"
+                                    onClick={() => setDropdownColorAbierto(!dropdownColorAbierto)}
+                                    type="button"
+                                >
+                                    {(() => {
+                                        const colorObj = coloresDisponibles.find((c) => String(c.ID_Color) === String(colorSeleccionado));
+                                        if (colorObj) {
+                                            return (
+                                                <div className="selector-color-opcion-item">
+                                                    <span 
+                                                        className="color-dot-preview" 
+                                                        style={{ backgroundColor: colorObj.Codigo_Hex || '#666' }} 
+                                                    />
+                                                    <span style={{ fontWeight: 600 }}>{colorObj.Nombre_Color}</span>
+                                                </div>
+                                            );
+                                        }
+                                        return <span style={{ color: '#888' }}>Selecciona un color...</span>;
+                                    })()}
+                                    <span style={{ fontSize: '0.75rem', color: '#666' }}>▼</span>
+                                </div>
+
+                                {dropdownColorAbierto && (
+                                    <div className="selector-color-menu">
+                                        {coloresDisponibles.map((c) => (
+                                            <div
+                                                key={c.ID_Color}
+                                                className={`selector-color-option ${String(colorSeleccionado) === String(c.ID_Color) ? 'seleccionado' : ''}`}
+                                                onClick={() => {
+                                                    setColorSeleccionado(c.ID_Color);
+                                                    setDropdownColorAbierto(false);
+                                                }}
+                                            >
+                                                <span 
+                                                    className="color-dot-preview" 
+                                                    style={{ backgroundColor: c.Codigo_Hex || '#666' }} 
+                                                />
+                                                <span>{c.Nombre_Color}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <button 
+                                type="button" 
+                                className="btn-nuevo-color"
+                                onClick={() => {
+                                    setCreandoColor(true);
+                                    setDropdownColorAbierto(false);
+                                }}
+                            >
+                                + Nuevo Color
+                            </button>
+                        </div>
+
                         <div className="modal-row">
                             <div>
                                 <label>Precio</label>
@@ -2577,11 +2866,11 @@ function AdminInventario() {
                             <button type="button" onClick={async () => {
                                 try {
                                     const idUser = await obtenerIdUsuario();
-                                    const nuevoId = doc(collection(db, 'Categorias_Producto')).id;
+                                    const nuevoId = await generarSiguienteIdNumerico('Categorias_Producto', 'ID_categoria', 100);
                                     const data = {
                                         ID_categoria: nuevoId,
                                         ID_User: idUser,
-                                        Nombre_Categoria: nombreNuevaSubcategoriaEditar,
+                                        Nombre_Categoria: nombreNuevaSubcategoriaEditar.trim(),
                                         ID_CategoriaPadre: categoriaEditar,
                                         Fecha_Creacion: new Date().toISOString()
                                     };
@@ -2610,7 +2899,7 @@ function AdminInventario() {
                 onChange={(e) => setPrecioEditar(e.target.value)}
             />
 
-                        <label>Marca</label>
+            <label>Marca</label>
             {!creandoMarcaEditar ? (
                 <div className="select-con-boton">
                     <select
@@ -2637,25 +2926,40 @@ function AdminInventario() {
                     <button type="button" onClick={async () => {
                         try {
                             const idUser = await obtenerIdUsuario();
-                            const nuevoId = doc(collection(db, 'Marca')).id;
+                            const nuevoId = await generarSiguienteIdNumerico('Marca', 'ID_Marca', 1);
                             const nuevaMarca = {
                                 ID_Marca: nuevoId,
                                 ID_User: idUser,
-                                Nombre_Marca: nombreNuevaMarcaEditar,
+                                Nombre_Marca: nombreNuevaMarcaEditar.trim(),
                                 Fecha_Creacion: new Date().toISOString()
                             };
                             await setDoc(doc(db, 'Marca', String(nuevoId)), nuevaMarca);
                             setMarcas((prev) => [...prev, nuevaMarca]);
-                            setMarcaEditar(nuevaMarca.ID_Marca);
+                            setMarcaEditar(nuevoId);
                             setNombreNuevaMarcaEditar('');
                             setCreandoMarcaEditar(false);
                         } catch (error) {
-                            console.log('❌ Error creando marca en Firestore:', error.message);
+                            console.log('Error creando marca:', error.message);
                         }
                     }}>Crear</button>
                     <button type="button" onClick={() => setCreandoMarcaEditar(false)}>Cancelar</button>
                 </div>
             )}
+
+            <label>Color del Producto</label>
+            <div className="select-con-boton">
+                <select
+                    value={colorEditar}
+                    onChange={(e) => setColorEditar(e.target.value)}
+                >
+                    <option value="">Sin color asignado</option>
+                    {coloresDisponibles.map((c) => (
+                        <option key={c.ID_Color} value={c.ID_Color}>
+                            {c.Nombre_Color}
+                        </option>
+                    ))}
+                </select>
+            </div>
 
             <label>Fotos del producto</label>
             <div className="fotos-row">
@@ -2742,15 +3046,27 @@ function AdminInventario() {
               {/*------------ MODAL: ENTRADA DE STOCK -------------- */}
              {modalAbierto === 'stock' && varianteStock && (
     <div className="modal-overlay">
-        <div className="modal-box" style={{ maxWidth: '420px' }} >
+        <div className="modal-box" style={{ maxWidth: '440px' }} >
             <div className="modal-header">
-                <h2>Ajustar stock</h2>
+                <h2>Ajustar stock (Entradas y Salidas)</h2>
                 <button onClick={() => setModalAbierto(null)}>✕</button>
             </div>
 
-            <p style={{ fontSize: '0.9rem', color: '#555', textDecoration: 'underline', marginBottom: '10px' }}>
-                {varianteStock?.Productos?.Nombre_Producto || 'Producto'} | Talla actual: {varianteStock?.Talla?.Tipos_Talla?.Nombre_TipoTalla || 'Pendiente de asignar'}
+            <p style={{ fontSize: '0.9rem', color: '#555', marginBottom: '8px' }}>
+                <strong>{varianteStock?.Productos?.Nombre_Producto || 'Producto'}</strong> | {tieneTallaAsignadaStock ? (
+                    <span>Talla asignada: <strong>{varianteStock?.Talla?.Tipos_Talla?.Nombre_TipoTalla || `Talla #${varianteStock?.ID_Talla}`}</strong></span>
+                ) : (
+                    <span style={{ color: '#4f46e5', fontWeight: 600 }}>Modelo Base (Selecciona la talla abajo)</span>
+                )}
             </p>
+
+            {varianteStock?.Colores && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '0.85rem' }}>
+                    <span style={{ color: '#64748b' }}>Color del Modelo Base:</span>
+                    <span className="color-dot-tabla" style={{ backgroundColor: varianteStock.Colores.Codigo_Hex || '#666' }} />
+                    <strong style={{ color: '#1e293b' }}>{varianteStock.Colores.Nombre_Color}</strong>
+                </div>
+            )}
 
             {/* Resumen de todas las tallas registradas de esta prenda y su stock actual */}
             {(() => {
@@ -2776,14 +3092,14 @@ function AdminInventario() {
                                 {variantesMismaPrenda.map((vp) => {
                                     const nomTalla = vp.Talla?.Tipos_Talla?.Nombre_TipoTalla;
                                     const cantTalla = vp.Inventario?.[0]?.Cantidad_Disponible ?? 0;
-                                    const idTipo = vp.Talla?.Tipos_Talla?.ID_TipoTalla;
-                                    const seleccionada = String(idTipo) === String(tipoTallaSeleccionada);
+                                    const idTallaItem = vp.ID_Talla ?? vp.Talla?.ID_Talla;
+                                    const seleccionada = String(idTallaItem) === String(tipoTallaSeleccionada);
                                     return (
                                         <span
                                             key={vp.ID_Variante}
                                             onClick={() => {
-                                                if (!tieneTallaAsignadaStock && idTipo) {
-                                                    setTipoTallaSeleccionada(idTipo);
+                                                if (!tieneTallaAsignadaStock && idTallaItem) {
+                                                    setTipoTallaSeleccionada(idTallaItem);
                                                 }
                                             }}
                                             style={{
@@ -2796,7 +3112,7 @@ function AdminInventario() {
                                                 fontWeight: 600,
                                                 opacity: tieneTallaAsignadaStock && !seleccionada ? 0.6 : 1
                                             }}
-                                            title={tieneTallaAsignadaStock ? `Talla fija de esta variante (${nomTalla})` : `ID Variante: ${vp.ID_Variante} | ID Talla: ${vp.ID_Talla}`}
+                                            title={tieneTallaAsignadaStock ? `Talla fija de esta variante (${nomTalla})` : `ID Variante: ${vp.ID_Variante} | ID Talla: ${idTallaItem}`}
                                         >
                                             {nomTalla} (ID: {vp.ID_Variante}): {cantTalla} uds.
                                         </span>
@@ -2879,25 +3195,11 @@ function AdminInventario() {
              >
                  <option value="" disabled hidden>Selecciona una talla</option>
                  {tallasDisponibles.map((t) => (
-                     <option key={t.ID_TipoTalla} value={t.ID_TipoTalla}>
+                     <option key={t.ID_Talla} value={t.ID_Talla}>
                          {t.Nombre_TipoTalla}
                      </option>
                  ))}
              </select>
-                
-                {/* Selector de color, si hay colores disponibles para la variante */}
-                <label>Color</label>
-                <select
-                    value={colorSeleccionado}
-                    onChange={(e) => setColorSeleccionado(e.target.value)}
-                >
-                    <option value="">Selecciona un color</option>
-                    {coloresDisponibles.map((c) => (
-                        <option key={c.ID_Color} value={c.ID_Color}>
-                            {c.Nombre_Color}
-                        </option>
-                    ))}
-                </select>
 
             {/* Opciones según el tipo de movimiento */}
             <label>Motivo</label>
@@ -2946,13 +3248,14 @@ function AdminInventario() {
                 const varianteTallaElegida = variantes.find(
                     (item) =>
                         String(item.ID_Producto) === String(varianteStock?.ID_Producto) &&
-                        String(item.Talla?.Tipos_Talla?.ID_TipoTalla ?? '') === String(tipoTallaSeleccionada ?? '')
+                        (String(item.ID_Talla ?? item.Talla?.ID_Talla ?? '') === String(tipoTallaSeleccionada ?? '') ||
+                         String(item.Talla?.Tipos_Talla?.ID_TipoTalla ?? '') === String(tipoTallaSeleccionada ?? ''))
                 );
                 const stockBaseTalla = tipoTallaSeleccionada
                     ? Number(varianteTallaElegida?.Inventario?.[0]?.Cantidad_Disponible ?? 0)
                     : Number(varianteStock?.Inventario?.[0]?.Cantidad_Disponible ?? 0);
                 const nombreTallaElegida =
-                    tallasDisponibles.find((t) => String(t.ID_TipoTalla) === String(tipoTallaSeleccionada))?.Nombre_TipoTalla ||
+                    tallasDisponibles.find((t) => String(t.ID_Talla) === String(tipoTallaSeleccionada) || String(t.ID_TipoTalla) === String(tipoTallaSeleccionada))?.Nombre_TipoTalla ||
                     varianteStock?.Talla?.Tipos_Talla?.Nombre_TipoTalla ||
                     'Sin seleccionar';
                 const cant = parseInt(cantidadIngresar, 10) || 0;
