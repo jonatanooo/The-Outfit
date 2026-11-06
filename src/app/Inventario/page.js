@@ -112,6 +112,28 @@ function IconoCamisa() {
   );
 }
 
+function extraerCodigoNumericoProducto(p) {
+    if (!p) return 10001;
+    if (p.Codigo_Producto && !isNaN(Number(p.Codigo_Producto))) {
+        return Number(p.Codigo_Producto);
+    }
+    const pid = p.ID_Producto ?? p.id;
+    if (!isNaN(Number(pid)) && /^\d+$/.test(String(pid))) {
+        return Number(pid);
+    }
+    const digits = String(pid).replace(/\D/g, '');
+    if (digits.length >= 4) {
+        return parseInt(digits.slice(0, 8), 10);
+    }
+    let hash = 0;
+    const str = String(pid);
+    for (let i = 0; i < str.length; i++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i);
+        hash = Math.abs(hash);
+    }
+    return 10000 + (hash % 89999);
+}
+
 function AdminInventario() {
     const router = useRouter();
     const [verificandoAcceso, setVerificandoAcceso] = useState(true);
@@ -160,7 +182,6 @@ function AdminInventario() {
     const [nombreNuevaMarcaEditar, setNombreNuevaMarcaEditar] = useState('');
     const [precioEditar, setPrecioEditar] = useState('');
     const [tallaEditar, setTallaEditar] = useState('');
-    const [stockEditar, setStockEditar] = useState('');
     const [categoriaEditar, setCategoriaEditar] = useState('');
     const [subcategoriaEditar, setSubcategoriaEditar] = useState('');
     const [creandoSubcategoriaEditar, setCreandoSubcategoriaEditar] = useState(false);
@@ -174,8 +195,14 @@ function AdminInventario() {
 
     //------ ESTADOS DE MODAL DE INGRESO DE STOCK ----------//
     const [varianteStock, setVarianteStock] = useState(null);
+    const tieneTallaAsignadaStock = Boolean(
+        varianteStock?.Talla?.Tipos_Talla?.Nombre_TipoTalla ||
+        varianteStock?.Talla?.Nombre_TipoTalla ||
+        (varianteStock?.ID_Talla != null && varianteStock?.ID_Talla !== '' && varianteStock?.ID_Talla !== 0)
+    );
     const [cantidadIngresar, setCantidadIngresar] = useState('');
     const [motivoStock, setMotivoStock] = useState('Compra a proveedor');
+    const [motivoPersonalizado, setMotivoPersonalizado] = useState('');
     const [guardandoStock, setGuardandoStock] = useState(false);
     const [tallaStock, setTallaStock] = useState('');
     const [tallasDisponibles, setTallasDisponibles] = useState([]);
@@ -251,15 +278,42 @@ function AdminInventario() {
     async function cargarTallasDisponibles() {
         try {
             const snap = await getDocs(collection(db, 'Tipos_Talla'));
-            const data = snap.docs
-                .filter((d) => !esDocPlantilla(d))
-                .map((d) => ({
-                    _docId: d.id,
-                    ID_TipoTalla: d.data().ID_TipoTalla ?? d.id,
-                    Nombre_TipoTalla: d.data().Nombre_TipoTalla,
-                    ...d.data()
-                }));
-            setTallasDisponibles(data);
+            const docsValidos = snap.docs.filter((d) => !esDocPlantilla(d));
+            const mapaExistente = new Map();
+            docsValidos.forEach((d) => {
+                const nom = (d.data().Nombre_TipoTalla || '').trim().toUpperCase();
+                if (nom) {
+                    mapaExistente.set(nom, {
+                        _docId: d.id,
+                        ID_TipoTalla: d.data().ID_TipoTalla ?? d.id,
+                        Nombre_TipoTalla: nom,
+                        ...d.data()
+                    });
+                }
+            });
+
+            const tallasOrdenadas = [];
+            const listaOrden = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+            for (const nom of listaOrden) {
+                if (mapaExistente.has(nom)) {
+                    tallasOrdenadas.push(mapaExistente.get(nom));
+                } else {
+                    try {
+                        const nuevoId = doc(collection(db, 'Tipos_Talla')).id;
+                        const nuevoDoc = {
+                            ID_TipoTalla: nuevoId,
+                            Nombre_TipoTalla: nom
+                        };
+                        await setDoc(doc(db, 'Tipos_Talla', String(nuevoId)), nuevoDoc);
+                        tallasOrdenadas.push(nuevoDoc);
+                        mapaExistente.set(nom, nuevoDoc);
+                    } catch (e) {
+                        console.error('Error creando tipo talla:', nom, e);
+                    }
+                }
+            }
+
+            setTallasDisponibles(tallasOrdenadas);
         } catch (err) {
             console.error('Error al cargar tallas disponibles:', err);
         }
@@ -512,11 +566,9 @@ function AdminInventario() {
         setVarianteEditando(v);
         setNombreEditar(v.Productos?.Nombre_Producto || '');
         setPrecioEditar(v.Precio_Actual || '');
-        setTallaEditar(v.Talla?.Tipos_Talla?.Nombre_TipoTalla || '');
         setMarcaEditar(v.Marca?.ID_Marca || '');
         cargarMarcas();
         cargarCategorias();
-        setStockEditar(v.Inventario?.[0]?.Cantidad_Disponible ?? 0);
         
         let idPadre = v.Productos?.Categorias_Producto?.ID_CategoriaPadre;
         let idSub = v.Productos?.ID_Categoria;
@@ -552,10 +604,17 @@ function AdminInventario() {
     function abrirModalStock(v) {
         setVarianteStock(v);
         setCantidadIngresar('');
-        setTipoTallaSeleccionada(v.Talla?.Tipos_Talla?.ID_TipoTalla || '');
+        const idTipoDirecto = v.Talla?.Tipos_Talla?.ID_TipoTalla || v.Talla?.ID_TipoTalla || v.ID_Talla || '';
+        const nomTalla = (v.Talla?.Tipos_Talla?.Nombre_TipoTalla || v.Talla?.Nombre_TipoTalla || '').trim().toUpperCase();
+        const encontradaPorNombre = nomTalla
+            ? tallasDisponibles.find((t) => (t.Nombre_TipoTalla || '').trim().toUpperCase() === nomTalla)
+            : null;
+        const idTipoFinal = idTipoDirecto || encontradaPorNombre?.ID_TipoTalla || '';
+        setTipoTallaSeleccionada(idTipoFinal);
         setColorSeleccionado(v.Colores?.ID_Color || '');
         setModalAbierto('stock');
         setMotivoStock('Compra a proveedor');
+        setMotivoPersonalizado('');
     }
 
     // Abre el modal para gestionar descuentos y ofertas
@@ -684,6 +743,7 @@ function AdminInventario() {
 
             setModalAbierto(null);
             cargarVariantes();
+            cargarAuditoria();
             alert(quitar ? 'Descuento eliminado con éxito.' : `¡Oferta del ${numPorcentaje}% aplicada correctamente!`);
         } catch (error) {
             console.error('Error al guardar descuento:', error);
@@ -897,23 +957,16 @@ function AdminInventario() {
             alert('El precio no puede ser negativo');
             return;
         }
-
-        if (Number(stockEditar) < 0) {
-            alert('El stock no puede ser negativo');
-            return;
-        }
         setGuardandoEdicion(true);
 
         const idProducto = varianteEditando.Productos?.ID_Producto ?? varianteEditando.ID_Producto;
         const idVariante = varianteEditando.ID_Variante;
-        const idInventario = varianteEditando.Inventario?.[0]?.ID_Inventario;
         const idTipoTalla = varianteEditando.Talla?.Tipos_Talla?.ID_TipoTalla;
         const categoriaAnterior = varianteEditando.Productos?.ID_Categoria ?? varianteEditando.Productos?.ID_categoria ?? null;
         const precioAnterior = Number(varianteEditando.Precio_Actual ?? 0);
-        const stockAnterior = Number(varianteEditando.Inventario?.[0]?.Cantidad_Disponible ?? 0);
 
         try {
-            const idUserAudit = await obtenerIdUsuario();
+            const idUserAudit = (await obtenerIdUsuario()) || auth.currentUser?.uid || 'Admin';
 
             // 1. Actualiza el nombre, marca y categoría del producto
             if (idProducto) {
@@ -967,82 +1020,7 @@ function AdminInventario() {
                 }
             }
 
-            // 3. Asigna o actualiza la talla de la variante de forma segura (sin corromper Tipos_Talla global)
-            if (tallaEditar && tallaEditar.trim() !== '') {
-                const nombreTallaLimpio = tallaEditar.trim().toUpperCase();
-                const nombreTallaActual = (varianteEditando.Talla?.Tipos_Talla?.Nombre_TipoTalla || '').trim().toUpperCase();
-
-                if (nombreTallaLimpio !== nombreTallaActual || !varianteEditando.ID_Talla) {
-                    const tiposSnap = await getDocs(collection(db, 'Tipos_Talla'));
-                    let tipoDoc = tiposSnap.docs
-                        .filter((d) => !esDocPlantilla(d))
-                        .find((d) => (d.data().Nombre_TipoTalla || '').trim().toUpperCase() === nombreTallaLimpio);
-
-                    let targetIdTipoTalla;
-                    if (tipoDoc) {
-                        targetIdTipoTalla = tipoDoc.data().ID_TipoTalla ?? tipoDoc.id;
-                    } else {
-                        targetIdTipoTalla = doc(collection(db, 'Tipos_Talla')).id;
-                        await setDoc(doc(db, 'Tipos_Talla', String(targetIdTipoTalla)), {
-                            ID_TipoTalla: targetIdTipoTalla,
-                            Nombre_TipoTalla: nombreTallaLimpio
-                        });
-                    }
-
-                    // Crear siempre un ID_Talla único y exclusivo para esta talla de esta prenda
-                    const targetIdTalla = doc(collection(db, 'Talla')).id;
-                    await setDoc(doc(db, 'Talla', String(targetIdTalla)), {
-                        ID_Talla: targetIdTalla,
-                        ID_TipoTalla: targetIdTipoTalla,
-                        ID_Producto: idProducto ?? null,
-                        ID_Variante: idVariante ?? null
-                    });
-
-                    if (idVariante) {
-                        await actualizarDocPorId('Variante_Producto', 'ID_Variante', idVariante, {
-                            ID_Talla: targetIdTalla
-                        });
-                    }
-                }
-            }
-
-            // 4. Actualiza o crea la cantidad de stock disponible y registra en Auditoria_Inventario si cambió
-            const nuevoStockNum = parseInt(stockEditar, 10) || 0;
-            if (idInventario) {
-                await actualizarDocPorId('Inventario', 'ID_Inventario', idInventario, {
-                    Cantidad_Disponible: nuevoStockNum,
-                    Fecha_Actualizacion: new Date().toISOString()
-                });
-            } else if (idVariante) {
-                const nuevoInvId = doc(collection(db, 'Inventario')).id;
-                await setDoc(doc(db, 'Inventario', String(nuevoInvId)), {
-                    ID_Inventario: nuevoInvId,
-                    ID_Variante: idVariante,
-                    Cantidad_Disponible: nuevoStockNum,
-                    Cantidad_Reservada: 0,
-                    Fecha_Actualizacion: new Date().toISOString()
-                });
-            }
-
-            if (nuevoStockNum !== stockAnterior && idVariante) {
-                try {
-                    const idAuditInv = doc(collection(db, 'Auditoria_Inventario')).id;
-                    await setDoc(doc(db, 'Auditoria_Inventario', idAuditInv), {
-                        ID_Auditoria: idAuditInv,
-                        ID_Variante: idVariante,
-                        ID_UserAccion: idUserAudit,
-                        Cantidad_Anterior: stockAnterior,
-                        Cantidad_Nueva: nuevoStockNum,
-                        Tipo_Movimiento: nuevoStockNum > stockAnterior ? 'Ingreso' : 'Salida',
-                        Motivo: 'Ajuste desde edición de producto',
-                        Fecha_Accion: new Date().toISOString()
-                    });
-                } catch (errInvAudit) {
-                    console.error('Error guardando Auditoria_Inventario en edición:', errInvAudit);
-                }
-            }
-
-            // 5. Elimina de la BD las fotos que el usuario quitó
+            // 3. Elimina de la BD las fotos que el usuario quitó
             if (fotosAEliminar.length > 0) {
                 for (const idFoto of fotosAEliminar) {
                     await eliminarDocPorId('Fotos_Productos', 'ID_Foto', idFoto);
@@ -1136,6 +1114,7 @@ function AdminInventario() {
 
             setModalAbierto(null);
             cargarVariantes();
+            cargarAuditoria();
         } catch (err) {
             console.error('Error general en guardarEdicion:', err);
             alert('Error al procesar la edición');
@@ -1155,222 +1134,209 @@ function AdminInventario() {
             alert('Por favor selecciona la talla a la que deseas ingresar o retirar stock.');
             return;
         }
+        if (motivoStock === 'Otro' && !motivoPersonalizado.trim()) {
+            alert('Por favor escribe la razón o motivo del movimiento.');
+            return;
+        }
 
         setGuardandoStock(true);
         try {
-            let idInventario = varianteStock.Inventario?.[0]?.ID_Inventario;
-            const stockActualVariante = Number(varianteStock.Inventario?.[0]?.Cantidad_Disponible ?? 0);
-            let stockAnteriorAudit = stockActualVariante;
-            let nuevoStock = tipoMovimiento === 'entrada' ? stockActualVariante + cant : stockActualVariante - cant;
-
-            // Si la variante aún no tenía documento en Inventario, creamos uno base antes de operar
-            if (!idInventario && varianteStock?.ID_Variante) {
-                const invCreadoId = doc(collection(db, 'Inventario')).id;
-                await setDoc(doc(db, 'Inventario', String(invCreadoId)), {
-                    ID_Inventario: invCreadoId,
-                    ID_Variante: varianteStock.ID_Variante,
-                    Cantidad_Disponible: stockActualVariante,
-                    Cantidad_Reservada: 0,
-                    Fecha_Actualizacion: new Date().toISOString()
-                });
-                idInventario = invCreadoId;
+            // REGLA 1: Independencia absoluta del Producto Base (CERO eliminaciones)
+            // El Producto Base padre (Productos) queda intacto como entidad independiente.
+            const idProductoPadre = varianteStock.ID_Producto;
+            if (!idProductoPadre) {
+                alert('Error: No se encontró el ID del Producto Base padre.');
+                return;
             }
 
-            // 1. Resolver la talla final seleccionada
-            const idTipoTallaActual = varianteStock.Talla?.Tipos_Talla?.ID_TipoTalla;
-            
-            const tallaCambio = Boolean(tipoTallaSeleccionada && String(tipoTallaSeleccionada) !== String(idTipoTallaActual ?? ''));
-            const colorCambio = Boolean(colorSeleccionado && String(colorSeleccionado) !== String(varianteStock.Colores?.ID_Color ?? ''));
+            // REGLA 2: Códigos 100% Numéricos
+            // Obtener el código numérico del Producto Base padre
+            const idProdNumerico = extraerCodigoNumericoProducto(varianteStock.Productos || varianteStock);
 
-            let idVarianteObjetivo = varianteStock.ID_Variante;
-            let idInventarioObjetivo = idInventario;
+            // Leer el ID numérico de la talla directamente de la tabla Tipos_Talla (sin diccionarios estáticos)
+            const tallaDoc = tallasDisponibles.find(
+                (t) => String(t.ID_TipoTalla) === String(tipoTallaSeleccionada)
+            );
+            const idTallaNumerico = Number(tallaDoc?.ID_TipoTalla ?? tipoTallaSeleccionada);
+            if (isNaN(idTallaNumerico) || idTallaNumerico <= 0) {
+                alert('Error: El ID de la talla seleccionada no es numérico.');
+                return;
+            }
 
-            if (tallaCambio || colorCambio || varianteStock.ID_Talla == null) {
-                const idsTallaEquivalentes = new Set();
+            // Concatenar código numérico del Producto Base + ID numérico de la tabla de Tallas
+            const skuNumerico = Number(`${idProdNumerico}${idTallaNumerico}`);
 
-                if (tipoTallaSeleccionada) {
-                    const qTalla = query(
-                        collection(db, 'Talla'),
-                        where('ID_TipoTalla', 'in', [
-                            tipoTallaSeleccionada,
-                            Number(tipoTallaSeleccionada),
-                            String(tipoTallaSeleccionada)
-                        ])
-                    );
-                    const snapTalla = await getDocs(qTalla);
-                    const docsTalla = snapTalla.docs.filter((td) => !esDocPlantilla(td));
-                    docsTalla.forEach((td) => {
-                        const tid = td.data().ID_Talla ?? td.id;
-                        idsTallaEquivalentes.add(String(tid));
+            // REGLAS 3 & 4: Integridad Estricta y Verificación de Flujo de Entrada de Stock
+            // Consultar si ya existe este código numérico de variante para este producto
+            const qVar = query(
+                collection(db, 'Variante_Producto'),
+                where('ID_Producto', 'in', [
+                    idProductoPadre,
+                    Number(idProductoPadre),
+                    String(idProductoPadre)
+                ])
+            );
+            const snapVar = await getDocs(qVar);
+            let varExistente = null;
+
+            for (const d of snapVar.docs) {
+                if (esDocPlantilla(d)) continue;
+                const vd = d.data();
+                const vid = vd.ID_Variante ?? d.id;
+
+                const coincideSku = String(vid) === String(skuNumerico) || Number(vid) === skuNumerico;
+                const coincideTalla = 
+                    vd.ID_TipoTalla != null && 
+                    Number(vd.ID_TipoTalla) === idTallaNumerico;
+
+                if (coincideSku || coincideTalla) {
+                    varExistente = { ...vd, ID_Variante: vid, _docId: d.id };
+                    break;
+                }
+            }
+
+            let idVarianteFinal = skuNumerico;
+            let idInventarioObjetivo = null;
+            let stockAnteriorAudit = 0;
+            let nuevoStock = 0;
+
+            const idColorFinal = colorSeleccionado 
+                ? (Number(colorSeleccionado) || colorSeleccionado) 
+                : (varianteStock.Colores?.ID_Color ?? null);
+
+            if (varExistente) {
+                // Caso A: Ya existe el código numérico de la variante -> La talla es inmutable.
+                // Sumar (o restar) la cantidad al stock existente en Inventario.
+                idVarianteFinal = varExistente.ID_Variante;
+
+                if (colorSeleccionado && idColorFinal != null && idColorFinal !== varExistente.ID_Color) {
+                    await actualizarDocPorId('Variante_Producto', 'ID_Variante', idVarianteFinal, {
+                        ID_Color: idColorFinal
                     });
                 }
 
-                const idColorFinal = colorSeleccionado ? (Number(colorSeleccionado) || colorSeleccionado) : (varianteStock.Colores?.ID_Color ?? null);
-
-                // Buscar todas las variantes de la misma prenda en la BD
-                const qVar = query(
-                    collection(db, 'Variante_Producto'),
-                    where('ID_Producto', 'in', [
-                        varianteStock.ID_Producto,
-                        Number(varianteStock.ID_Producto),
-                        String(varianteStock.ID_Producto)
+                const qInv = query(
+                    collection(db, 'Inventario'),
+                    where('ID_Variante', 'in', [
+                        idVarianteFinal,
+                        Number(idVarianteFinal),
+                        String(idVarianteFinal),
+                        skuNumerico
                     ])
                 );
-                const snapVar = await getDocs(qVar);
-                let varExistente = null;
-                let varPlantillaSinTalla = null;
+                const snapInv = await getDocs(qInv);
+                const docsInv = snapInv.docs.filter((idDoc) => !esDocPlantilla(idDoc));
 
-                for (const d of snapVar.docs) {
-                    if (esDocPlantilla(d)) continue;
-                    const vd = d.data();
-                    const vidDoc = vd.ID_Variante ?? d.id;
-                    if (vd.ID_Talla == null || vd.ID_Talla === '' || vd.ID_Talla === 0) {
-                        varPlantillaSinTalla = { ...vd, ID_Variante: vidDoc, _docId: d.id };
-                    }
-                    const matchTalla =
-                        idsTallaEquivalentes.size > 0 &&
-                        vd.ID_Talla != null &&
-                        idsTallaEquivalentes.has(String(vd.ID_Talla));
-                    if (matchTalla) {
-                        varExistente = { ...vd, ID_Variante: vidDoc, _docId: d.id };
-                        break;
-                    }
-                }
+                if (docsInv.length > 0) {
+                    const invDoc = docsInv[0];
+                    idInventarioObjetivo = invDoc.data().ID_Inventario ?? invDoc.id;
+                    stockAnteriorAudit = Number(invDoc.data().Cantidad_Disponible ?? 0);
+                    nuevoStock = tipoMovimiento === 'entrada'
+                        ? stockAnteriorAudit + cant
+                        : Math.max(0, stockAnteriorAudit - cant);
 
-                // Caso A: Ya existe esa talla para esta prenda -> sumamos/restamos stock sobre el ID único de esa talla
-                if (varExistente) {
-                    idVarianteObjetivo = varExistente.ID_Variante;
-                    if (colorCambio && idColorFinal != null) {
-                        await actualizarDocPorId('Variante_Producto', 'ID_Variante', idVarianteObjetivo, {
-                            ID_Color: idColorFinal
-                        });
-                    }
-                    const qInv = query(
-                        collection(db, 'Inventario'),
-                        where('ID_Variante', 'in', [
-                            idVarianteObjetivo,
-                            Number(idVarianteObjetivo),
-                            String(idVarianteObjetivo)
-                        ])
-                    );
-                    const snapInv = await getDocs(qInv);
-                    const docsInv = snapInv.docs.filter((idDoc) => !esDocPlantilla(idDoc));
-                    if (docsInv.length > 0) {
-                        const invDoc = docsInv[0];
-                        idInventarioObjetivo = invDoc.data().ID_Inventario ?? invDoc.id;
-                        const stockBase = Number(invDoc.data().Cantidad_Disponible ?? 0);
-                        stockAnteriorAudit = stockBase;
-                        nuevoStock = tipoMovimiento === 'entrada' ? stockBase + cant : Math.max(0, stockBase - cant);
-                    } else {
-                        const nuevoInvId = doc(collection(db, 'Inventario')).id;
-                        stockAnteriorAudit = 0;
-                        nuevoStock = tipoMovimiento === 'entrada' ? cant : 0;
-                        await setDoc(doc(db, 'Inventario', String(nuevoInvId)), {
-                            ID_Inventario: nuevoInvId,
-                            ID_Variante: idVarianteObjetivo,
-                            Cantidad_Disponible: nuevoStock,
-                            Cantidad_Reservada: 0,
-                            Fecha_Actualizacion: new Date().toISOString()
-                        });
-                        idInventarioObjetivo = nuevoInvId;
-                    }
-                } else {
-                    // Caso B: Es una talla nueva para esta prenda (sea la primera o una adicional)
-                    // Siempre se genera un ID_Variante único, un ID_Talla único y un ID_Inventario único para esta talla de esta prenda
-                    const nuevoVarId = doc(collection(db, 'Variante_Producto')).id;
-                    const nuevaTallaId = doc(collection(db, 'Talla')).id;
-
-                    await setDoc(doc(db, 'Talla', String(nuevaTallaId)), {
-                        ID_Talla: nuevaTallaId,
-                        ID_TipoTalla: Number(tipoTallaSeleccionada) || tipoTallaSeleccionada,
-                        ID_Producto: varianteStock.ID_Producto,
-                        ID_Variante: nuevoVarId
+                    await actualizarDocPorId('Inventario', 'ID_Inventario', idInventarioObjetivo, {
+                        Cantidad_Disponible: nuevoStock,
+                        Fecha_Actualizacion: new Date().toISOString()
                     });
-
-                    const nuevaVar = {
-                        ID_Variante: nuevoVarId,
-                        ID_Producto: varianteStock.ID_Producto,
-                        ID_Talla: nuevaTallaId,
-                        ID_Color: idColorFinal,
-                        Precio_Actual: varianteStock.Precio_Actual,
-                        ID_EstadoProducto: 1,
-                        ...(varianteStock.Tiene_Descuento ? {
-                            Porcentaje_Descuento: varianteStock.Porcentaje_Descuento,
-                            Precio_Oferta: varianteStock.Precio_Oferta,
-                            Fecha_Inicio_Oferta: varianteStock.Fecha_Inicio_Oferta ?? null,
-                            Fecha_Fin_Oferta: varianteStock.Fecha_Fin_Oferta ?? null,
-                            Tiene_Descuento: true
-                        } : {})
-                    };
-                    await setDoc(doc(db, 'Variante_Producto', String(nuevoVarId)), nuevaVar);
-                    idVarianteObjetivo = nuevoVarId;
-
+                } else {
                     const nuevoInvId = doc(collection(db, 'Inventario')).id;
                     stockAnteriorAudit = 0;
                     nuevoStock = tipoMovimiento === 'entrada' ? cant : 0;
                     await setDoc(doc(db, 'Inventario', String(nuevoInvId)), {
                         ID_Inventario: nuevoInvId,
-                        ID_Variante: idVarianteObjetivo,
+                        ID_Variante: idVarianteFinal,
                         Cantidad_Disponible: nuevoStock,
                         Cantidad_Reservada: 0,
                         Fecha_Actualizacion: new Date().toISOString()
                     });
                     idInventarioObjetivo = nuevoInvId;
-
-                    // Si había quedado una variante plantilla temporal sin talla y con stock 0, limpiarla
-                    if (varPlantillaSinTalla && String(varPlantillaSinTalla.ID_Variante) !== String(nuevoVarId)) {
-                        const qInvPlantilla = query(
-                            collection(db, 'Inventario'),
-                            where('ID_Variante', 'in', [
-                                varPlantillaSinTalla.ID_Variante,
-                                Number(varPlantillaSinTalla.ID_Variante),
-                                String(varPlantillaSinTalla.ID_Variante)
-                            ])
-                        );
-                        const snapInvPlantilla = await getDocs(qInvPlantilla);
-                        const stockPlantilla = snapInvPlantilla.docs.reduce(
-                            (acc, docInv) => acc + Number(docInv.data().Cantidad_Disponible ?? 0),
-                            0
-                        );
-                        if (stockPlantilla === 0) {
-                            await eliminarDocPorId('Variante_Producto', 'ID_Variante', varPlantillaSinTalla.ID_Variante);
-                            await eliminarDocPorId('Inventario', 'ID_Variante', varPlantillaSinTalla.ID_Variante);
-                        }
-                    }
                 }
-            }
+            } else {
+                // Caso B: NO existe la variante -> INSERT estricto del nuevo registro hijo vinculado al padre y a la talla
+                // CERO eliminaciones: El registro del Producto Base jamás se elimina ni se sobreescribe.
+                const idDocVariante = String(skuNumerico);
 
-            // 3. Actualizar el stock
-            if (idInventarioObjetivo) {
-                await actualizarDocPorId('Inventario', 'ID_Inventario', idInventarioObjetivo, {
+                let idTallaAsociada = idTallaNumerico;
+                try {
+                    const qTalla = query(
+                        collection(db, 'Talla'),
+                        where('ID_TipoTalla', 'in', [idTallaNumerico, String(idTallaNumerico), Number(idTallaNumerico)])
+                    );
+                    const snapTalla = await getDocs(qTalla);
+                    const docsT = snapTalla.docs.filter((td) => !esDocPlantilla(td));
+                    if (docsT.length > 0) {
+                        idTallaAsociada = docsT[0].data().ID_Talla ?? docsT[0].id;
+                    }
+                } catch {
+                    idTallaAsociada = idTallaNumerico;
+                }
+
+                const nuevaVariante = {
+                    ID_Variante: skuNumerico,
+                    ID_Producto: idProductoPadre, // Llave foránea hacia el producto base
+                    ID_Talla: idTallaAsociada,
+                    ID_TipoTalla: idTallaNumerico,
+                    ID_Color: idColorFinal,
+                    Precio_Actual: Number(varianteStock.Precio_Actual) || Number(varianteStock.Productos?.Precio) || 0,
+                    ID_EstadoProducto: 1,
+                    Fecha_Creacion: new Date().toISOString(),
+                    ...(varianteStock.Tiene_Descuento ? {
+                        Porcentaje_Descuento: varianteStock.Porcentaje_Descuento,
+                        Precio_Oferta: varianteStock.Precio_Oferta,
+                        Fecha_Inicio_Oferta: varianteStock.Fecha_Inicio_Oferta ?? null,
+                        Fecha_Fin_Oferta: varianteStock.Fecha_Fin_Oferta ?? null,
+                        Tiene_Descuento: true
+                    } : {})
+                };
+
+                // INSERT estricto en Variante_Producto con el SKU numérico
+                await setDoc(doc(db, 'Variante_Producto', idDocVariante), nuevaVariante);
+                idVarianteFinal = skuNumerico;
+
+                // INSERT estricto en Inventario
+                const nuevoInvId = doc(collection(db, 'Inventario')).id;
+                stockAnteriorAudit = 0;
+                nuevoStock = tipoMovimiento === 'entrada' ? cant : 0;
+                await setDoc(doc(db, 'Inventario', String(nuevoInvId)), {
+                    ID_Inventario: nuevoInvId,
+                    ID_Variante: skuNumerico,
                     Cantidad_Disponible: nuevoStock,
+                    Cantidad_Reservada: 0,
                     Fecha_Actualizacion: new Date().toISOString()
                 });
+                idInventarioObjetivo = nuevoInvId;
+            }
 
-                // --- INSERTAR EN TABLA DE AUDITORIA ---
-                try {
-                    const idUserAccion = await obtenerIdUsuario();
-                    const nuevoAuditId = doc(collection(db, 'Auditoria_Inventario')).id;
-                    await setDoc(doc(db, 'Auditoria_Inventario', String(nuevoAuditId)), {
-                        ID_Auditoria: nuevoAuditId,
-                        ID_Variante: idVarianteObjetivo,
-                        ID_UserAccion: idUserAccion,
-                        Cantidad_Anterior: stockAnteriorAudit,
-                        Cantidad_Nueva: nuevoStock,
-                        Tipo_Movimiento: tipoMovimiento === 'entrada' ? 'Ingreso' : 'Salida',
-                        Motivo: motivoStock || (tipoMovimiento === 'entrada' ? 'Compra a proveedor' : 'Ajuste de inventario'),
-                        Fecha_Accion: new Date().toISOString()
-                    });
-                } catch (err) {
-                    console.error('No se pudo guardar la auditoría en Firestore:', err);
-                }
+            // Registrar en Auditoria_Inventario
+            try {
+                const idUserAccion = (await obtenerIdUsuario()) || auth.currentUser?.uid || 'Admin';
+                const nuevoAuditId = doc(collection(db, 'Auditoria_Inventario')).id;
+                const motivoFinal = motivoStock === 'Otro'
+                    ? (motivoPersonalizado.trim() || 'Otro (sin especificar)')
+                    : (motivoStock || (tipoMovimiento === 'entrada' ? 'Compra a proveedor' : 'Ajuste de inventario'));
+
+                await setDoc(doc(db, 'Auditoria_Inventario', String(nuevoAuditId)), {
+                    ID_Auditoria: nuevoAuditId,
+                    ID_Variante: idVarianteFinal,
+                    ID_UserAccion: idUserAccion,
+                    Cantidad_Anterior: stockAnteriorAudit,
+                    Cantidad_Nueva: nuevoStock,
+                    Tipo_Movimiento: tipoMovimiento === 'entrada' ? 'Ingreso' : 'Salida',
+                    Motivo: motivoFinal,
+                    Fecha_Accion: new Date().toISOString()
+                });
+            } catch (err) {
+                console.error('No se pudo guardar la auditoría:', err);
             }
 
             setModalAbierto(null);
-            cargarVariantes();
+            setMotivoPersonalizado('');
+            await cargarVariantes();
             cargarAuditoria();
         } catch (err) {
             console.error('Error en guardarEntradaStock:', err);
+            alert('Error al registrar movimiento de stock: ' + (err?.message || 'Error desconocido'));
         } finally {
             setGuardandoStock(false);
         }
@@ -1559,6 +1525,23 @@ function AdminInventario() {
                     }
                     return true;
                 });
+
+            // Incluir productos base que no tengan variantes registradas todavía (como entidad independiente lista para stock)
+            const productosConVariante = new Set(listaVariantes.map((v) => String(v.ID_Producto)));
+            Object.values(prodMap).forEach((p) => {
+                if (p && p.Nombre_Producto && !productosConVariante.has(String(p.ID_Producto))) {
+                    listaVariantes.push({
+                        ID_Variante: p.ID_Producto,
+                        ID_Producto: p.ID_Producto,
+                        Precio_Actual: p.Precio || 0,
+                        ID_EstadoProducto: p.ID_EstadoProducto ?? 1,
+                        Productos: p,
+                        Talla: null,
+                        Inventario: [{ ID_Inventario: null, Cantidad_Disponible: 0 }],
+                        Colores: null
+                    });
+                }
+            });
 
             const ordenTallasTabla = { XS: 1, S: 2, M: 3, L: 4, XL: 5, XXL: 6 };
             listaVariantes.sort((a, b) => {
@@ -1783,15 +1766,28 @@ function AdminInventario() {
         setGuardandoProducto(true);
 
         try {
-            const idProducto = doc(collection(db, 'Productos')).id;
-            const idVariante = doc(collection(db, 'Variante_Producto')).id;
+            // 1. Obtener siguiente código numérico secuencial para garantizar producto base 100% numérico
+            const snapProd = await getDocs(collection(db, 'Productos'));
+            let maxCodigo = 10000;
+            snapProd.docs.forEach((d) => {
+                const data = d.data();
+                const num = Number(data.Codigo_Producto ?? data.ID_Producto);
+                if (!isNaN(num) && num >= 10000 && num < 1000000 && num > maxCodigo) {
+                    maxCodigo = num;
+                }
+            });
+            const nuevoCodigoNumerico = maxCodigo + 1;
+            const idProducto = nuevoCodigoNumerico;
+            const idVariante = nuevoCodigoNumerico;
             const idInventario = doc(collection(db, 'Inventario')).id;
 
-            // 1. Crear producto maestro y su registro base en Firestore (las tallas y su stock se agregan después en "Ajustar stock")
+            // 2. Crear producto maestro independiente y su registro base
             const nuevoProducto = {
                 ID_Producto: idProducto,
+                Codigo_Producto: nuevoCodigoNumerico,
                 Nombre_Producto: nombreProducto,
                 Descripcion: descripcionProducto,
+                Precio: parseFloat(precioProducto) || 0,
                 ID_Categoria: Number(idCategoriaFinal) || idCategoriaFinal,
                 ID_Marca: marcaSeleccionada ? (Number(marcaSeleccionada) || marcaSeleccionada) : null,
                 ID_EstadoProducto: 1,
@@ -1820,7 +1816,7 @@ function AdminInventario() {
             batch.set(doc(db, 'Inventario', String(idInventario)), nuevoInventario);
             await batch.commit();
 
-            // 2. Subir fotos en paralelo con optimización de imagen
+            // 3. Subir fotos en paralelo con optimización de imagen
             if (fotosSeleccionadas.length > 0) {
                 await subirFotos(idProducto, fotosSeleccionadas);
             }
@@ -2605,34 +2601,14 @@ function AdminInventario() {
             )}
 
 
-            <div className="modal-row">
-                <div>
-                    <label>Precio</label>
-                    <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={precioEditar}
-                        onChange={(e) => setPrecioEditar(e.target.value)}
-                    />
-                </div>
-                <div>
-                    <label>Talla</label>
-                    <input
-                        type="text"
-                        value={tallaEditar}
-                        onChange={(e) => setTallaEditar(e.target.value)}
-                    />
-                </div>
-                <div>
-                    <label>Stock</label>
-                    <input
-                        type="number"
-                        value={stockEditar}
-                        onChange={(e) => setStockEditar(e.target.value)}
-                    />
-                </div>
-            </div>
+            <label>Precio</label>
+            <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={precioEditar}
+                onChange={(e) => setPrecioEditar(e.target.value)}
+            />
 
                         <label>Marca</label>
             {!creandoMarcaEditar ? (
@@ -2805,17 +2781,22 @@ function AdminInventario() {
                                     return (
                                         <span
                                             key={vp.ID_Variante}
-                                            onClick={() => idTipo && setTipoTallaSeleccionada(idTipo)}
+                                            onClick={() => {
+                                                if (!tieneTallaAsignadaStock && idTipo) {
+                                                    setTipoTallaSeleccionada(idTipo);
+                                                }
+                                            }}
                                             style={{
                                                 padding: '3px 8px',
                                                 borderRadius: '4px',
-                                                cursor: 'pointer',
+                                                cursor: tieneTallaAsignadaStock ? 'not-allowed' : 'pointer',
                                                 backgroundColor: seleccionada ? '#111' : '#fff',
                                                 color: seleccionada ? '#fff' : '#111',
                                                 border: '1px solid #bbb',
-                                                fontWeight: 600
+                                                fontWeight: 600,
+                                                opacity: tieneTallaAsignadaStock && !seleccionada ? 0.6 : 1
                                             }}
-                                            title={`ID Variante: ${vp.ID_Variante} | ID Talla: ${vp.ID_Talla}`}
+                                            title={tieneTallaAsignadaStock ? `Talla fija de esta variante (${nomTalla})` : `ID Variante: ${vp.ID_Variante} | ID Talla: ${vp.ID_Talla}`}
                                         >
                                             {nomTalla} (ID: {vp.ID_Variante}): {cantTalla} uds.
                                         </span>
@@ -2878,18 +2859,31 @@ function AdminInventario() {
                 value={cantidadIngresar}
                 onChange={(e) => setCantidadIngresar(e.target.value)}
             />
-             <label>Talla</label>
-                <select
-                    value={tipoTallaSeleccionada}
-                    onChange={(e) => setTipoTallaSeleccionada(e.target.value)}
-                >
-                    <option value="" disabled hidden>Selecciona una talla</option>
-                    {tallasDisponibles.map((t) => (
-                        <option key={t.ID_TipoTalla} value={t.ID_TipoTalla}>
-                            {t.Nombre_TipoTalla}
-                        </option>
-                    ))}
-                </select>
+             <label>
+                 Talla {tieneTallaAsignadaStock && (
+                     <span style={{ color: '#666', fontWeight: 'normal', fontSize: '0.85rem' }}>
+                         (Asignada a esta variante - Bloqueada)
+                     </span>
+                 )}
+             </label>
+             <select
+                 value={tipoTallaSeleccionada}
+                 onChange={(e) => setTipoTallaSeleccionada(e.target.value)}
+                 disabled={tieneTallaAsignadaStock}
+                 style={{
+                     backgroundColor: tieneTallaAsignadaStock ? '#f3f4f6' : '#ffffff',
+                     cursor: tieneTallaAsignadaStock ? 'not-allowed' : 'pointer',
+                     color: tieneTallaAsignadaStock ? '#555555' : 'inherit',
+                     borderColor: tieneTallaAsignadaStock ? '#d1d5db' : undefined
+                 }}
+             >
+                 <option value="" disabled hidden>Selecciona una talla</option>
+                 {tallasDisponibles.map((t) => (
+                     <option key={t.ID_TipoTalla} value={t.ID_TipoTalla}>
+                         {t.Nombre_TipoTalla}
+                     </option>
+                 ))}
+             </select>
                 
                 {/* Selector de color, si hay colores disponibles para la variante */}
                 <label>Color</label>
@@ -2907,12 +2901,21 @@ function AdminInventario() {
 
             {/* Opciones según el tipo de movimiento */}
             <label>Motivo</label>
-            <select value={motivoStock} onChange={(e) => setMotivoStock(e.target.value)}>
+            <select
+                value={motivoStock}
+                onChange={(e) => {
+                    setMotivoStock(e.target.value);
+                    if (e.target.value !== 'Otro') {
+                        setMotivoPersonalizado('');
+                    }
+                }}
+            >
                 {tipoMovimiento === 'entrada' ? (
                     <>
                         <option value="Compra a proveedor">Compra a proveedor</option>
                         <option value="Devolución de cliente">Devolución de cliente</option>
                         <option value="Ajuste positivo de inventario">Ajuste de inventario</option>
+                        <option value="Otro">Otro</option>
                     </>
                 ) : (
                     <>
@@ -2920,9 +2923,23 @@ function AdminInventario() {
                         <option value="Producto dañado / defectuoso">Producto dañado o defectuoso</option>
                         <option value="Pérdida o merma">Pérdida o merma</option>
                         <option value="Ajuste negativo de inventario">Ajuste de inventario</option>
+                        <option value="Otro">Otro</option>
                     </>
                 )}
             </select>
+
+            {motivoStock === 'Otro' && (
+                <div style={{ marginTop: '10px' }}>
+                    <label>Escribe la razón / motivo</label>
+                    <input
+                        type="text"
+                        placeholder="Escribe la razón aquí..."
+                        value={motivoPersonalizado}
+                        onChange={(e) => setMotivoPersonalizado(e.target.value)}
+                        autoFocus
+                    />
+                </div>
+            )}
 
             {/* Tarjeta de cálculo en vivo según la talla seleccionada */}
             {(() => {
@@ -2940,15 +2957,17 @@ function AdminInventario() {
                     'Sin seleccionar';
                 const cant = parseInt(cantidadIngresar, 10) || 0;
                 const resultante = tipoMovimiento === 'entrada' ? stockBaseTalla + cant : stockBaseTalla - cant;
-                const esInvalido = resultante < 0;
+                const stockNegativo = resultante < 0;
+                const faltaMotivoOtro = motivoStock === 'Otro' && !motivoPersonalizado.trim();
+                const botonDeshabilitado = guardandoStock || stockNegativo || cant <= 0 || !tipoTallaSeleccionada || faltaMotivoOtro;
 
                 return (
                     <>
                         <div style={{
                             marginTop: '16px',
-                            backgroundColor: esInvalido ? '#f8d7da' : '#e8f5e9',
-                            border: `1px solid ${esInvalido ? '#f5c6cb' : '#c8e6c9'}`,
-                            color: esInvalido ? '#721c24' : '#1b5e20',
+                            backgroundColor: stockNegativo ? '#f8d7da' : '#e8f5e9',
+                            border: `1px solid ${stockNegativo ? '#f5c6cb' : '#c8e6c9'}`,
+                            color: stockNegativo ? '#721c24' : '#1b5e20',
                             padding: '10px 14px',
                             borderRadius: '8px',
                             display: 'flex',
@@ -2965,7 +2984,7 @@ function AdminInventario() {
                         <button 
                             className="btn-guardar" 
                             onClick={guardarEntradaStock}
-                            disabled={guardandoStock || esInvalido}
+                            disabled={botonDeshabilitado}
                             style={{ marginTop: '16px' }}
                         >
                             {guardandoStock ? 'Guardando...' : 'Confirmar movimiento'}

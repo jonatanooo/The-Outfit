@@ -17,10 +17,37 @@ const firebaseConfig = {
 
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app);
-// Solo inicializar Firebase Auth en el navegador (o si existe la API key en el entorno)
-// para evitar el error `auth/invalid-api-key` durante `next build` en entornos Preview de Vercel
-export const auth =
-  typeof window !== 'undefined' || process.env.NEXT_PUBLIC_FIREBASE_API_KEY
-    ? getAuth(app)
-    : /** @type {any} */ ({});
+
+// Inicialización perezosa (lazy proxy) de Firebase Auth para evitar que `next build`
+// o entornos Preview de Vercel fallen con `auth/invalid-api-key` cuando falten variables de entorno
+let _authInstance = null;
+function obtenerAuthSeguro() {
+  if (!_authInstance) {
+    try {
+      const tieneApiKey = Boolean(
+        app?.options?.apiKey &&
+        typeof app.options.apiKey === 'string' &&
+        app.options.apiKey.trim().length > 0
+      );
+      if (typeof window !== 'undefined' || tieneApiKey) {
+        _authInstance = getAuth(app);
+      }
+    } catch (e) {
+      console.warn('Advertencia: Firebase Auth client no se pudo inicializar en este entorno:', e?.message);
+    }
+  }
+  return _authInstance || /** @type {any} */ ({});
+}
+
+export const auth = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      const instancia = obtenerAuthSeguro();
+      const val = instancia[prop];
+      return typeof val === 'function' ? val.bind(instancia) : val;
+    },
+  }
+);
+
 export const storage = getStorage(app);
