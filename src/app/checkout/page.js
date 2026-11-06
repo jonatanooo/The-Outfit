@@ -346,12 +346,25 @@ export default function CheckoutPage() {
     setErrorCompra('');
 
     try {
-      const idToken = await auth.currentUser?.getIdToken().catch(() => null);
+      if (typeof auth?.authStateReady === 'function') {
+        await auth.authStateReady();
+      }
+
+      if (!auth?.currentUser) {
+        throw new Error('Debes iniciar sesión para procesar la compra.');
+      }
+
+      // Obtener el ID Token real y fresco del usuario autenticado
+      const token = await auth.currentUser.getIdToken(true);
+      if (!token || typeof token !== 'string' || token === 'undefined' || token === 'null' || !token.trim()) {
+        throw new Error('No se pudo obtener el token de autenticación del usuario. Por favor vuelve a iniciar sesión.');
+      }
+
       const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           items: items.map((i) => ({
@@ -372,10 +385,10 @@ export default function CheckoutPage() {
         resultadoCompra = await response.json();
       } else {
         const errData = await response.json().catch(() => ({}));
-        if (response.status >= 400 && response.status < 500 && errData.error) {
+        if (errData.error) {
           throw new Error(errData.error);
         }
-        // Fallback transaccional atómico con runTransaction si el servidor API devolvió error 500
+        // Fallback transaccional atómico con runTransaction si el servidor API devolvió error sin mensaje
         resultadoCompra = await ejecutarTransaccionSeguraFirestore(metodoPago);
       }
 

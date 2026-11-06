@@ -6,27 +6,22 @@ import { useSearchParams } from "next/navigation";
 import FiltroMenu from "./FiltroMenu";
 import ListadoPrendas from "./ListadoPrendas";
 
-function PaginaCategoriaContenido({ idCategoriaPadre }) {
+function PaginaCategoriaContenido({ idCategoriaPadre, categoriaFija = null }) {
   const searchParams = useSearchParams();
-  const categoriaQuery = searchParams.get('categoria');
+  const categoriaQuery = categoriaFija || searchParams.get('categoria') || searchParams.get('subcategoria') || searchParams.get('temporada');
 
   const [subcategorias, setSubcategorias] = useState([]);
-  const [filtrosMenu, setFiltrosMenu] = useState({});
+  const [prevQuery, setPrevQuery] = useState(categoriaQuery);
+  const [filtrosManuales, setFiltrosManuales] = useState(null);
   const [cantidadResultados, setCantidadResultados] = useState(0);
 
-  // Sincronizar siempre cuando cambia el parametro en la URL
-  useEffect(() => {
-    setFiltrosMenu((prev) => {
-      if (categoriaQuery) {
-        // Reemplaza la categoría actual con la que viene en la URL
-        return { ...prev, Categorias: [categoriaQuery] };
-      } else {
-        // Si no hay categoría en la URL, limpiamos el filtro
-        const { Categorias, ...resto } = prev;
-        return resto;
-      }
-    });
-  }, [categoriaQuery]);
+  // Sincronizar automáticamente cuando cambia el parámetro de categoría en la URL
+  if (categoriaQuery !== prevQuery) {
+    setPrevQuery(categoriaQuery);
+    setFiltrosManuales(null);
+  }
+
+  const filtrosActivos = filtrosManuales ?? (categoriaQuery ? { Categorias: [categoriaQuery] } : {});
 
   useEffect(() => {
     async function cargarSubcategorias() {
@@ -37,7 +32,12 @@ function PaginaCategoriaContenido({ idCategoriaPadre }) {
           .filter((c) => String(c.ID_CategoriaPadre) === String(idCategoriaPadre))
           .map((c) => c.Nombre_Categoria)
           .filter(Boolean);
-        setSubcategorias(subs);
+
+        const tieneWinter = subs.some(
+          (s) => String(s).trim().toUpperCase() === "WINTER SEASON"
+        );
+        const listaOpciones = tieneWinter ? subs : ["WINTER SEASON", ...subs];
+        setSubcategorias(listaOpciones);
       } catch (error) {
         console.error("Error al cargar subcategorias desde Firestore:", error);
       }
@@ -46,16 +46,16 @@ function PaginaCategoriaContenido({ idCategoriaPadre }) {
   }, [idCategoriaPadre]);
 
   const filtrosCombinados = {
-    ...filtrosMenu,
-    Categorias: filtrosMenu.Categorias?.length > 0 ? filtrosMenu.Categorias : subcategorias,
+    ...filtrosActivos,
+    Categorias: filtrosActivos.Categorias?.length > 0 ? filtrosActivos.Categorias : null,
   };
 
   return (
     <>
       <FiltroMenu
-        onAplicarFiltros={setFiltrosMenu}
+        onAplicarFiltros={setFiltrosManuales}
         categoriasDisponibles={subcategorias}
-        filtrosActivos={filtrosMenu}
+        filtrosActivos={filtrosActivos}
         cantidadResultados={cantidadResultados}
       />
       <div className="prenda-wrap-listado">
@@ -65,10 +65,10 @@ function PaginaCategoriaContenido({ idCategoriaPadre }) {
   );
 }
 
-export default function PaginaCategoria({ idCategoriaPadre }) {
+export default function PaginaCategoria({ idCategoriaPadre, categoriaFija = null }) {
   return (
     <Suspense fallback={<div>Cargando catálogo...</div>}>
-      <PaginaCategoriaContenido idCategoriaPadre={idCategoriaPadre} />
+      <PaginaCategoriaContenido idCategoriaPadre={idCategoriaPadre} categoriaFija={categoriaFija} />
     </Suspense>
   );
 }

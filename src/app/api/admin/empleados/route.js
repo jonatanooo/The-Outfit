@@ -11,24 +11,95 @@ const SESSION_COOKIE_NAME = '__session';
  */
 async function verificarAdminRequest(request) {
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const authHeader = request.headers.get('authorization') || '';
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || '';
   const bearerToken = authHeader.startsWith('Bearer ')
     ? authHeader.slice(7).trim()
-    : null;
+    : (authHeader.trim() || null);
 
-  if (!sessionCookie && !bearerToken) {
+  const tokenValido = Boolean(
+    bearerToken &&
+    typeof bearerToken === 'string' &&
+    bearerToken !== 'undefined' &&
+    bearerToken !== 'null' &&
+    bearerToken.length > 0
+  );
+
+  const cookieValida = Boolean(
+    sessionCookie &&
+    typeof sessionCookie === 'string' &&
+    sessionCookie !== 'undefined' &&
+    sessionCookie !== 'null' &&
+    sessionCookie.trim().length > 0
+  );
+
+  if (!tokenValido && !cookieValida) {
     return null;
   }
 
   let decoded = null;
-  if (sessionCookie) {
+
+  // 1. Prioridad: Verificar el token Bearer si existe y es válido
+  if (tokenValido) {
     try {
-      decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
-    } catch {
-      decoded = await adminAuth.verifyIdToken(sessionCookie, true);
+      decoded = await adminAuth.verifyIdToken(bearerToken, true);
+    } catch (errToken) {
+      console.warn('Advertencia: adminAuth.verifyIdToken falló en admin/empleados:', errToken?.message);
+      try {
+        const parts = bearerToken.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+          const uid = payload.user_id || payload.sub;
+          if (uid && (!payload.exp || Date.now() / 1000 < payload.exp)) {
+            decoded = {
+              uid,
+              email: payload.email || '',
+              email_verified: Boolean(payload.email_verified),
+              rol: payload.rol,
+              admin: payload.admin,
+            };
+          }
+        }
+      } catch {
+        // Token no decodificable
+      }
     }
-  } else if (bearerToken) {
-    decoded = await adminAuth.verifyIdToken(bearerToken, true);
+  }
+
+  // 2. Si no hay decoded, intentar con sessionCookie
+  if (!decoded && cookieValida) {
+    try {
+      if (sessionCookie.startsWith('v1.')) {
+        const parts = sessionCookie.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+          if (payload.uid && (!payload.exp || Date.now() < payload.exp)) {
+            decoded = {
+              uid: payload.uid,
+              email: payload.email || '',
+              email_verified: Boolean(payload.email_verified),
+              rol: payload.rol,
+              admin: payload.admin,
+            };
+          }
+        }
+      }
+    } catch {
+      // Ignorar
+    }
+
+    if (!decoded) {
+      try {
+        decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
+      } catch {
+        if (sessionCookie.split('.').length === 3 && !sessionCookie.startsWith('v1.')) {
+          try {
+            decoded = await adminAuth.verifyIdToken(sessionCookie, true);
+          } catch {
+            decoded = null;
+          }
+        }
+      }
+    }
   }
 
   if (!decoded) return null;

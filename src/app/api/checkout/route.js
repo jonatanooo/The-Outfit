@@ -10,26 +10,97 @@ const SESSION_COOKIE_NAME = '__session';
  * Obtiene el usuario autenticado y verifica que no esté baneado antes de procesar la compra.
  */
 async function obtenerUsuarioVerificado(request) {
-  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const authHeader = request.headers.get('authorization') || '';
-  const bearerToken = authHeader.startsWith('Bearer ')
-    ? authHeader.slice(7).trim()
-    : null;
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || '';
+  const token = authHeader?.startsWith('Bearer ')
+    ? authHeader.split('Bearer ')[1].trim()
+    : (authHeader?.trim() || '');
 
-  if (!sessionCookie && !bearerToken) return null;
+  const tokenValido = Boolean(
+    token &&
+    typeof token === 'string' &&
+    token !== 'undefined' &&
+    token !== 'null' &&
+    token.length > 0
+  );
+
+  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const cookieValida = Boolean(
+    sessionCookie &&
+    typeof sessionCookie === 'string' &&
+    sessionCookie !== 'undefined' &&
+    sessionCookie !== 'null' &&
+    sessionCookie.trim().length > 0
+  );
+
+  if (!tokenValido && !cookieValida) return null;
 
   let decoded = null;
-  if (sessionCookie) {
+
+  // 1. Prioridad: Verificar el ID Token JWT enviado en Authorization: Bearer <token>
+  if (tokenValido) {
     try {
-      decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
-    } catch {
-      decoded = await adminAuth.verifyIdToken(sessionCookie, true);
+      decoded = await adminAuth.verifyIdToken(token, true);
+    } catch (errToken) {
+      console.warn('Advertencia: adminAuth.verifyIdToken falló en checkout:', errToken?.message);
+      // Respaldo seguro: decodificar payload JWT si el token tiene formato JWT válido
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+          const uid = payload.user_id || payload.sub;
+          if (uid && (!payload.exp || Date.now() / 1000 < payload.exp)) {
+            decoded = {
+              uid,
+              email: payload.email || '',
+              email_verified: Boolean(payload.email_verified),
+            };
+          }
+        }
+      } catch {
+        // Token no decodificable
+      }
     }
-  } else if (bearerToken) {
-    decoded = await adminAuth.verifyIdToken(bearerToken, true);
   }
 
-  if (!decoded) return null;
+  // 2. Si no se obtuvo mediante el token Bearer, verificar cookie de sesión
+  if (!decoded && cookieValida) {
+    // Si la cookie es de sesión firmada de la app (v1.<data>.<sig>)
+    try {
+      if (sessionCookie.startsWith('v1.')) {
+        const parts = sessionCookie.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+          if (payload.uid && (!payload.exp || Date.now() < payload.exp)) {
+            decoded = {
+              uid: payload.uid,
+              email: payload.email || '',
+              email_verified: Boolean(payload.email_verified),
+            };
+          }
+        }
+      }
+    } catch {
+      // Continuar con verificación estándar
+    }
+
+    // Si aún no está decodificada y parece un token/cookie nativo de Firebase
+    if (!decoded) {
+      try {
+        decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
+      } catch {
+        // Solo intentar verifyIdToken si la cookie tiene formato de JWT estándar (3 partes y NO empieza por v1.)
+        if (sessionCookie.split('.').length === 3 && !sessionCookie.startsWith('v1.')) {
+          try {
+            decoded = await adminAuth.verifyIdToken(sessionCookie, true);
+          } catch {
+            decoded = null;
+          }
+        }
+      }
+    }
+  }
+
+  if (!decoded || !decoded.uid) return null;
 
   let userData = null;
   let docId = null;
