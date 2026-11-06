@@ -70,6 +70,30 @@ async function generarSiguienteIdNumerico(nombreColeccion, campoId, baseMinima =
     }
 }
 
+// Registra de forma estricta un cambio en el precio de una variante en Auditoria_Precio_Variante
+async function registrarAuditoriaPrecioVariante({ idVariante, idUserAccion, precioAnterior, precioNuevo }) {
+    const pAnt = Number(precioAnterior ?? 0);
+    const pNue = Number(precioNuevo ?? 0);
+    if (pAnt === pNue) return null; // Solo registrar si el precio nuevo es diferente al anterior
+
+    try {
+        const idAuditPrecio = await generarSiguienteIdNumerico('Auditoria_Precio_Variante', 'ID_Auditoria', 1);
+        const docAudit = {
+            ID_Auditoria: idAuditPrecio,
+            ID_Variante: Number(idVariante),
+            ID_UserAccion: !isNaN(Number(idUserAccion)) ? Number(idUserAccion) : idUserAccion,
+            Precio_Anterior: pAnt,
+            Precio_Nuevo: pNue,
+            Fecha: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'Auditoria_Precio_Variante', String(idAuditPrecio)), docAudit);
+        return idAuditPrecio;
+    } catch (err) {
+        console.error('Error al registrar Auditoria_Precio_Variante:', err);
+        return null;
+    }
+}
+
 async function actualizarDocPorId(nombreColeccion, campoId, idValor, camposActualizar) {
     if (idValor == null) return;
     try {
@@ -317,6 +341,7 @@ function AdminInventario() {
     const [creandoMarcaEditar, setCreandoMarcaEditar] = useState(false);
     const [nombreNuevaMarcaEditar, setNombreNuevaMarcaEditar] = useState('');
     const [precioEditar, setPrecioEditar] = useState('');
+    const [actualizarEnCascada, setActualizarEnCascada] = useState(true); // Checkbox por defecto true para cascada de precio base
     const [tallaEditar, setTallaEditar] = useState('');
     const [categoriaEditar, setCategoriaEditar] = useState('');
     const [subcategoriaEditar, setSubcategoriaEditar] = useState('');
@@ -339,6 +364,7 @@ function AdminInventario() {
         )
     );
     const [cantidadIngresar, setCantidadIngresar] = useState('');
+    const [precioTallaEntrada, setPrecioTallaEntrada] = useState(''); // Precio opcional para nueva talla (por defecto hereda Precio_Base)
     const [motivoStock, setMotivoStock] = useState('Compra a proveedor');
     const [motivoPersonalizado, setMotivoPersonalizado] = useState('');
     const [guardandoStock, setGuardandoStock] = useState(false);
@@ -914,7 +940,12 @@ function AdminInventario() {
     function abrirModalEditar(v) {
         setVarianteEditando(v);
         setNombreEditar(v.Productos?.Nombre_Producto || '');
-        setPrecioEditar(v.Precio_Actual ?? v.Productos?.Precio ?? '');
+        const esBase = v.esProductoBase || !v.ID_Talla || v.ID_Talla === 0;
+        const precioInit = esBase
+            ? (v.Productos?.Precio_Base ?? v.Productos?.Precio ?? v.Precio_Actual ?? '')
+            : (v.Precio_Actual ?? v.Productos?.Precio_Base ?? v.Productos?.Precio ?? '');
+        setPrecioEditar(precioInit !== '' && precioInit != null ? String(precioInit) : '');
+        setActualizarEnCascada(true); // Por defecto true al editar Producto Base
         setMarcaEditar(v.Marca?.ID_Marca ?? v.Productos?.ID_Marca ?? '');
         setColorEditar(v.Productos?.ID_Color ?? v.Colores?.ID_Color ?? '');
         cargarMarcas();
@@ -962,6 +993,7 @@ function AdminInventario() {
     function abrirModalStock(v) {
         setVarianteStock(v);
         setCantidadIngresar('');
+        setPrecioTallaEntrada('');
         const esBase = v.esProductoBase || !v.ID_Talla;
         if (esBase) {
             setTipoTallaSeleccionada('');
@@ -1413,100 +1445,147 @@ function AdminInventario() {
 
     //-----------OPERACIONES EN LA BASE DE DATOS (CRUD)----------//
 
-    // ---------- GUARDAR EDICION DE VARIANTE ----------//
+    // ---------- GUARDAR EDICION DE PRODUCTO BASE O VARIANTE ----------//
     async function guardarEdicion() {
         if (!varianteEditando) return;
 
-        if (Number(precioEditar) < 0) {
-            alert('El precio no puede ser negativo');
+        const nuevoPrecioNum = parseFloat(precioEditar);
+        if (isNaN(nuevoPrecioNum) || nuevoPrecioNum < 0) {
+            alert('Por favor ingresa un precio válido mayor o igual a 0');
             return;
         }
         setGuardandoEdicion(true);
 
-        const idProducto = varianteEditando.Productos?.ID_Producto ?? varianteEditando.ID_Producto;
-        const idVariante = varianteEditando.ID_Variante;
-        const idTipoTalla = varianteEditando.Talla?.Tipos_Talla?.ID_TipoTalla;
+        const esBase = Boolean(varianteEditando.esProductoBase || !varianteEditando.ID_Talla || varianteEditando.ID_Talla === 0);
+        const idProducto = Number(varianteEditando.Productos?.ID_Producto ?? varianteEditando.ID_Producto);
+        const idVariante = Number(varianteEditando.ID_Variante);
         const categoriaAnterior = varianteEditando.Productos?.ID_Categoria ?? varianteEditando.Productos?.ID_categoria ?? null;
         const precioAnterior = Number(varianteEditando.Precio_Actual ?? 0);
 
         try {
-            const idUserAudit = (await obtenerIdUsuario()) || auth.currentUser?.uid || 'Admin';
+            const idUserAudit = (await obtenerIdUsuario()) || auth.currentUser?.uid || 1;
 
-            // 1. Actualiza el nombre, marca, categoría, precio y color del producto
-            if (idProducto) {
-                const idCatUpdate = subcategoriaEditar ? subcategoriaEditar : (categoriaEditar || null);
-                const idCatFinal = idCatUpdate ? (Number(idCatUpdate) || idCatUpdate) : null;
-                const nuevoPrecioNum = parseFloat(precioEditar);
-                const datosUpdateProd = {
-                    Nombre_Producto: nombreEditar,
-                    ID_Marca: marcaEditar ? (Number(marcaEditar) || marcaEditar) : null,
-                    ID_Categoria: idCatFinal,
-                    ID_Temporada: temporadaEditar ? Number(temporadaEditar) : null
-                };
-                if (!isNaN(nuevoPrecioNum)) {
-                    datosUpdateProd.Precio = nuevoPrecioNum;
-                }
-                if (colorEditar) {
-                    datosUpdateProd.ID_Color = Number(colorEditar) || colorEditar;
-                }
-                await actualizarDocPorId('Productos', 'ID_Producto', idProducto, datosUpdateProd);
+            if (esBase) {
+                // CASO 1: EDICIÓN DEL PRODUCTO BASE
+                // 1. Actualiza información principal del Producto Base (Nombre, Marca, Categoría, Temporada, Color, Precio_Base y Precio)
+                if (idProducto) {
+                    const idCatUpdate = subcategoriaEditar ? subcategoriaEditar : (categoriaEditar || null);
+                    const idCatFinal = idCatUpdate ? (Number(idCatUpdate) || idCatUpdate) : null;
+                    const datosUpdateProd = {
+                        Nombre_Producto: nombreEditar,
+                        ID_Marca: marcaEditar ? (Number(marcaEditar) || marcaEditar) : null,
+                        ID_Categoria: idCatFinal,
+                        ID_Temporada: temporadaEditar ? Number(temporadaEditar) : null,
+                        Precio_Base: nuevoPrecioNum,
+                        Precio: nuevoPrecioNum
+                    };
+                    if (colorEditar) {
+                        datosUpdateProd.ID_Color = Number(colorEditar) || colorEditar;
+                    }
+                    await actualizarDocPorId('Productos', 'ID_Producto', idProducto, datosUpdateProd);
 
-                // Si se cambió el color, heredar a todas las variantes del producto
-                if (colorEditar) {
-                    try {
-                        const qVarsProd = query(
-                            collection(db, 'Variante_Producto'),
-                            where('ID_Producto', 'in', [idProducto, Number(idProducto), String(idProducto)])
-                        );
-                        const snapVarsProd = await getDocs(qVarsProd);
-                        for (const vd of snapVarsProd.docs) {
-                            if (!esDocPlantilla(vd)) {
-                                await updateDoc(vd.ref, { ID_Color: Number(colorEditar) || colorEditar });
+                    // Si se cambió el color, heredar a todas las variantes del producto
+                    if (colorEditar) {
+                        try {
+                            const qVarsProd = query(
+                                collection(db, 'Variante_Producto'),
+                                where('ID_Producto', 'in', [idProducto, Number(idProducto), String(idProducto)])
+                            );
+                            const snapVarsProd = await getDocs(qVarsProd);
+                            for (const vd of snapVarsProd.docs) {
+                                if (!esDocPlantilla(vd)) {
+                                    await updateDoc(vd.ref, { ID_Color: Number(colorEditar) || colorEditar });
+                                }
                             }
+                        } catch (errColorHer) {
+                            console.error('Error heredando color a variantes:', errColorHer);
                         }
-                    } catch (errColorHer) {
-                        console.error('Error heredando color a variantes:', errColorHer);
+                    }
+
+                    // Registrar en Auditoria_CambioCategoria si cambió la categoría
+                    if (idCatFinal != null && String(idCatFinal) !== String(categoriaAnterior ?? '')) {
+                        try {
+                            const idAuditCat = await generarSiguienteIdNumerico('Auditoria_CambioCategoria', 'ID_Auditoria', 1);
+                            await setDoc(doc(db, 'Auditoria_CambioCategoria', String(idAuditCat)), {
+                                ID_Auditoria: idAuditCat,
+                                ID_Producto: idProducto,
+                                ID_UserAccion: idUserAudit,
+                                ID_CategoriaAntigua: categoriaAnterior,
+                                ID_CategoriaNueva: idCatFinal,
+                                Fecha_Registro: new Date().toISOString()
+                            });
+                        } catch (errCatAudit) {
+                            console.error('Error guardando Auditoria_CambioCategoria:', errCatAudit);
+                        }
+                    }
+
+                    // 2. ACTUALIZACIÓN EN CASCADA (Checkbox activo por defecto: true):
+                    // Busca todas las variantes hijas en Variante_Producto con ese ID_Producto y actualiza su Precio_Actual
+                    if (actualizarEnCascada) {
+                        try {
+                            const qHijas = query(
+                                collection(db, 'Variante_Producto'),
+                                where('ID_Producto', 'in', [idProducto, Number(idProducto), String(idProducto)])
+                            );
+                            const snapHijas = await getDocs(qHijas);
+                            let baseIdAudit = await generarSiguienteIdNumerico('Auditoria_Precio_Variante', 'ID_Auditoria', 1);
+
+                            for (const vDoc of snapHijas.docs) {
+                                if (esDocPlantilla(vDoc)) continue;
+                                const vData = vDoc.data();
+                                const vIdVar = vData.ID_Variante ?? vDoc.id;
+                                const vPrecioAnt = Number(vData.Precio_Actual ?? 0);
+
+                                if (vPrecioAnt !== nuevoPrecioNum) {
+                                    const descPorc = Number(vData.Porcentaje_Descuento ?? 0);
+                                    const vPrecioOferta = (vData.Tiene_Descuento && descPorc > 0)
+                                        ? calcularPrecioConDescuento(nuevoPrecioNum, descPorc)
+                                        : nuevoPrecioNum;
+
+                                    await updateDoc(vDoc.ref, {
+                                        Precio_Actual: nuevoPrecioNum,
+                                        Precio_Oferta: vPrecioOferta
+                                    });
+
+                                    // Registrar en Auditoria_Precio_Variante
+                                    const auditId = baseIdAudit++;
+                                    await setDoc(doc(db, 'Auditoria_Precio_Variante', String(auditId)), {
+                                        ID_Auditoria: auditId,
+                                        ID_Variante: Number(vIdVar),
+                                        ID_UserAccion: !isNaN(Number(idUserAudit)) ? Number(idUserAudit) : idUserAudit,
+                                        Precio_Anterior: vPrecioAnt,
+                                        Precio_Nuevo: nuevoPrecioNum,
+                                        Fecha: new Date().toISOString()
+                                    });
+                                }
+                            }
+                        } catch (errCascada) {
+                            console.error('Error al actualizar variantes en cascada:', errCascada);
+                        }
                     }
                 }
+            } else {
+                // CASO 2: EXCEPCIÓN DE PRECIO POR TALLA INDIVIDUAL
+                // Modifica únicamente el Precio_Actual de esta variante específica, sin alterar el Precio_Base ni las demás tallas
+                if (idVariante) {
+                    const descPorc = Number(varianteEditando.Porcentaje_Descuento ?? 0);
+                    const vPrecioOferta = (varianteEditando.Tiene_Descuento && descPorc > 0)
+                        ? calcularPrecioConDescuento(nuevoPrecioNum, descPorc)
+                        : nuevoPrecioNum;
 
-                // Registrar en Auditoria_CambioCategoria si cambió la categoría
-                if (idCatFinal != null && String(idCatFinal) !== String(categoriaAnterior ?? '')) {
-                    try {
-                        const idAuditCat = await generarSiguienteIdNumerico('Auditoria_CambioCategoria', 'ID_Auditoria', 1);
-                        await setDoc(doc(db, 'Auditoria_CambioCategoria', String(idAuditCat)), {
-                            ID_Auditoria: idAuditCat,
-                            ID_Producto: idProducto,
-                            ID_UserAccion: idUserAudit,
-                            ID_CategoriaAntigua: categoriaAnterior,
-                            ID_CategoriaNueva: idCatFinal,
-                            Fecha_Registro: new Date().toISOString()
+                    await actualizarDocPorId('Variante_Producto', 'ID_Variante', idVariante, {
+                        Precio_Actual: nuevoPrecioNum,
+                        Precio_Oferta: vPrecioOferta
+                    });
+
+                    // Registrar en Auditoria_Precio_Variante solo si el precio cambió
+                    if (nuevoPrecioNum !== precioAnterior) {
+                        await registrarAuditoriaPrecioVariante({
+                            idVariante: idVariante,
+                            idUserAccion: idUserAudit,
+                            precioAnterior: precioAnterior,
+                            precioNuevo: nuevoPrecioNum
                         });
-                    } catch (errCatAudit) {
-                        console.error('Error guardando Auditoria_CambioCategoria:', errCatAudit);
-                    }
-                }
-            }
-
-            // 2. Actualiza el precio actual (Variante_Producto) y registra en Auditoria_Precio_Variante si cambió
-            if (idVariante) {
-                const nuevoPrecioNum = parseFloat(precioEditar);
-                await actualizarDocPorId('Variante_Producto', 'ID_Variante', idVariante, {
-                    Precio_Actual: nuevoPrecioNum
-                });
-
-                if (!isNaN(nuevoPrecioNum) && Number(nuevoPrecioNum) !== Number(precioAnterior)) {
-                    try {
-                        const idAuditPrecio = await generarSiguienteIdNumerico('Auditoria_Precio_Variante', 'ID_Auditoria', 1);
-                        await setDoc(doc(db, 'Auditoria_Precio_Variante', String(idAuditPrecio)), {
-                            ID_Auditoria: idAuditPrecio,
-                            ID_Variante: idVariante,
-                            ID_UserAccion: idUserAudit,
-                            Precio_Anterior: precioAnterior,
-                            Precio_Nuevo: nuevoPrecioNum,
-                            Fecha: new Date().toISOString()
-                        });
-                    } catch (errPrecioAudit) {
-                        console.error('Error guardando Auditoria_Precio_Variante:', errPrecioAudit);
                     }
                 }
             }
@@ -1592,7 +1671,7 @@ function AdminInventario() {
                     {
                         ID_Producto: idProducto,
                         name: nombreEditar,
-                        price: parseFloat(precioEditar) || 0,
+                        price: esBase ? nuevoPrecioNum : (Number(varianteEditando.Productos?.Precio_Base ?? varianteEditando.Productos?.Precio ?? nuevoPrecioNum) || 0),
                         imageUrl: urlPrincipalFinal,
                         images: [
                             ...fotosExistentes.map((f) => f.URL_Foto),
@@ -1615,15 +1694,22 @@ function AdminInventario() {
         }
     }
 
-    // -------------- GUARDAR ENTRADA DE STOCK (POR TALLA) --------------//
+    // -------------- GUARDAR ENTRADA O SALIDA DE STOCK (POR TALLA) --------------//
     async function guardarEntradaStock() {
         const cant = parseInt(cantidadIngresar, 10) || 0;
         if (cant <= 0) {
             alert('Por favor ingresa una cantidad válida mayor a 0.');
             return;
         }
+
+        // REGLA 1: Obligatoriedad de Seleccionar Talla al Elegir un Producto Base
+        // El Producto Base es únicamente de catálogo y jamás maneja stock físico propio.
         if (!tipoTallaSeleccionada) {
-            alert('Por favor selecciona la talla a la que deseas ingresar o retirar stock.');
+            alert(
+                tipoMovimiento === 'salida'
+                    ? 'Error: Debes seleccionar obligatoriamente una talla para registrar la salida. El Producto Base no cuenta con stock propio.'
+                    : 'Por favor selecciona la talla a la que deseas ingresar stock.'
+            );
             return;
         }
         if (motivoStock === 'Otro' && !motivoPersonalizado.trim()) {
@@ -1638,26 +1724,29 @@ function AdminInventario() {
             const idProductoPadre = Number(varianteStock.ID_Producto ?? varianteStock.Productos?.ID_Producto);
             if (!idProductoPadre || isNaN(idProductoPadre)) {
                 alert('Error: No se encontró el ID numérico del Producto Base padre.');
+                setGuardandoStock(false);
                 return;
             }
 
-            // REGLA 2: Códigos 100% Numéricos
-            const idProdNumerico = idProductoPadre;
+            // REGLAS 2 & 3: Códigos 100% Numéricos y Búsqueda Compuesta Estricta (ID_Producto + ID_Talla)
+            const idProdNumerico = Number(idProductoPadre);
 
-            // Leer el ID numérico de la talla directamente de la tabla Talla
-            const tallaDoc = tallasDisponibles.find(
-                (t) => String(t.ID_Talla) === String(tipoTallaSeleccionada) || String(t.ID_TipoTalla) === String(tipoTallaSeleccionada)
-            );
-            const idTallaNumerico = Number(tallaDoc?.ID_Talla ?? tipoTallaSeleccionada);
-            if (isNaN(idTallaNumerico) || idTallaNumerico <= 0) {
+            // Encontrar la talla seleccionada de forma estricta por su ID_Talla numérico
+            const idTallaSeleccionada = Number(tipoTallaSeleccionada);
+            if (isNaN(idTallaSeleccionada) || idTallaSeleccionada <= 0) {
                 alert('Error: Por favor selecciona una talla válida.');
+                setGuardandoStock(false);
                 return;
             }
+
+            const tallaDoc = tallasDisponibles.find((t) => Number(t.ID_Talla) === idTallaSeleccionada);
+            const idTallaNumerico = idTallaSeleccionada;
 
             // Concatenar código numérico del Producto Base + ID numérico de la tabla Talla como número entero puro
             const skuNumerico = parseInt(`${idProdNumerico}${idTallaNumerico}`, 10);
             if (isNaN(skuNumerico)) {
                 alert('Error: No se pudo generar el SKU numérico.');
+                setGuardandoStock(false);
                 return;
             }
 
@@ -1665,14 +1754,13 @@ function AdminInventario() {
             const idColorPadre = varianteStock.Productos?.ID_Color ?? varianteStock.ID_Color ?? null;
             const idColorFinal = idColorPadre != null && !isNaN(Number(idColorPadre)) ? Number(idColorPadre) : null;
 
-            // REGLAS 3 & 4: Integridad Estricta y Verificación de Flujo de Entrada de Stock
-            // Consultar si ya existe este código numérico de variante para este producto
+            // BÚSQUEDA COMPUESTA ESTRICTA (ID_Producto + ID_Talla):
+            // Consulta Variante_Producto filtrando por ID_Producto
             const qVar = query(
                 collection(db, 'Variante_Producto'),
                 where('ID_Producto', 'in', [
-                    idProductoPadre,
-                    Number(idProductoPadre),
-                    String(idProductoPadre)
+                    idProdNumerico,
+                    String(idProdNumerico)
                 ])
             );
             const snapVar = await getDocs(qVar);
@@ -1681,17 +1769,117 @@ function AdminInventario() {
             for (const d of snapVar.docs) {
                 if (esDocPlantilla(d)) continue;
                 const vd = d.data();
-                const vid = vd.ID_Variante ?? d.id;
+                const vidNum = Number(vd.ID_Variante ?? d.id);
+                const prodNum = Number(vd.ID_Producto);
+                const tallaNum = Number(vd.ID_Talla);
 
-                const coincideSku = Number(vid) === skuNumerico || String(vid) === String(skuNumerico);
-                const coincideTalla = vd.ID_Talla != null && Number(vd.ID_Talla) === idTallaNumerico;
+                // COINCIDENCIA COMPUESTA ESTRICTA:
+                // Deben coincidir simultáneamente ID_Producto == productoSeleccionado Y ID_Talla == tallaSeleccionada
+                // O coincidir exactamente el ID_Variante con el SKU compuesto exacto (ID_Producto + ID_Talla)
+                const coincideCompuesto = (prodNum === idProdNumerico && tallaNum === idTallaNumerico);
+                const coincideSkuExacto = (!isNaN(skuNumerico) && vidNum === skuNumerico);
 
-                if (coincideSku || coincideTalla) {
-                    varExistente = { ...vd, ID_Variante: Number(vid) || vid, _docId: d.id };
+                if (coincideCompuesto || coincideSkuExacto) {
+                    varExistente = {
+                        ...vd,
+                        _docId: d.id,
+                        ID_Variante: vidNum || skuNumerico,
+                        ID_Producto: prodNum,
+                        ID_Talla: tallaNum
+                    };
                     break;
                 }
             }
 
+            // =========================================================================
+            // VALIDACIÓN Y FLUJO ESTRICTO PARA SALIDAS DE INVENTARIO
+            // =========================================================================
+            if (tipoMovimiento === 'salida') {
+                // Prohibido usar Fallbacks (Cero selección por defecto):
+                // Si la consulta con ID_Producto + ID_Talla no devuelve exactamente la variante de esa talla,
+                // detén la ejecución inmediatamente y muestra el mensaje de error en la interfaz:
+                if (!varExistente) {
+                    alert('Error: Este producto no tiene inventario registrado en la talla seleccionada');
+                    setGuardandoStock(false);
+                    return;
+                }
+
+                const idVarianteSalida = Number(varExistente.ID_Variante);
+
+                // 2. Verificación de registro en Inventario exclusivo para esta variante:
+                const qInv = query(
+                    collection(db, 'Inventario'),
+                    where('ID_Variante', 'in', [
+                        idVarianteSalida,
+                        String(idVarianteSalida)
+                    ])
+                );
+                const snapInv = await getDocs(qInv);
+                const docsInv = snapInv.docs.filter((idDoc) => !esDocPlantilla(idDoc));
+
+                if (docsInv.length === 0) {
+                    alert('Error: Este producto no tiene inventario registrado en la talla seleccionada');
+                    setGuardandoStock(false);
+                    return;
+                }
+
+                const invDoc = docsInv[0];
+                const idInventarioSalida = invDoc.data().ID_Inventario ?? invDoc.id;
+                const stockAnterior = Number(invDoc.data().Cantidad_Disponible ?? 0);
+
+                // 3. Verificación de stock disponible:
+                if (stockAnterior <= 0) {
+                    alert('Error: No hay stock disponible en esa talla para realizar la salida (Stock actual: 0 uds.).');
+                    setGuardandoStock(false);
+                    return;
+                }
+
+                if (cant > stockAnterior) {
+                    alert(`Error: La cantidad a retirar (${cant} uds.) supera el stock disponible (${stockAnterior} uds.) en la talla seleccionada.`);
+                    setGuardandoStock(false);
+                    return;
+                }
+
+                const stockActualizado = stockAnterior - cant;
+
+                // 4. Descuento Exclusivo a la Variante Correcta en Inventario
+                await actualizarDocPorId('Inventario', 'ID_Inventario', idInventarioSalida, {
+                    Cantidad_Disponible: stockActualizado,
+                    Fecha_Actualizacion: new Date().toISOString()
+                });
+
+                // 5. Registro estricto en Auditoria_Inventario exclusivo sobre esta variante
+                try {
+                    const idUserAccion = (await obtenerIdUsuario()) || auth.currentUser?.uid || 'Admin';
+                    const nuevoAuditId = await generarSiguienteIdNumerico('Auditoria_Inventario', 'ID_Auditoria', 1);
+                    const motivoFinal = motivoStock === 'Otro'
+                        ? (motivoPersonalizado.trim() || 'Otro (sin especificar)')
+                        : (motivoStock || 'Venta en tienda física');
+
+                    await setDoc(doc(db, 'Auditoria_Inventario', String(nuevoAuditId)), {
+                        ID_Auditoria: nuevoAuditId,
+                        ID_Variante: idVarianteSalida,
+                        ID_UserAccion: idUserAccion,
+                        Cantidad_Anterior: stockAnterior,
+                        Cantidad_Nueva: stockActualizado,
+                        Tipo_Movimiento: 'Salida',
+                        Motivo: motivoFinal,
+                        Fecha_Accion: new Date().toISOString()
+                    });
+                } catch (errAudit) {
+                    console.error('No se pudo guardar la auditoría de salida:', errAudit);
+                }
+
+                setModalAbierto(null);
+                setMotivoPersonalizado('');
+                await cargarVariantes();
+                cargarAuditoria();
+                return;
+            }
+
+            // =========================================================================
+            // FLUJO DE INGRESO / ENTRADA DE STOCK
+            // =========================================================================
             let idVarianteFinal = skuNumerico;
             let idInventarioObjetivo = null;
             let stockAnteriorAudit = 0;
@@ -1699,8 +1887,33 @@ function AdminInventario() {
 
             if (varExistente) {
                 // Caso A: Ya existe la variante -> La talla es inmutable.
-                // Sumar (o restar) la cantidad al stock existente en Inventario.
+                // Sumar la cantidad al stock existente en Inventario.
                 idVarianteFinal = Number(varExistente.ID_Variante) || skuNumerico;
+
+                // Si se especificó un precio diferente para esta variante en la entrada
+                const pEntradaNum = parseFloat(precioTallaEntrada);
+                if (!isNaN(pEntradaNum) && pEntradaNum >= 0 && precioTallaEntrada !== '') {
+                    const precioAntVar = Number(varExistente.Precio_Actual ?? 0);
+                    if (precioAntVar !== pEntradaNum) {
+                        const descPorc = Number(varExistente.Porcentaje_Descuento ?? 0);
+                        const pOferta = (varExistente.Tiene_Descuento && descPorc > 0)
+                            ? calcularPrecioConDescuento(pEntradaNum, descPorc)
+                            : pEntradaNum;
+
+                        await actualizarDocPorId('Variante_Producto', 'ID_Variante', idVarianteFinal, {
+                            Precio_Actual: pEntradaNum,
+                            Precio_Oferta: pOferta
+                        });
+
+                        const idUserAudit = (await obtenerIdUsuario()) || auth.currentUser?.uid || 1;
+                        await registrarAuditoriaPrecioVariante({
+                            idVariante: idVarianteFinal,
+                            idUserAccion: idUserAudit,
+                            precioAnterior: precioAntVar,
+                            precioNuevo: pEntradaNum
+                        });
+                    }
+                }
 
                 const qInv = query(
                     collection(db, 'Inventario'),
@@ -1718,9 +1931,7 @@ function AdminInventario() {
                     const invDoc = docsInv[0];
                     idInventarioObjetivo = invDoc.data().ID_Inventario ?? invDoc.id;
                     stockAnteriorAudit = Number(invDoc.data().Cantidad_Disponible ?? 0);
-                    nuevoStock = tipoMovimiento === 'entrada'
-                        ? stockAnteriorAudit + cant
-                        : Math.max(0, stockAnteriorAudit - cant);
+                    nuevoStock = stockAnteriorAudit + cant;
 
                     await actualizarDocPorId('Inventario', 'ID_Inventario', idInventarioObjetivo, {
                         Cantidad_Disponible: nuevoStock,
@@ -1729,7 +1940,7 @@ function AdminInventario() {
                 } else {
                     const nuevoInvId = await generarSiguienteIdNumerico('Inventario', 'ID_Inventario', 1);
                     stockAnteriorAudit = 0;
-                    nuevoStock = tipoMovimiento === 'entrada' ? cant : 0;
+                    nuevoStock = cant;
                     await setDoc(doc(db, 'Inventario', String(nuevoInvId)), {
                         ID_Inventario: nuevoInvId,
                         ID_Variante: idVarianteFinal,
@@ -1744,18 +1955,30 @@ function AdminInventario() {
                 // CERO eliminaciones: El registro del Producto Base jamás se elimina ni se sobreescribe.
                 const idDocVariante = String(skuNumerico);
 
+                // REGLA 2: Herencia Automática de Precio_Base (o precio específico si se definió)
+                const precioBasePadre = Number(
+                    varianteStock.Productos?.Precio_Base ??
+                    varianteStock.Productos?.Precio ??
+                    varianteStock.Precio_Actual ??
+                    0
+                );
+                const pEntradaNum = parseFloat(precioTallaEntrada);
+                const precioFinalVariante = (!isNaN(pEntradaNum) && pEntradaNum >= 0 && precioTallaEntrada !== '')
+                    ? pEntradaNum
+                    : precioBasePadre;
+
                 const nuevaVariante = {
                     ID_Variante: skuNumerico,
                     ID_Producto: idProductoPadre, // Llave foránea hacia el producto base
                     ID_Talla: idTallaNumerico,
                     ID_TipoTalla: tallaDoc?.ID_TipoTalla ? Number(tallaDoc.ID_TipoTalla) : idTallaNumerico,
                     ID_Color: idColorFinal,
-                    Precio_Actual: Number(varianteStock.Precio_Actual) || Number(varianteStock.Productos?.Precio) || 0,
+                    Precio_Actual: precioFinalVariante,
                     ID_EstadoProducto: 1,
                     Fecha_Creacion: new Date().toISOString(),
                     ...(varianteStock.Tiene_Descuento ? {
                         Porcentaje_Descuento: varianteStock.Porcentaje_Descuento,
-                        Precio_Oferta: varianteStock.Precio_Oferta,
+                        Precio_Oferta: calcularPrecioConDescuento(precioFinalVariante, Number(varianteStock.Porcentaje_Descuento || 0)),
                         Fecha_Inicio_Oferta: varianteStock.Fecha_Inicio_Oferta ?? null,
                         Fecha_Fin_Oferta: varianteStock.Fecha_Fin_Oferta ?? null,
                         Tiene_Descuento: true
@@ -1766,10 +1989,21 @@ function AdminInventario() {
                 await setDoc(doc(db, 'Variante_Producto', idDocVariante), nuevaVariante);
                 idVarianteFinal = skuNumerico;
 
+                // Registrar en Auditoria_Precio_Variante el precio inicial
+                if (precioFinalVariante > 0) {
+                    const idUserAudit = (await obtenerIdUsuario()) || auth.currentUser?.uid || 1;
+                    await registrarAuditoriaPrecioVariante({
+                        idVariante: skuNumerico,
+                        idUserAccion: idUserAudit,
+                        precioAnterior: 0,
+                        precioNuevo: precioFinalVariante
+                    });
+                }
+
                 // INSERT estricto en Inventario con ID_Inventario entero puro
                 const nuevoInvId = await generarSiguienteIdNumerico('Inventario', 'ID_Inventario', 1);
                 stockAnteriorAudit = 0;
-                nuevoStock = tipoMovimiento === 'entrada' ? cant : 0;
+                nuevoStock = cant;
                 await setDoc(doc(db, 'Inventario', String(nuevoInvId)), {
                     ID_Inventario: nuevoInvId,
                     ID_Variante: skuNumerico,
@@ -1780,13 +2014,13 @@ function AdminInventario() {
                 idInventarioObjetivo = nuevoInvId;
             }
 
-            // Registrar en Auditoria_Inventario con ID_Auditoria numérico entero
+            // Registrar en Auditoria_Inventario para Ingreso con ID_Auditoria numérico entero
             try {
                 const idUserAccion = (await obtenerIdUsuario()) || auth.currentUser?.uid || 'Admin';
                 const nuevoAuditId = await generarSiguienteIdNumerico('Auditoria_Inventario', 'ID_Auditoria', 1);
                 const motivoFinal = motivoStock === 'Otro'
                     ? (motivoPersonalizado.trim() || 'Otro (sin especificar)')
-                    : (motivoStock || (tipoMovimiento === 'entrada' ? 'Compra a proveedor' : 'Ajuste de inventario'));
+                    : (motivoStock || 'Compra a proveedor');
 
                 await setDoc(doc(db, 'Auditoria_Inventario', String(nuevoAuditId)), {
                     ID_Auditoria: nuevoAuditId,
@@ -1794,7 +2028,7 @@ function AdminInventario() {
                     ID_UserAccion: idUserAccion,
                     Cantidad_Anterior: stockAnteriorAudit,
                     Cantidad_Nueva: nuevoStock,
-                    Tipo_Movimiento: tipoMovimiento === 'entrada' ? 'Ingreso' : 'Salida',
+                    Tipo_Movimiento: 'Ingreso',
                     Motivo: motivoFinal,
                     Fecha_Accion: new Date().toISOString()
                 });
@@ -1945,12 +2179,15 @@ function AdminInventario() {
                 const colorObj = coloresMap[p.ID_Color] || coloresMap[String(p.ID_Color)] || null;
                 const idTemp = p.ID_Temporada ?? p.ID_temporada ?? null;
                 const tempObj = idTemp != null ? (temporadasMap[idTemp] || temporadasMap[String(idTemp)] || null) : null;
+                const numPrecioBase = p.Precio_Base != null ? Number(p.Precio_Base) : (Number(p.Precio) || 0);
                 const item = {
                     ...p,
                     ID_Producto: pid,
                     _docId: d.id,
                     Nombre_Producto: p.Nombre_Producto || '',
                     Descripcion: p.Descripcion || '',
+                    Precio_Base: numPrecioBase,
+                    Precio: numPrecioBase,
                     ID_Categoria: p.ID_Categoria ?? p.ID_categoria ?? null,
                     ID_Temporada: idTemp != null && !isNaN(Number(idTemp)) ? Number(idTemp) : null,
                     Marca: marcasMap[p.ID_Marca] || marcasMap[String(p.ID_Marca)] || null,
@@ -2005,7 +2242,7 @@ function AdminInventario() {
                     esProductoBase: false,
                     ID_Variante: vid,
                     ID_Producto: pid,
-                    Precio_Actual: v.Precio_Actual ?? parentProd?.Precio ?? 0,
+                    Precio_Actual: v.Precio_Actual != null ? Number(v.Precio_Actual) : (Number(parentProd?.Precio_Base ?? parentProd?.Precio ?? 0)),
                     ID_EstadoProducto: v.ID_EstadoProducto ?? parentProd?.ID_EstadoProducto ?? 1,
                     Productos: parentProd,
                     Talla: tallaObj,
@@ -2036,7 +2273,7 @@ function AdminInventario() {
                     _docId: p._docId,
                     ID_Variante: p.ID_Producto,
                     ID_Producto: p.ID_Producto,
-                    Precio_Actual: p.Precio || 0,
+                    Precio_Actual: p.Precio_Base ?? p.Precio ?? 0,
                     ID_EstadoProducto: p.ID_EstadoProducto ?? 1,
                     Productos: p,
                     Talla: null,
@@ -2285,8 +2522,9 @@ function AdminInventario() {
             return;
         }
 
-        if (Number(precioProducto) < 0) {
-            alert('El precio no puede ser negativo');
+        const numPrecioBase = parseFloat(precioProducto);
+        if (isNaN(numPrecioBase) || numPrecioBase < 0) {
+            alert('El Precio Base debe ser un número válido mayor o igual a 0.');
             return;
         }
 
@@ -2303,13 +2541,14 @@ function AdminInventario() {
             const nuevoCodigoNumerico = idProducto;
             const idTempNum = temporadaSeleccionada ? (Number(temporadaSeleccionada) || null) : null;
 
-            // 2. Crear registro del Producto Base en la colección Productos (con su ID_Color y ID_Temporada opcional)
+            // 2. Crear registro del Producto Base en la colección Productos con su Precio_Base y Precio
             const nuevoProducto = {
                 ID_Producto: idProducto,
                 Codigo_Producto: nuevoCodigoNumerico,
                 Nombre_Producto: nombreProducto.trim(),
                 Descripcion: descripcionProducto.trim(),
-                Precio: parseFloat(precioProducto) || 0,
+                Precio_Base: numPrecioBase,
+                Precio: numPrecioBase,
                 ID_Categoria: Number(idCategoriaFinal) || idCategoriaFinal,
                 ID_Temporada: idTempNum,
                 ID_Marca: marcaSeleccionada ? (Number(marcaSeleccionada) || marcaSeleccionada) : null,
@@ -2540,7 +2779,33 @@ function AdminInventario() {
                                                     </span>
                                                 </div>
                                             ) : (
-                                                <span>${Number(v.Precio_Actual || 0).toFixed(2)}</span>
+                                                <div>
+                                                    <strong>${Number(v.Precio_Actual || 0).toFixed(2)}</strong>
+                                                    {esBase ? (
+                                                        <span style={{ display: 'block', fontSize: '0.72rem', color: '#4f46e5', fontWeight: 600 }}>
+                                                            Precio Base
+                                                        </span>
+                                                    ) : (
+                                                        v.Productos && Number(v.Precio_Actual) !== Number(v.Productos?.Precio_Base ?? v.Productos?.Precio) && (
+                                                            <span 
+                                                                title={`Precio diferenciado para esta talla (Precio Base: $${Number(v.Productos?.Precio_Base ?? v.Productos?.Precio ?? 0).toFixed(2)})`}
+                                                                style={{
+                                                                    display: 'inline-block',
+                                                                    marginLeft: '4px',
+                                                                    padding: '1px 5px',
+                                                                    borderRadius: '4px',
+                                                                    backgroundColor: '#fef3c7',
+                                                                    border: '1px solid #fde68a',
+                                                                    fontSize: '0.7rem',
+                                                                    color: '#b45309',
+                                                                    fontWeight: 700
+                                                                }}
+                                                            >
+                                                                Excepción
+                                                            </span>
+                                                        )
+                                                    )}
+                                                </div>
                                             )}
                                         </td>
                                         
@@ -2594,7 +2859,7 @@ function AdminInventario() {
                                                 </button>
                                                 <button 
                                                     type="button" 
-                                                    title="Editar producto" 
+                                                    title={esBase ? "Editar Producto Base y su Precio Base" : `Editar precio y detalles de talla ${v.Talla?.Tipos_Talla?.Nombre_TipoTalla || v.Talla?.Nombre_TipoTalla || v.ID_Talla}`} 
                                                     onClick={() => abrirModalEditar(v)}
                                                     className="btn-accion-tabla"
                                                 >
@@ -2760,7 +3025,33 @@ function AdminInventario() {
                                                             </strong>
                                                         </div>
                                                     ) : (
-                                                        <span>${Number(v.Precio_Actual || 0).toFixed(2)}</span>
+                                                        <div>
+                                                            <strong>${Number(v.Precio_Actual || 0).toFixed(2)}</strong>
+                                                            {esBase ? (
+                                                                <span style={{ display: 'block', fontSize: '0.72rem', color: '#4f46e5', fontWeight: 600 }}>
+                                                                    Precio Base
+                                                                </span>
+                                                            ) : (
+                                                                v.Productos && Number(v.Precio_Actual) !== Number(v.Productos?.Precio_Base ?? v.Productos?.Precio) && (
+                                                                    <span 
+                                                                        title={`Precio diferenciado para esta talla (Precio Base: $${Number(v.Productos?.Precio_Base ?? v.Productos?.Precio ?? 0).toFixed(2)})`}
+                                                                        style={{
+                                                                            display: 'inline-block',
+                                                                            marginLeft: '4px',
+                                                                            padding: '1px 5px',
+                                                                            borderRadius: '4px',
+                                                                            backgroundColor: '#fef3c7',
+                                                                            border: '1px solid #fde68a',
+                                                                            fontSize: '0.7rem',
+                                                                            color: '#b45309',
+                                                                            fontWeight: 700
+                                                                        }}
+                                                                    >
+                                                                        Excepción
+                                                                    </span>
+                                                                )
+                                                            )}
+                                                        </div>
                                                     )}
                                                 </td>
                                                 <td>
@@ -2804,7 +3095,7 @@ function AdminInventario() {
                                                     <div className="acciones-tabla-wrap">
                                                         <button
                                                             type="button"
-                                                            title="Editar producto"
+                                                            title={esBase ? "Editar Producto Base y su Precio Base" : `Editar precio y detalles de talla ${v.Talla?.Tipos_Talla?.Nombre_TipoTalla || v.Talla?.Nombre_TipoTalla || v.ID_Talla}`}
                                                             onClick={() => abrirModalEditar(v)}
                                                             className="btn-accion-tabla"
                                                         >
@@ -3296,7 +3587,10 @@ function AdminInventario() {
 
                         <div className="modal-row">
                             <div>
-                                <label>Precio</label>
+                                <label>Precio Base ($) *</label>
+                                <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'block', marginBottom: '6px' }}>
+                                    Precio del modelo base. Las variantes de talla que se registren heredarán este precio automáticamente si no se especifica otro.
+                                </span>
                                 <input
                                     type="number"
                                     min="0"
@@ -3368,20 +3662,43 @@ function AdminInventario() {
             )}
 
             {/* ---------- MODAL: EDITAR PRODUCTO ---------- */}
-        {modalAbierto === 'editar' && (
-            <div className="modal-overlay">
-        <div className="modal-box">
-            <div className="modal-header">
-                <h2>Editar producto</h2>
-                <button onClick={() => setModalAbierto(null)}>✕</button>
-            </div>
+        {modalAbierto === 'editar' && (() => {
+            const esBaseEditando = Boolean(varianteEditando?.esProductoBase || !varianteEditando?.ID_Talla || varianteEditando?.ID_Talla === 0);
+            const tallaNombre = varianteEditando?.Talla?.Tipos_Talla?.Nombre_TipoTalla || varianteEditando?.Talla?.Nombre_TipoTalla || (varianteEditando?.ID_Talla ? `Talla #${varianteEditando.ID_Talla}` : '');
 
-            <label>Nombre producto</label>
-            <input
-                type="text"
-                value={nombreEditar}
-                onChange={(e) => setNombreEditar(e.target.value)}
-            />
+            return (
+                <div className="modal-overlay">
+                    <div className="modal-box">
+                        <div className="modal-header">
+                            <h2>{esBaseEditando ? 'Editar Producto Base' : `Editar Talla (${tallaNombre})`}</h2>
+                            <button onClick={() => setModalAbierto(null)}>✕</button>
+                        </div>
+
+                        {!esBaseEditando && (
+                            <div style={{
+                                padding: '10px 14px',
+                                backgroundColor: '#f0fdf4',
+                                border: '1.5px solid #bbf7d0',
+                                borderRadius: '6px',
+                                marginBottom: '14px',
+                                fontSize: '0.86rem',
+                                color: '#166534'
+                            }}>
+                                <div>
+                                    <strong>Modificando Talla Individual:</strong> {tallaNombre} (SKU #{varianteEditando?.ID_Variante})
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: '#15803d', marginTop: '3px' }}>
+                                    Precio Base del Producto: <strong>${Number(varianteEditando?.Productos?.Precio_Base ?? varianteEditando?.Productos?.Precio ?? 0).toFixed(2)}</strong>
+                                </div>
+                            </div>
+                        )}
+
+                        <label>Nombre producto</label>
+                        <input
+                            type="text"
+                            value={nombreEditar}
+                            onChange={(e) => setNombreEditar(e.target.value)}
+                        />
             <label>Categoría</label>
             <div className="select-con-boton">
                 <select
@@ -3454,14 +3771,58 @@ function AdminInventario() {
             )}
 
 
-            <label>Precio</label>
-            <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={precioEditar}
-                onChange={(e) => setPrecioEditar(e.target.value)}
-            />
+            {esBaseEditando ? (
+                <>
+                    <label>Precio Base ($) *</label>
+                    <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'block', marginBottom: '6px' }}>
+                        Precio principal del modelo en catálogo.
+                    </span>
+                    <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={precioEditar}
+                        onChange={(e) => setPrecioEditar(e.target.value)}
+                    />
+
+                    <div style={{
+                        marginTop: '8px',
+                        marginBottom: '14px',
+                        padding: '10px 12px',
+                        backgroundColor: '#f8fafc',
+                        border: '1.5px solid #cbd5e1',
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px'
+                    }}>
+                        <input
+                            type="checkbox"
+                            id="chk-actualizar-cascada"
+                            checked={actualizarEnCascada}
+                            onChange={(e) => setActualizarEnCascada(e.target.checked)}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#0f172a' }}
+                        />
+                        <label htmlFor="chk-actualizar-cascada" style={{ margin: 0, fontSize: '0.86rem', fontWeight: 600, color: '#1e293b', cursor: 'pointer' }}>
+                            Actualizar este precio en todas las tallas (variantes) existentes de este producto
+                        </label>
+                    </div>
+                </>
+            ) : (
+                <>
+                    <label>Precio Actual de esta Talla ($) *</label>
+                    <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'block', marginBottom: '6px' }}>
+                        Excepción de precio individual: Solo modificará esta talla ({tallaNombre}) sin alterar el Precio Base del producto ni el de las demás tallas.
+                    </span>
+                    <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={precioEditar}
+                        onChange={(e) => setPrecioEditar(e.target.value)}
+                    />
+                </>
+            )}
 
             <label>Marca</label>
             {!creandoMarcaEditar ? (
@@ -3677,7 +4038,8 @@ function AdminInventario() {
             </button>
         </div>
     </div>
-)}
+        );
+    })()}
 
               {/*------------ MODAL: ENTRADA DE STOCK -------------- */}
              {modalAbierto === 'stock' && varianteStock && (
@@ -3756,8 +4118,10 @@ function AdminInventario() {
                                 })}
                             </div>
                         ) : (
-                            <span style={{ color: '#777' }}>
-                                Sin tallas ingresadas aún. Selecciona una talla abajo para hacer el primer ingreso.
+                            <span style={{ color: tipoMovimiento === 'salida' ? '#dc2626' : '#777', fontWeight: tipoMovimiento === 'salida' ? 600 : 'normal' }}>
+                                {tipoMovimiento === 'salida'
+                                    ? '⚠️ Este producto base aún no tiene ninguna talla registrada en inventario. No se pueden procesar salidas.'
+                                    : 'Sin tallas ingresadas aún. Selecciona una talla abajo para hacer el primer ingreso.'}
                             </span>
                         )}
                     </div>
@@ -3765,11 +4129,16 @@ function AdminInventario() {
             })()}
 
             {/* Selector: Entrada o Salida */}
-          <label>Tipo de movimiento</label>
+            <label>Tipo de movimiento</label>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 <button
                     type="button"
-                    onClick={() => setTipoMovimiento('entrada')}
+                    onClick={() => {
+                        setTipoMovimiento('entrada');
+                        if (['Venta en tienda física', 'Producto dañado / defectuoso', 'Pérdida o merma', 'Ajuste negativo de inventario'].includes(motivoStock)) {
+                            setMotivoStock('Compra a proveedor');
+                        }
+                    }}
                     style={{
                         flex: 1,
                         padding: '10px',
@@ -3786,16 +4155,21 @@ function AdminInventario() {
                 </button>
                 <button
                     type="button"
-                    onClick={() => setTipoMovimiento('salida')}
+                    onClick={() => {
+                        setTipoMovimiento('salida');
+                        if (['Compra a proveedor', 'Devolución de cliente', 'Ajuste positivo de inventario'].includes(motivoStock)) {
+                            setMotivoStock('Venta en tienda física');
+                        }
+                    }}
                     style={{
                         flex: 1,
                         padding: '10px',
-                        borderRadius: '10px',
+                        borderRadius: '6px',
                         border: 'none',
                         cursor: 'pointer',
                         fontWeight: '600',
                         outline: tipoMovimiento === 'salida' ? '2px solid #0e0d0d' : 'none',
-                        backgroundColor: tipoMovimiento === 'salida' ? '#a32121' : '#eee',
+                        backgroundColor: tipoMovimiento === 'salida' ? '#dc2626' : '#eee',
                         color: tipoMovimiento === 'salida' ? 'white' : '#333',
                     }}
                 >
@@ -3811,31 +4185,103 @@ function AdminInventario() {
                 value={cantidadIngresar}
                 onChange={(e) => setCantidadIngresar(e.target.value)}
             />
-             <label>
-                 Talla {tieneTallaAsignadaStock && (
-                     <span style={{ color: '#666', fontWeight: 'normal', fontSize: '0.85rem' }}>
-                         (Asignada a esta variante - Bloqueada)
-                     </span>
-                 )}
-             </label>
-             <select
-                 value={tipoTallaSeleccionada}
-                 onChange={(e) => setTipoTallaSeleccionada(e.target.value)}
-                 disabled={tieneTallaAsignadaStock}
-                 style={{
-                     backgroundColor: tieneTallaAsignadaStock ? '#f3f4f6' : '#ffffff',
-                     cursor: tieneTallaAsignadaStock ? 'not-allowed' : 'pointer',
-                     color: tieneTallaAsignadaStock ? '#555555' : 'inherit',
-                     borderColor: tieneTallaAsignadaStock ? '#d1d5db' : undefined
-                 }}
-             >
-                 <option value="" disabled hidden>Selecciona una talla</option>
-                 {tallasDisponibles.map((t) => (
-                     <option key={t.ID_Talla} value={t.ID_Talla}>
-                         {t.Nombre_TipoTalla}
-                     </option>
-                 ))}
-             </select>
+
+            <label>
+                Talla {tieneTallaAsignadaStock ? (
+                    <span style={{ color: '#666', fontWeight: 'normal', fontSize: '0.85rem' }}>
+                        (Asignada a esta variante - Bloqueada)
+                    </span>
+                ) : tipoMovimiento === 'salida' ? (
+                    <span style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                        * (Obligatoria para salida de stock)
+                    </span>
+                ) : null}
+            </label>
+
+            {tipoMovimiento === 'salida' && !tieneTallaAsignadaStock && !tipoTallaSeleccionada && (
+                <div style={{
+                    margin: '4px 0 10px 0',
+                    padding: '8px 12px',
+                    backgroundColor: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    color: '#92400e'
+                }}>
+                    ⚠️ <strong>Atención:</strong> El Producto Base no tiene stock propio. Debes seleccionar obligatoriamente una talla registrada con stock para registrar la salida.
+                </div>
+            )}
+
+            <select
+                value={tipoTallaSeleccionada}
+                onChange={(e) => setTipoTallaSeleccionada(e.target.value)}
+                disabled={tieneTallaAsignadaStock}
+                style={{
+                    backgroundColor: tieneTallaAsignadaStock ? '#f3f4f6' : '#ffffff',
+                    cursor: tieneTallaAsignadaStock ? 'not-allowed' : 'pointer',
+                    color: tieneTallaAsignadaStock ? '#555555' : 'inherit',
+                    borderColor: (tipoMovimiento === 'salida' && !tipoTallaSeleccionada) ? '#ef4444' : (tieneTallaAsignadaStock ? '#d1d5db' : undefined)
+                }}
+            >
+                <option value="" disabled hidden>
+                    {tipoMovimiento === 'salida' ? '— Selecciona la talla a descargar (Obligatorio) —' : 'Selecciona una talla'}
+                </option>
+                {tallasDisponibles.map((t) => {
+                    const idTallaNum = Number(t.ID_Talla);
+                    const idProdPadreNum = Number(varianteStock?.ID_Producto ?? varianteStock?.Productos?.ID_Producto);
+
+                    // Búsqueda Compuesta Estricta (ID_Producto + ID_Talla):
+                    // Cero fallbacks, descartar Modelo Base
+                    const varTalla = variantes.find((item) => {
+                        if (item.esProductoBase) return false;
+                        const pNum = Number(item.ID_Producto);
+                        const tNum = Number(item.ID_Talla ?? item.Talla?.ID_Talla);
+                        return pNum === idProdPadreNum && tNum === idTallaNum;
+                    });
+                    const stockTalla = Number(varTalla?.Inventario?.[0]?.Cantidad_Disponible ?? 0);
+                    const existeTalla = Boolean(varTalla);
+
+                    let labelTalla = t.Nombre_TipoTalla;
+                    if (tipoMovimiento === 'salida') {
+                        if (existeTalla) {
+                            labelTalla += ` — Stock disponible: ${stockTalla} uds.${stockTalla === 0 ? ' (Agotado)' : ''}`;
+                        } else {
+                            labelTalla += ` — No registrada en inventario (Sin variante)`;
+                        }
+                    } else {
+                        if (existeTalla) {
+                            labelTalla += ` — Stock actual: ${stockTalla} uds.`;
+                        } else {
+                            labelTalla += ` — Nueva talla a ingresar`;
+                        }
+                    }
+
+                    return (
+                        <option key={t.ID_Talla} value={t.ID_Talla}>
+                            {labelTalla}
+                        </option>
+                    );
+                })}
+            </select>
+
+            {tipoMovimiento === 'entrada' && (
+                <div style={{ marginTop: '10px' }}>
+                    <label>
+                        Precio de esta talla ($){' '}
+                        <span style={{ color: '#64748b', fontWeight: 'normal', fontSize: '0.82rem' }}>
+                            (Opcional - por defecto hereda Precio Base: ${Number(varianteStock?.Productos?.Precio_Base ?? varianteStock?.Productos?.Precio ?? varianteStock?.Precio_Actual ?? 0).toFixed(2)})
+                        </span>
+                    </label>
+                    <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder={`Por defecto hereda: $${Number(varianteStock?.Productos?.Precio_Base ?? varianteStock?.Productos?.Precio ?? varianteStock?.Precio_Actual ?? 0).toFixed(2)}`}
+                        value={precioTallaEntrada}
+                        onChange={(e) => setPrecioTallaEntrada(e.target.value)}
+                    />
+                </div>
+            )}
 
             {/* Opciones según el tipo de movimiento */}
             <label>Motivo</label>
@@ -3879,54 +4325,107 @@ function AdminInventario() {
                 </div>
             )}
 
-            {/* Tarjeta de cálculo en vivo según la talla seleccionada */}
+            {/* Tarjeta de cálculo en vivo y validación estricta según la talla seleccionada */}
             {(() => {
-                const varianteTallaElegida = variantes.find(
-                    (item) =>
-                        String(item.ID_Producto) === String(varianteStock?.ID_Producto) &&
-                        (String(item.ID_Talla ?? item.Talla?.ID_Talla ?? '') === String(tipoTallaSeleccionada ?? '') ||
-                         String(item.Talla?.Tipos_Talla?.ID_TipoTalla ?? '') === String(tipoTallaSeleccionada ?? ''))
-                );
-                const stockBaseTalla = tipoTallaSeleccionada
+                const idProdPadreNum = Number(varianteStock?.ID_Producto ?? varianteStock?.Productos?.ID_Producto);
+                const idTallaSelNum = Number(tipoTallaSeleccionada);
+
+                // Búsqueda Compuesta Estricta (ID_Producto + ID_Talla):
+                // Jamás usar fallbacks ni seleccionar el producto base
+                const varianteTallaElegida = (tipoTallaSeleccionada && !isNaN(idTallaSelNum))
+                    ? variantes.find((item) => {
+                        if (item.esProductoBase) return false;
+                        const pNum = Number(item.ID_Producto);
+                        const tNum = Number(item.ID_Talla ?? item.Talla?.ID_Talla);
+                        return pNum === idProdPadreNum && tNum === idTallaSelNum;
+                    })
+                    : null;
+
+                const existeVariante = Boolean(varianteTallaElegida);
+                const stockBaseTalla = varianteTallaElegida
                     ? Number(varianteTallaElegida?.Inventario?.[0]?.Cantidad_Disponible ?? 0)
-                    : Number(varianteStock?.Inventario?.[0]?.Cantidad_Disponible ?? 0);
+                    : 0;
                 const nombreTallaElegida =
-                    tallasDisponibles.find((t) => String(t.ID_Talla) === String(tipoTallaSeleccionada) || String(t.ID_TipoTalla) === String(tipoTallaSeleccionada))?.Nombre_TipoTalla ||
+                    tallasDisponibles.find((t) => Number(t.ID_Talla) === idTallaSelNum)?.Nombre_TipoTalla ||
                     varianteStock?.Talla?.Tipos_Talla?.Nombre_TipoTalla ||
                     'Sin seleccionar';
                 const cant = parseInt(cantidadIngresar, 10) || 0;
                 const resultante = tipoMovimiento === 'entrada' ? stockBaseTalla + cant : stockBaseTalla - cant;
-                const stockNegativo = resultante < 0;
                 const faltaMotivoOtro = motivoStock === 'Otro' && !motivoPersonalizado.trim();
-                const botonDeshabilitado = guardandoStock || stockNegativo || cant <= 0 || !tipoTallaSeleccionada || faltaMotivoOtro;
+
+                // Reglas estrictas de validación para salidas
+                let errorSalida = null;
+                if (tipoMovimiento === 'salida') {
+                    if (!tipoTallaSeleccionada) {
+                        errorSalida = 'Debes seleccionar obligatoriamente una talla para registrar la salida. El Producto Base no tiene stock propio.';
+                    } else if (!existeVariante) {
+                        errorSalida = 'Error: Este producto no tiene inventario registrado en la talla seleccionada';
+                    } else if (stockBaseTalla <= 0) {
+                        errorSalida = `Error: La talla "${nombreTallaElegida}" no tiene stock disponible (Stock: 0 uds.). No se puede realizar la salida.`;
+                    } else if (cant > stockBaseTalla) {
+                        errorSalida = `Error: La cantidad a retirar (${cant} uds.) supera el stock disponible (${stockBaseTalla} uds.) en la talla seleccionada.`;
+                    }
+                }
+
+                const botonDeshabilitado = guardandoStock || cant <= 0 || !tipoTallaSeleccionada || faltaMotivoOtro || (tipoMovimiento === 'salida' && Boolean(errorSalida)) || (tipoMovimiento === 'entrada' && resultante < 0);
 
                 return (
                     <>
-                        <div style={{
-                            marginTop: '16px',
-                            backgroundColor: stockNegativo ? '#f8d7da' : '#e8f5e9',
-                            border: `1px solid ${stockNegativo ? '#f5c6cb' : '#c8e6c9'}`,
-                            color: stockNegativo ? '#721c24' : '#1b5e20',
-                            padding: '10px 14px',
-                            borderRadius: '8px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            fontSize: '0.9rem'
-                        }}>
-                            <span>
-                                Stock resultante ({nombreTallaElegida}, actual: {stockBaseTalla}):
-                            </span>
-                            <strong>{resultante} Unidades</strong>
-                        </div>
+                        {errorSalida ? (
+                            <div style={{
+                                marginTop: '16px',
+                                backgroundColor: '#fee2e2',
+                                border: '1px solid #ef4444',
+                                color: '#991b1b',
+                                padding: '10px 14px',
+                                borderRadius: '8px',
+                                fontSize: '0.88rem',
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: '8px'
+                            }}>
+                                <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>⛔</span>
+                                <div>
+                                    <strong>Validación de Salida:</strong>
+                                    <div style={{ marginTop: '2px' }}>{errorSalida}</div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{
+                                marginTop: '16px',
+                                backgroundColor: resultante < 0 ? '#fee2e2' : '#e8f5e9',
+                                border: `1px solid ${resultante < 0 ? '#fca5a5' : '#c8e6c9'}`,
+                                color: resultante < 0 ? '#991b1b' : '#1b5e20',
+                                padding: '10px 14px',
+                                borderRadius: '8px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                fontSize: '0.9rem'
+                            }}>
+                                <span>
+                                    Stock resultante ({nombreTallaElegida}, actual: {stockBaseTalla}):
+                                </span>
+                                <strong>{resultante} Unidades</strong>
+                            </div>
+                        )}
 
                         <button 
                             className="btn-guardar" 
                             onClick={guardarEntradaStock}
                             disabled={botonDeshabilitado}
-                            style={{ marginTop: '16px' }}
+                            style={{
+                                marginTop: '16px',
+                                backgroundColor: botonDeshabilitado ? '#9ca3af' : (tipoMovimiento === 'salida' ? '#dc2626' : '#16a34a'),
+                                color: '#fff',
+                                cursor: botonDeshabilitado ? 'not-allowed' : 'pointer'
+                            }}
                         >
-                            {guardandoStock ? 'Guardando...' : 'Confirmar movimiento'}
+                            {guardandoStock
+                                ? 'Procesando movimiento...'
+                                : tipoMovimiento === 'salida'
+                                    ? 'Confirmar Salida de Stock'
+                                    : 'Confirmar Ingreso de Stock'}
                         </button>
                     </>
                 );

@@ -47,7 +47,7 @@ export function normalizarProducto(p) {
   const catPropio = cat.ID_Categoria ?? cat.ID_categoria ?? p.ID_Categoria ?? p.ID_categoria;
   const idGenero = Number(catPadre ?? catPropio ?? null);
 
-  const precioBase = precios.length > 0 ? Math.min(...precios) : (Number(p.Precio ?? p.Precio_Actual ?? 0) || 0);
+  const precioBase = precios.length > 0 ? Math.min(...precios) : (Number(p.Precio_Base ?? p.Precio ?? p.Precio_Actual ?? 0) || 0);
   
   // Calcular si tiene oferta activa (en producto o en alguna de sus variantes)
   const ofertaProducto = esOfertaActiva(p);
@@ -350,7 +350,7 @@ function normalizarTalla(v, tallaMap = {}, tiposTallaMap = {}, inventarioMap = {
     prodData?.Porcentaje_Descuento ||
     0
   );
-  const precioBase = Number(v.Precio_Actual ?? prodData?.Precio ?? 0);
+  const precioBase = Number(v.Precio_Actual ?? prodData?.Precio_Base ?? prodData?.Precio ?? 0);
   const precioFinal = enOferta ? calcularPrecioConDescuento(precioBase, porcentaje) : precioBase;
 
   return {
