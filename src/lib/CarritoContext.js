@@ -93,7 +93,7 @@ export function CarritoProvider({ children }) {
           if (!v) return item;
 
           const p = prodMap[v.ID_Producto] || prodMap[String(v.ID_Producto)] || null;
-          const precioOriginalReal = Number(v.Precio_Actual ?? item.precioOriginal ?? item.precio ?? 0);
+          const precioOriginalReal = Number(v.Precio_Actual ?? p?.Precio_Base ?? p?.Precio ?? item.precioOriginal ?? item.precio ?? 0);
 
           let enOferta = false;
           let porcentajeDescuento = 0;
@@ -134,6 +134,7 @@ export function CarritoProvider({ children }) {
   // Revalidar automáticamente contra Firestore al cargar el carrito y cuando la ventana recupera el foco
   useEffect(() => {
     if (!cargado || items.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     sincronizarPreciosConBD();
 
     const alEnfocar = () => sincronizarPreciosConBD();

@@ -9,7 +9,77 @@ import { useFavoritos } from "@/lib/useFavoritos";
 import { esOfertaActiva, calcularPrecioConDescuento } from "@/lib/descuentos";
 import "./ListadoPrendas.css";
 
-async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, soloOfertas = false) {
+function esProductoWinterSeason(p, categoria, tempMap = {}) {
+  // 1. Verificar por Nombre_Categoria de la subcategoría vinculada
+  const nombreCat = (categoria?.Nombre_Categoria || '').trim().toLowerCase();
+  if (
+    nombreCat === 'winter season' ||
+    nombreCat === 'winter' ||
+    nombreCat === 'invierno' ||
+    nombreCat.includes('winter') ||
+    nombreCat.includes('invierno')
+  ) {
+    return true;
+  }
+
+  // 2. Verificar por ID_Temporada en la colección Temporadas
+  const idTemp = p.ID_Temporada ?? p.ID_temporada ?? p.idTemporada ?? null;
+  if (idTemp != null) {
+    if (Number(idTemp) === 1) return true; // Temporada inicial 1 (Invierno)
+    const tempObj = tempMap[idTemp] || tempMap[String(idTemp)] || tempMap[Number(idTemp)] || null;
+    if (tempObj) {
+      const nombreTemp = (tempObj.Nombre_Temporada || tempObj.Nombre || tempObj.Descripcion || '').trim().toLowerCase();
+      if (
+        nombreTemp === 'winter season' ||
+        nombreTemp === 'winter' ||
+        nombreTemp === 'invierno' ||
+        nombreTemp.includes('winter') ||
+        nombreTemp.includes('invierno')
+      ) {
+        return true;
+      }
+    }
+  }
+
+  // 3. Verificar por campo Temporada directo en el producto
+  if (p.Temporada) {
+    const strTemp = typeof p.Temporada === 'string'
+      ? p.Temporada.trim().toLowerCase()
+      : (p.Temporada?.Nombre_Temporada || p.Temporada?.Nombre || '').trim().toLowerCase();
+    if (
+      strTemp === 'winter season' ||
+      strTemp === 'winter' ||
+      strTemp === 'invierno' ||
+      strTemp.includes('winter') ||
+      strTemp.includes('invierno')
+    ) {
+      return true;
+    }
+  }
+
+  // 4. Verificar por campos de Colección / Subcategoría
+  const col = (
+    p.Coleccion ||
+    p.Nombre_Coleccion ||
+    p.Subcategoria ||
+    p.Nombre_Subcategoria ||
+    p.Temporada_Nombre ||
+    ''
+  ).trim().toLowerCase();
+  if (
+    col === 'winter season' ||
+    col === 'winter' ||
+    col === 'invierno' ||
+    col.includes('winter') ||
+    col.includes('invierno')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, soloOfertas = false, soloWinterSeason = false) {
   try {
     const [
       prodSnap,
@@ -19,7 +89,8 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
       fotosSnap,
       tallaSnap,
       tiposTallaSnap,
-      coloresSnap
+      coloresSnap,
+      tempSnap
     ] = await Promise.all([
       getDocs(collection(db, "Productos")),
       getDocs(collection(db, "Variante_Producto")),
@@ -28,8 +99,21 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
       getDocs(collection(db, "Fotos_Productos")),
       getDocs(collection(db, "Talla")),
       getDocs(collection(db, "Tipos_Talla")),
-      getDocs(collection(db, "Colores"))
+      getDocs(collection(db, "Colores")),
+      getDocs(collection(db, "Temporadas")).catch(() => ({ docs: [], empty: true }))
     ]);
+
+    // 0. Indexar Temporadas
+    const tempMap = {};
+    if (tempSnap && tempSnap.docs) {
+      tempSnap.docs.forEach((d) => {
+        const data = d.data();
+        const id = data.ID_Temporada ?? d.id;
+        tempMap[id] = data;
+        tempMap[String(id)] = data;
+        if (!isNaN(Number(id))) tempMap[Number(id)] = data;
+      });
+    }
 
     // 1. Indexar Tipos_Talla y Colores
     const tiposTallaMap = {};
@@ -124,14 +208,51 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
 
       // Filtro de género / ID_CategoriaPadre
       if (idCategoriaPadre != null) {
-        const idGenero = categoria?.ID_CategoriaPadre ?? p.ID_Categoria ?? p.ID_categoria ?? null;
-        if (String(idGenero) !== String(idCategoriaPadre)) continue;
+        const idGenero = categoria?.ID_CategoriaPadre ?? p.ID_Genero ?? p.ID_Categoria ?? p.ID_categoria ?? null;
+        if (String(idGenero) !== String(idCategoriaPadre) && Number(idGenero) !== Number(idCategoriaPadre)) {
+          continue;
+        }
       }
 
-      // Filtro por nombre de categoría
+      // Si la vista es exclusiva de Winter Season, la prenda debe pertenecer obligatoriamente a dicha colección
+      if (soloWinterSeason) {
+        const esWinter = esProductoWinterSeason(p, categoria, tempMap);
+        if (!esWinter) continue;
+      }
+
+      // Filtro por nombre de categoría / subcategoría o temporada
       if (filtroCategorias) {
-        const nombreCat = categoria?.Nombre_Categoria;
-        if (!nombreCat || !filtroCategorias.includes(nombreCat)) continue;
+        const esWinterFiltro = (nombre) => {
+          const l = String(nombre || '').trim().toLowerCase();
+          return l === 'winter season' || l === 'winter' || l === 'invierno' || l.includes('winter');
+        };
+
+        const tieneWinterEnFiltro = filtroCategorias.some(esWinterFiltro);
+
+        if (tieneWinterEnFiltro) {
+          const coincideWinter = esProductoWinterSeason(p, categoria, tempMap);
+          const otrasCategorias = filtroCategorias.filter((c) => !esWinterFiltro(c));
+          const coincideOtras =
+            otrasCategorias.length > 0 &&
+            categoria?.Nombre_Categoria &&
+            otrasCategorias.some(
+              (c) => String(c).trim().toLowerCase() === String(categoria.Nombre_Categoria).trim().toLowerCase()
+            );
+
+          if (!coincideWinter && !coincideOtras) {
+            continue;
+          }
+        } else {
+          const nombreCat = categoria?.Nombre_Categoria;
+          if (
+            !nombreCat ||
+            !filtroCategorias.some(
+              (c) => String(c).trim().toLowerCase() === String(nombreCat).trim().toLowerCase()
+            )
+          ) {
+            continue;
+          }
+        }
       }
 
       // Obtener variantes del producto
@@ -139,10 +260,26 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
 
       // Filtro por variantes (colores o tallas)
       let variantesCoincidentes = vars;
-      if (filtroColores) {
-        variantesCoincidentes = variantesCoincidentes.filter((v) =>
-          filtroColores.includes(v.Colores?.Nombre_Color)
-        );
+      if (filtroColores && filtroColores.length > 0) {
+        const idsColoresFiltro = filtroColores.map((c) => Number(c)).filter((n) => !isNaN(n));
+        const nombresColoresFiltro = filtroColores.map((c) => String(c).trim().toLowerCase());
+
+        variantesCoincidentes = variantesCoincidentes.filter((v) => {
+          const idColorVar = v.ID_Color != null ? Number(v.ID_Color) : (v.Colores?.ID_Color != null ? Number(v.Colores.ID_Color) : null);
+          const idColorProd = p.ID_Color != null ? Number(p.ID_Color) : null;
+          const nombreColorVar = (v.Colores?.Nombre_Color || '').trim().toLowerCase();
+
+          // 1. Coincidencia estricta por ID_Color numérico
+          if (idsColoresFiltro.length > 0) {
+            if (idColorVar != null && idsColoresFiltro.includes(idColorVar)) return true;
+            if (idColorProd != null && idsColoresFiltro.includes(idColorProd)) return true;
+          }
+
+          // 2. Respaldo por Nombre_Color
+          if (nombreColorVar && nombresColoresFiltro.includes(nombreColorVar)) return true;
+
+          return false;
+        });
       }
       if (filtroTallas) {
         variantesCoincidentes = variantesCoincidentes.filter((v) =>
@@ -216,7 +353,13 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
 }
 
 // funcion que carga el listado de productos reales desde Firestore, filtrado
-function ListadoPrendas({ filtros, onResultados, idCategoriaPadre, soloOfertas = false }) {
+function ListadoPrendas({
+  filtros,
+  onResultados,
+  idCategoriaPadre,
+  soloOfertas = false,
+  soloWinterSeason = false
+}) {
   const [prendas, setPrendas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const { esFavorito, alternarFavorito } = useFavoritos();
@@ -226,7 +369,7 @@ function ListadoPrendas({ filtros, onResultados, idCategoriaPadre, soloOfertas =
 
     async function cargar() {
       setCargando(true);
-      const data = await buscarProductosFiltrados(filtros, idCategoriaPadre, soloOfertas);
+      const data = await buscarProductosFiltrados(filtros, idCategoriaPadre, soloOfertas, soloWinterSeason);
       if (!activo) return;
       setPrendas(data);
       setCargando(false);
@@ -235,7 +378,7 @@ function ListadoPrendas({ filtros, onResultados, idCategoriaPadre, soloOfertas =
 
     cargar();
     return () => { activo = false; };
-  }, [filtros, idCategoriaPadre, soloOfertas]);
+  }, [filtros, idCategoriaPadre, soloOfertas, soloWinterSeason]);
 
   if (cargando) {
     return (
@@ -249,9 +392,17 @@ function ListadoPrendas({ filtros, onResultados, idCategoriaPadre, soloOfertas =
     return (
       <div className="seccion-listado">
         <div style={{ textAlign: "center", padding: "80px 20px", color: "#666" }}>
-          <h2>{soloOfertas ? "De momento no hay prendas en oferta" : "De momento no hay prendas disponibles"}</h2>
+          <h2>
+            {soloWinterSeason
+              ? "De momento no hay prendas en la colección Winter Season"
+              : soloOfertas
+              ? "De momento no hay prendas en oferta"
+              : "De momento no hay prendas disponibles"}
+          </h2>
           <p style={{ marginTop: "10px" }}>
-            {soloOfertas
+            {soloWinterSeason
+              ? "Pronto añadiremos nuevas prendas de temporada de invierno. ¡Mantente atento a las novedades!"
+              : soloOfertas
               ? "Pronto publicaremos nuevas promociones y descuentos exclusivos. ¡Vuelve a consultar más adelante!"
               : "Intenta buscar otra subcategoría o quitar algunos filtros."}
           </p>

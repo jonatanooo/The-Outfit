@@ -1,75 +1,134 @@
 "use client"
 import './FiltroMenu.css'
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { db } from '@/lib/firebaseClient';
+import { collection, getDocs } from 'firebase/firestore';
 
 function FiltroMenu({ onAplicarFiltros, categoriasDisponibles = [], filtrosActivos = {}, cantidadResultados = 0 }) {
-    const[filtroAbierto, setFiltroAbierto] = useState(false);
+    const [filtroAbierto, setFiltroAbierto] = useState(false);
+    const [listaColores, setListaColores] = useState([]);
 
-    const filtroRef = useRef(null)
-    const filtroBtnRef = useRef(null)
+    const filtroRef = useRef(null);
+    const filtroBtnRef = useRef(null);
 
-    useEffect (() => {
-        const ClickFuera = (event) => {
-            const clickDentroDelMenu = filtroRef.current?.contains(event.target)
-            const clickEnBotonFiltro = filtroBtnRef.current?.contains(event.target)
-            if (!clickDentroDelMenu && !clickEnBotonFiltro) {
-                setFiltroAbierto(false)
+    // Cargar colores dinámicamente desde la colección Colores de Firebase
+    useEffect(() => {
+        let activo = true;
+        async function cargarColores() {
+            try {
+                const snap = await getDocs(collection(db, "Colores"));
+                if (!activo) return;
+                const items = snap.docs.map((d) => {
+                    const data = d.data();
+                    const rawId = data.ID_Color ?? d.id;
+                    const numId = Number(rawId);
+                    return {
+                        ID_Color: isNaN(numId) ? rawId : numId,
+                        Nombre_Color: data.Nombre_Color || data.Nombre || 'Sin nombre',
+                        Codigo_Hex: data.Codigo_Hex || data.Hex || '#666666'
+                    };
+                });
+                items.sort((a, b) => (a.Nombre_Color || '').localeCompare(b.Nombre_Color || ''));
+                setListaColores(items);
+            } catch (err) {
+                console.error("Error cargando colores en FiltroMenu:", err);
             }
         }
-        document.addEventListener('click', ClickFuera)
-        return () => document.removeEventListener('click',ClickFuera)
-    }, [])
+        cargarColores();
+        return () => { activo = false; };
+    }, []);
 
-    const [abiertoIds, setAbiertoIds] = useState([])
+    const coloresMap = useMemo(() => {
+        const map = {};
+        listaColores.forEach((c) => {
+            map[c.ID_Color] = c;
+            map[String(c.ID_Color)] = c;
+        });
+        return map;
+    }, [listaColores]);
+
+    useEffect(() => {
+        const ClickFuera = (event) => {
+            const clickDentroDelMenu = filtroRef.current?.contains(event.target);
+            const clickEnBotonFiltro = filtroBtnRef.current?.contains(event.target);
+            if (!clickDentroDelMenu && !clickEnBotonFiltro) {
+                setFiltroAbierto(false);
+            }
+        };
+        document.addEventListener('click', ClickFuera);
+        return () => document.removeEventListener('click', ClickFuera);
+    }, []);
+
+    const [abiertoIds, setAbiertoIds] = useState([]);
 
     const secciones = [
-        {id: 1, titulo: "Categorias", tipo: "multiple", opciones: categoriasDisponibles},
-        {id: 2, titulo: "Colores", tipo: "multiple", opciones: ["Negro", "Blanco", "Verde", "Azul"] },
-        {id: 3, titulo: "Tallas", tipo: "multiple", opciones: ["S", "M", "L", "XL", "XXL"]},
-        {id: 4, titulo: "Ordenar Por", tipo: "unica", opciones: ["Precio: menor a mayor", "Precio: mayor a menor", "Más nuevo"]},
-    ]
+        { id: 1, titulo: "Categorias", tipo: "multiple", opciones: categoriasDisponibles },
+        {
+            id: 2,
+            titulo: "Colores",
+            tipo: "multiple",
+            opciones: listaColores.map((c) => ({
+                valor: c.ID_Color,
+                label: c.Nombre_Color,
+                hex: c.Codigo_Hex
+            }))
+        },
+        { id: 3, titulo: "Tallas", tipo: "multiple", opciones: ["S", "M", "L", "XL", "XXL"] },
+        { id: 4, titulo: "Ordenar Por", tipo: "unica", opciones: ["Precio: menor a mayor", "Precio: mayor a menor", "Más nuevo"] },
+    ];
 
-    const toggleAcordeon =(id) => {
+    const toggleAcordeon = (id) => {
         setAbiertoIds((prev) =>
             prev.includes(id)
                 ? prev.filter((item) => item !== id)
                 : [...prev, id]
-        )
-    }
+        );
+    };
 
     // el checkbox sigue usando su propio estado local mientras el usuario arma la seleccion
-    const [filtrosSeleccionados, setFiltrosSeleccionados] = useState({})
+    const [filtrosSeleccionados, setFiltrosSeleccionados] = useState(filtrosActivos || {});
 
-    const toggleFiltro = (seccionTitulo, opcion) => {
+    const toggleFiltro = (seccionTitulo, valor) => {
         setFiltrosSeleccionados((prev) => {
-            const actuales = prev[seccionTitulo] || []
-            const yaEstaba = actuales.includes(opcion)
+            const actuales = prev[seccionTitulo] || [];
+            const yaEstaba = actuales.some((item) => String(item) === String(valor));
             const nuevosValores = yaEstaba
-            ? actuales.filter((item) => item !== opcion)
-            : [...actuales, opcion]
-            return { ...prev, [seccionTitulo]: nuevosValores }
-        })
-    }
+                ? actuales.filter((item) => String(item) !== String(valor))
+                : [...actuales, valor];
+            return { ...prev, [seccionTitulo]: nuevosValores };
+        });
+    };
 
-    const seleccionarUnica = (seccionTitulo, opcion) => {
-        setFiltrosSeleccionados((prev) => ({ ...prev, [seccionTitulo]: [opcion] }))
-    }
+    const seleccionarUnica = (seccionTitulo, valor) => {
+        setFiltrosSeleccionados((prev) => ({ ...prev, [seccionTitulo]: [valor] }));
+    };
 
     const aplicarFiltros = () => {
-        onAplicarFiltros(filtrosSeleccionados)
-        setFiltroAbierto(false)
-    }
+        onAplicarFiltros(filtrosSeleccionados);
+        setFiltroAbierto(false);
+    };
 
     // 👇 arma la lista plana de etiquetas a partir de lo que YA esta aplicado (filtrosActivos)
     const etiquetas = Object.entries(filtrosActivos).flatMap(([seccionTitulo, opciones]) =>
-        (opciones || []).map((opcion) => ({ seccionTitulo, opcion }))
+        (opciones || []).map((opcion) => {
+            let label = String(opcion);
+            let hex = null;
+            if (seccionTitulo === 'Colores') {
+                const colorObj = coloresMap[opcion] || coloresMap[String(opcion)];
+                if (colorObj) {
+                    label = colorObj.Nombre_Color;
+                    hex = colorObj.Codigo_Hex;
+                }
+            }
+            return { seccionTitulo, opcion, label, hex };
+        })
     );
 
     // 👇 quita una etiqueta puntual y vuelve a aplicar automaticamente
     const quitarEtiqueta = (seccionTitulo, opcion) => {
         const nuevos = {
             ...filtrosActivos,
-            [seccionTitulo]: (filtrosActivos[seccionTitulo] || []).filter((o) => o !== opcion),
+            [seccionTitulo]: (filtrosActivos[seccionTitulo] || []).filter((o) => String(o) !== String(opcion)),
         };
         onAplicarFiltros(nuevos);          // re-aplica ya sin ese filtro
         setFiltrosSeleccionados(nuevos);   // sincroniza los checkboxes por si reabre el menu
@@ -80,17 +139,21 @@ function FiltroMenu({ onAplicarFiltros, categoriasDisponibles = [], filtrosActiv
     <div className='filtros-linea1-2'>
         <div className='filtro-linea1'>
                 <button
-                    ref = {filtroBtnRef}
-                    className ="menu-toggle-filtro"
-                    onClick = {() => setFiltroAbierto (!filtroAbierto)}
-                    aria-label ="Abrir menú">
+                    ref={filtroBtnRef}
+                    className="menu-toggle-filtro"
+                    onClick={() => {
+                        setFiltrosSeleccionados(filtrosActivos || {});
+                        setFiltroAbierto(!filtroAbierto);
+                    }}
+                    aria-label="Abrir menú"
+                >
                     <img src="/ICONOS/FILTRO.png" alt="filtro" id="filtrobtn" className="filtroicon"/>
                     <span className='filtrar-titulo'>FILTRAR</span>
                 </button>
                 <p className='items-cantidad'>
                     <span className='items-numero'>{cantidadResultados}</span> Items filtrados
                     {etiquetas.length > 0 && (
-                        <> por <span className='filtro-cantidad'>{etiquetas[0].opcion}</span>{etiquetas.length > 1 && ` y ${etiquetas.length - 1} más`}</>
+                        <> por <span className='filtro-cantidad'>{etiquetas[0].label}</span>{etiquetas.length > 1 && ` y ${etiquetas.length - 1} más`}</>
                     )}
                 </p>
         </div> 
@@ -101,14 +164,28 @@ function FiltroMenu({ onAplicarFiltros, categoriasDisponibles = [], filtrosActiv
                 <p>No hay filtros activos</p>
             ) : (
                 <div className="etiquetas-filtro">
-                    {etiquetas.map(({ seccionTitulo, opcion }) => (
+                    {etiquetas.map(({ seccionTitulo, opcion, label, hex }) => (
                         <span className="etiqueta-filtro" key={`${seccionTitulo}-${opcion}`}>
-                            {opcion}
+                            {hex && (
+                                <span
+                                    className="color-bolita-filtro"
+                                    style={{
+                                        backgroundColor: hex,
+                                        border: (hex.toLowerCase() === '#ffffff' || hex.toLowerCase() === '#fff') ? '1px solid #cbd5e1' : '1px solid rgba(0,0,0,0.15)',
+                                        width: '12px',
+                                        height: '12px',
+                                        minWidth: '12px',
+                                        minHeight: '12px',
+                                        marginRight: '4px'
+                                    }}
+                                />
+                            )}
+                            {label}
                             <button
                                 type="button"
                                 className="etiqueta-quitar"
                                 onClick={() => quitarEtiqueta(seccionTitulo, opcion)}
-                                aria-label={`Quitar filtro ${opcion}`}
+                                aria-label={`Quitar filtro ${label}`}
                             >
                                 ✕
                             </button>
@@ -138,21 +215,40 @@ function FiltroMenu({ onAplicarFiltros, categoriasDisponibles = [], filtrosActiv
                                 <img src="/ICONOS/Flechaabajo.png" alt="desplegar" id="bajar" />
                             </button>
                             <div className='filtro-acordeon-contenido contenido'>
-                                {seccion.opciones.map((opcion) => (
-                                    <label key={opcion} className='checkbox-opcion'>
-                                        <input 
-                                            type={seccion.tipo === "unica" ? "radio" : "checkbox"}
-                                            name={seccion.tipo === "unica" ? seccion.titulo : undefined}
-                                            checked={filtrosSeleccionados[seccion.titulo]?.includes(opcion) || false}
-                                            onChange={() => 
-                                                seccion.tipo === "unica"
-                                                ? seleccionarUnica(seccion.titulo, opcion)
-                                                : toggleFiltro(seccion.titulo, opcion)
-                                            }
-                                        />
-                                        <span className="checkbox-texto">{opcion}</span>
-                                    </label>
-                                ))}
+                                {seccion.opciones.map((opcion) => {
+                                    const esObjeto = typeof opcion === 'object' && opcion !== null;
+                                    const valor = esObjeto ? opcion.valor : opcion;
+                                    const label = esObjeto ? opcion.label : opcion;
+                                    const hex = esObjeto ? opcion.hex : null;
+                                    const estaSeleccionado = (filtrosSeleccionados[seccion.titulo] || []).some(
+                                        (v) => String(v) === String(valor)
+                                    );
+
+                                    return (
+                                        <label key={String(valor)} className='checkbox-opcion'>
+                                            <input 
+                                                type={seccion.tipo === "unica" ? "radio" : "checkbox"}
+                                                name={seccion.tipo === "unica" ? seccion.titulo : undefined}
+                                                checked={estaSeleccionado}
+                                                onChange={() => 
+                                                    seccion.tipo === "unica"
+                                                    ? seleccionarUnica(seccion.titulo, valor)
+                                                    : toggleFiltro(seccion.titulo, valor)
+                                                }
+                                            />
+                                            {hex && (
+                                                <span 
+                                                    className="color-bolita-filtro" 
+                                                    style={{ 
+                                                        backgroundColor: hex,
+                                                        border: (hex.toLowerCase() === '#ffffff' || hex.toLowerCase() === '#fff') ? '1px solid #cbd5e1' : '1px solid rgba(0,0,0,0.15)'
+                                                    }} 
+                                                />
+                                            )}
+                                            <span className="checkbox-texto">{label}</span>
+                                        </label>
+                                    );
+                                })}
                             </div>
                         </div>
                     ))}

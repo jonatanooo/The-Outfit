@@ -24,9 +24,25 @@ function Headerv2 () {
     const router = useRouter();
     const sesionActiva = !!usuario
     const [categorias, setCategorias] = useState([
-        {id: 'mujer', label: 'MUJERES ', href: '', subcategorias: [{label: 'Ver Todo', href: '/productos'}]},
-        {id: 'hombre', label: 'HOMBRES', href: '', subcategorias: [{label: 'Ver Todo', href: '/productos-hombre'}]},
-        {id: 'ofertas', label: 'OFERTAS', href: '/ofertas'}
+        {
+            id: 'mujer',
+            label: 'MUJERES ',
+            href: '',
+            subcategorias: [
+                { label: 'Ver Todo', href: '/productos' },
+                { label: 'WINTER SEASON', href: '/winter-season?genero=mujer' }
+            ]
+        },
+        {
+            id: 'hombre',
+            label: 'HOMBRES',
+            href: '',
+            subcategorias: [
+                { label: 'Ver Todo', href: '/productos-hombre' },
+                { label: 'WINTER SEASON', href: '/winter-season?genero=hombre' }
+            ]
+        },
+        { id: 'ofertas', label: 'OFERTAS', href: '/ofertas' }
     ]);
 
     useEffect(() => {
@@ -41,12 +57,14 @@ function Headerv2 () {
 
                 const subMujer = data
                     .filter(c => Number(c.ID_CategoriaPadre) === 56)
+                    .filter(c => (c.Nombre_Categoria || '').trim().toUpperCase() !== 'WINTER SEASON')
                     .map(c => ({
                         label: c.Nombre_Categoria,
                         href: `/productos?categoria=${encodeURIComponent(c.Nombre_Categoria)}`
                     }));
                 const subHombre = data
                     .filter(c => Number(c.ID_CategoriaPadre) === 57)
+                    .filter(c => (c.Nombre_Categoria || '').trim().toUpperCase() !== 'WINTER SEASON')
                     .map(c => ({
                         label: c.Nombre_Categoria,
                         href: `/productos-hombre?categoria=${encodeURIComponent(c.Nombre_Categoria)}`
@@ -59,6 +77,7 @@ function Headerv2 () {
                         href: '',
                         subcategorias: [
                             { label: 'Ver Todo', href: '/productos' },
+                            { label: 'WINTER SEASON', href: '/winter-season?genero=mujer' },
                             ...subMujer
                         ]
                     },
@@ -68,6 +87,7 @@ function Headerv2 () {
                         href: '',
                         subcategorias: [
                             { label: 'Ver Todo', href: '/productos-hombre' },
+                            { label: 'WINTER SEASON', href: '/winter-season?genero=hombre' },
                             ...subHombre
                         ]
                     },

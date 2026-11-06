@@ -537,4 +537,356 @@
     align-items: center;
     justify-content: center;
 }
+
+/* ---------- Diferenciación Visual: Producto Base (Modelo Base) vs Variantes ---------- */
+.fila-modelo-base {
+    background-color: #f8fafc !important;
+    border-left: 5px solid #6366f1 !important; /* Azul índigo distintivo */
+    font-weight: 500;
+}
+
+.fila-modelo-base:hover {
+    background-color: #f1f5f9 !important;
+}
+
+.fila-variante-talla {
+    background-color: #ffffff;
+    border-left: 5px solid transparent;
+}
+
+.fila-variante-talla:hover {
+    background-color: #fafafa;
+}
+
+.fila-variante-talla td:first-child {
+    padding-left: 18px;
+    color: #475569;
+}
+
+/* Badge distintivo de Modelo Base */
+.badge-modelo-base {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background-color: #e0e7ff; /* Índigo suave */
+    color: #3730a3; /* Índigo profundo */
+    border: 1px solid #c7d2fe;
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+/* Badge para tallas normales (XS, S, M, L, etc.) */
+.badge-talla-normal {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background-color: #f1f5f9;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+    font-weight: 600;
+    font-size: 0.82rem;
+}
+
+/* Stock N/A para Producto Base de catálogo */
+.stock-modelo-base {
+    display: inline-block;
+    color: #64748b;
+    font-size: 0.82rem;
+    font-style: italic;
+    background-color: #f1f5f9;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px dashed #cbd5e1;
+    font-weight: 500;
+}
+
+/* Muestras y bolitas de color en la tabla */
+.color-celda-tabla {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.color-dot-tabla {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    display: inline-block;
+    flex-shrink: 0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* ---------- Selector Personalizado de Colores con Vista Previa ---------- */
+.selector-color-con-boton {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.selector-color-custom-wrap {
+    flex: 1;
+    position: relative;
+}
+
+.selector-color-trigger {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    background: #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease;
+}
+
+.selector-color-trigger:hover {
+    border-color: #888;
+}
+
+.selector-color-opcion-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.color-dot-preview {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.selector-color-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 120;
+}
+
+.selector-color-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    transition: background-color 0.1s ease;
+}
+
+.selector-color-option:hover {
+    background-color: #f3f4f6;
+}
+
+.selector-color-option.seleccionado {
+    background-color: #e0e7ff;
+    font-weight: 600;
+}
+
+.btn-nuevo-color {
+    padding: 9px 14px;
+    background-color: #111111;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.15s ease;
+}
+
+.btn-nuevo-color:hover {
+    background-color: #333333;
+}
+
+/* Subformulario / Modal rápido para agregar nuevo color */
+.box-nuevo-color {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 14px;
+}
+
+.box-nuevo-color-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #1e293b;
+}
+
+.box-nuevo-color-body {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.input-color-picker {
+    width: 44px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    cursor: pointer;
+    background: transparent;
+}
+
+/* ---------- Badges y Filtros de Temporada / Colección Especial ---------- */
+.badge-temporada {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    text-transform: capitalize;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.filtro-temporadas-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    margin-bottom: 14px;
+    padding: 8px 12px;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.filtro-temporadas-label {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #475569;
+    margin-right: 4px;
+}
+
+.btn-filtro-temporada {
+    padding: 5px 12px;
+    border-radius: 16px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid #cbd5e1;
+    background-color: #ffffff;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-filtro-temporada:hover {
+    border-color: #94a3b8;
+    background-color: #f1f5f9;
+}
+
+.btn-filtro-temporada.activo {
+    background-color: #0f172a;
+    color: #ffffff;
+    border-color: #0f172a;
+}
+
+.btn-limpiar-filtro-temp {
+    padding: 4px 10px;
+    border-radius: 14px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid #fecaca;
+    background-color: #fef2f2;
+    color: #b91c1c;
+    cursor: pointer;
+    margin-left: auto;
+    transition: background-color 0.15s ease;
+}
+
+.btn-limpiar-filtro-temp:hover {
+    background-color: #fee2e2;
+}
+
+/* Modal / Box Rápido para Nueva Temporada */
+.box-nueva-temporada {
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 6px;
+    margin-bottom: 12px;
+}
+
+.box-nueva-temporada-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 8px;
+}
+
+.box-nueva-temporada-header button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #64748b;
+}
+
+.box-nueva-temporada-body {
+    display: flex;
+    flex-direction: column;
+}
+
+.btn-guardar-temp-rapida {
+    padding: 6px 14px;
+    background-color: #0284c7;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.btn-guardar-temp-rapida:hover {
+    background-color: #0369a1;
+}
+
+.btn-cancelar-temp-rapida {
+    padding: 6px 12px;
+    background-color: #e2e8f0;
+    color: #334155;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+
 
