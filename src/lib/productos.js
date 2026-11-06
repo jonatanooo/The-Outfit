@@ -79,6 +79,8 @@ export function normalizarProducto(p) {
     fechaInicioOferta: p.Fecha_Inicio_Oferta ?? null,
     fechaFinOferta: p.Fecha_Fin_Oferta ?? null,
     idGenero,
+    temporada: p.Temporada?.Nombre_Temporada || null,
+    idTemporada: p.ID_Temporada != null && !isNaN(Number(p.ID_Temporada)) ? Number(p.ID_Temporada) : null,
   };
 }
 
@@ -100,18 +102,20 @@ export function useProductosCatalogo(idGenero, soloOfertas = false) {
           fotosSnap,
           varSnap,
           marcasSnap,
-          catSnap
+          catSnap,
+          tempSnap
         ] = await Promise.all([
           getDocs(collection(db, 'Productos')),
           getDocs(collection(db, 'Fotos_Productos')),
           getDocs(collection(db, 'Variante_Producto')),
           getDocs(collection(db, 'Marca')),
-          getDocs(collection(db, 'Categorias_Producto'))
+          getDocs(collection(db, 'Categorias_Producto')),
+          getDocs(collection(db, 'Temporadas')).catch(() => null)
         ]);
 
         if (!activo) return;
 
-        // 1. Indexar tablas de búsqueda rápida (Marca y Categorías)
+        // 1. Indexar tablas de búsqueda rápida (Marca, Categorías y Temporadas)
         const marcasMap = {};
         marcasSnap.docs.forEach((d) => {
           const m = d.data();
@@ -127,6 +131,17 @@ export function useProductosCatalogo(idGenero, soloOfertas = false) {
           catMap[id] = c;
           catMap[String(id)] = c;
         });
+
+        const tempMap = {};
+        if (tempSnap && !tempSnap.empty) {
+          tempSnap.docs.forEach((d) => {
+            const t = d.data();
+            const id = t.ID_Temporada ?? d.id;
+            tempMap[id] = t;
+            tempMap[String(id)] = t;
+            if (!isNaN(Number(id))) tempMap[Number(id)] = t;
+          });
+        }
 
         // 2. Agrupar fotos por ID_Producto
         const fotosPorProducto = {};
@@ -162,6 +177,7 @@ export function useProductosCatalogo(idGenero, soloOfertas = false) {
             const k3 = String(d.id);
             const fList = fotosPorProducto[k1] || (k2 ? fotosPorProducto[k2] : null) || fotosPorProducto[k3] || [];
             const vList = variantesPorProducto[k1] || (k2 ? variantesPorProducto[k2] : null) || variantesPorProducto[k3] || [];
+            const idTemp = data.ID_Temporada ?? data.ID_temporada ?? null;
             return {
               ...data,
               ID_Producto: pid,
@@ -169,6 +185,8 @@ export function useProductosCatalogo(idGenero, soloOfertas = false) {
               Variante_Producto: vList,
               Marca: marcasMap[data.ID_Marca] || null,
               Categorias_Producto: catMap[data.ID_Categoria ?? data.ID_categoria] || null,
+              Temporada: idTemp != null ? (tempMap[idTemp] || tempMap[String(idTemp)] || null) : null,
+              ID_Temporada: idTemp != null && !isNaN(Number(idTemp)) ? Number(idTemp) : null,
             };
           })
           .filter((p) => {

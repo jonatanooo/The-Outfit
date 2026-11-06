@@ -23,7 +23,7 @@ import {
     limit
 } from 'firebase/firestore';
 import { obtenerIdUsuario, verificarAccesoServidor } from '@/lib/usuario';
-import { esOfertaActiva, calcularPrecioConDescuento } from '@/lib/descuentos';
+import { esOfertaActiva, esOfertaVigente, calcularPrecioConDescuento } from '@/lib/descuentos';
 import './AdminInventario.css';
 
 // Helpers para indexar y buscar documentos en Firestore por ID flexible (número, string o doc.id)
@@ -155,11 +155,126 @@ function extraerCodigoNumericoProducto(p) {
     return 10000 + (hash % 89999);
 }
 
+function obtenerEstiloBadgeTemporada(nombre = '', colorBadge = null) {
+    const nom = (nombre || '').toLowerCase();
+    if (nom.includes('invierno') || nom.includes('frio') || nom.includes('frío')) {
+        return {
+            backgroundColor: '#e0f2fe',
+            color: '#0369a1',
+            border: '1px solid #7dd3fc',
+            padding: '2px 8px',
+            borderRadius: '12px',
+            fontSize: '0.74rem',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px'
+        };
+    }
+    if (nom.includes('verano') || nom.includes('playa') || nom.includes('calor')) {
+        return {
+            backgroundColor: '#fef3c7',
+            color: '#b45309',
+            border: '1px solid #fcd34d',
+            padding: '2px 8px',
+            borderRadius: '12px',
+            fontSize: '0.74rem',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px'
+        };
+    }
+    if (nom.includes('oferta') || nom.includes('promo') || nom.includes('descuento')) {
+        return {
+            backgroundColor: '#fee2e2',
+            color: '#b91c1c',
+            border: '1px solid #fca5a5',
+            padding: '2px 8px',
+            borderRadius: '12px',
+            fontSize: '0.74rem',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px'
+        };
+    }
+    if (nom.includes('liquidac') || nom.includes('remate') || nom.includes('outlet')) {
+        return {
+            backgroundColor: '#d1fae5',
+            color: '#047857',
+            border: '1px solid #6ee7b7',
+            padding: '2px 8px',
+            borderRadius: '12px',
+            fontSize: '0.74rem',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px'
+        };
+    }
+    if (nom.includes('primavera')) {
+        return {
+            backgroundColor: '#fce7f3',
+            color: '#be185d',
+            border: '1px solid #fbcfe8',
+            padding: '2px 8px',
+            borderRadius: '12px',
+            fontSize: '0.74rem',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px'
+        };
+    }
+    if (nom.includes('otoño') || nom.includes('otono')) {
+        return {
+            backgroundColor: '#ffedd5',
+            color: '#c2410c',
+            border: '1px solid #fdba74',
+            padding: '2px 8px',
+            borderRadius: '12px',
+            fontSize: '0.74rem',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px'
+        };
+    }
+    if (colorBadge) {
+        return {
+            backgroundColor: `${colorBadge}18`,
+            color: colorBadge,
+            border: `1px solid ${colorBadge}55`,
+            padding: '2px 8px',
+            borderRadius: '12px',
+            fontSize: '0.74rem',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px'
+        };
+    }
+    return {
+        backgroundColor: '#ede9fe',
+        color: '#6d28d9',
+        border: '1px solid #c4b5fd',
+        padding: '2px 8px',
+        borderRadius: '12px',
+        fontSize: '0.74rem',
+        fontWeight: 700,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px'
+    };
+}
+
 function AdminInventario() {
     const router = useRouter();
     const [verificandoAcceso, setVerificandoAcceso] = useState(true);
     // ---------- ESTADOS DE LA TABLA PRINCIPAL ----------
     const [filtroActivo, setFiltroActivo] = useState('todos'); // 'activos' | 'inactivos' | 'bajo' | 'sinstock'
+    const [filtroTemporada, setFiltroTemporada] = useState('todas'); // 'todas' | ID_Temporada
     const [idEstadoInactivo, setIdEstadoInactivo] = useState(null);
     const [busqueda, setBusqueda] = useState('');
     const [variantes, setVariantes] = useState([]);
@@ -244,6 +359,18 @@ function AdminInventario() {
     const [creandoMarca, setCreandoMarca] = useState(false);
     const [nombreNuevaMarca, setNombreNuevaMarca] = useState('');
 
+    // ---------- ESTADOS DE TEMPORADA / COLECCIÓN ESPECIAL ----------
+    const [temporadas, setTemporadas] = useState([]);
+    const [temporadaSeleccionada, setTemporadaSeleccionada] = useState(''); // '' = Ninguna / null
+    const [creandoTemporada, setCreandoTemporada] = useState(false);
+    const [nombreNuevaTemporada, setNombreNuevaTemporada] = useState('');
+    const [descripcionNuevaTemporada, setDescripcionNuevaTemporada] = useState('');
+    const [guardandoTemporada, setGuardandoTemporada] = useState(false);
+    const [temporadaEditar, setTemporadaEditar] = useState('');
+    const [creandoTemporadaEditar, setCreandoTemporadaEditar] = useState(false);
+    const [nombreNuevaTemporadaEditar, setNombreNuevaTemporadaEditar] = useState('');
+    const [descNuevaTemporadaEditar, setDescNuevaTemporadaEditar] = useState('');
+
     //------ ESTADOS DE MODAL DE DESCUENTO / OFERTA ----------//
     const [varianteDescuento, setVarianteDescuento] = useState(null);
     const [porcentajeDescuento, setPorcentajeDescuento] = useState('');
@@ -252,10 +379,11 @@ function AdminInventario() {
     const [guardandoDescuento, setGuardandoDescuento] = useState(false);
 
     useEffect(() => {
-        if (modalAbierto === 'agregar') {
+        if (modalAbierto === 'agregar' || modalAbierto === 'editar') {
             cargarCategorias();
             cargarMarcas();
             cargarColoresDisponibles();
+            cargarTemporadas();
         }
     }, [modalAbierto]);
 
@@ -294,6 +422,102 @@ function AdminInventario() {
             setCreandoMarca(false);
         } catch (error) {
             console.log('❌ Error creando marca en Firestore:', error.message);
+        }
+    }
+
+    // ---------- CARGA Y GESTIÓN DE TEMPORADAS / COLECCIONES ESPECIALES ----------
+    async function cargarTemporadas() {
+        try {
+            const snap = await getDocs(collection(db, 'Temporadas'));
+            let data = snap.docs
+                .filter((d) => !esDocPlantilla(d))
+                .map((d) => {
+                    const td = d.data();
+                    const rawId = td.ID_Temporada ?? d.id;
+                    const numId = Number(rawId);
+                    return {
+                        _docId: d.id,
+                        ID_Temporada: isNaN(numId) ? rawId : numId,
+                        Nombre_Temporada: td.Nombre_Temporada || td.Nombre || '',
+                        Descripcion: td.Descripcion || '',
+                        Color_Badge: td.Color_Badge || null,
+                        ...td
+                    };
+                })
+                .filter((t) => t.Nombre_Temporada);
+
+            // Sembrado inicial de temporadas base si la colección está vacía
+            if (data.length === 0) {
+                const temporadasIniciales = [
+                    { ID_Temporada: 1, Nombre_Temporada: 'Invierno', Descripcion: 'Colección de Invierno / Frío', Color_Badge: '#0284c7' },
+                    { ID_Temporada: 2, Nombre_Temporada: 'Verano', Descripcion: 'Colección de Verano / Playa', Color_Badge: '#d97706' },
+                    { ID_Temporada: 3, Nombre_Temporada: 'Ofertas', Descripcion: 'Prendas en Promoción u Ofertas especiales', Color_Badge: '#dc2626' },
+                    { ID_Temporada: 4, Nombre_Temporada: 'Liquidación', Descripcion: 'Prendas en Liquidación y Últimas Unidades', Color_Badge: '#059669' },
+                    { ID_Temporada: 5, Nombre_Temporada: 'Primavera', Descripcion: 'Colección Primavera', Color_Badge: '#db2777' },
+                    { ID_Temporada: 6, Nombre_Temporada: 'Otoño', Descripcion: 'Colección Otoño', Color_Badge: '#b45309' }
+                ];
+                try {
+                    for (const temp of temporadasIniciales) {
+                        await setDoc(doc(db, 'Temporadas', String(temp.ID_Temporada)), {
+                            ...temp,
+                            Fecha_Creacion: new Date().toISOString()
+                        });
+                    }
+                    data = temporadasIniciales;
+                } catch (errInit) {
+                    console.log('Nota: Temporadas cargadas en memoria inicial:', errInit?.message);
+                    data = temporadasIniciales;
+                }
+            }
+
+            data.sort((a, b) => Number(a.ID_Temporada || 0) - Number(b.ID_Temporada || 0));
+            setTemporadas(data);
+            return data;
+        } catch (err) {
+            console.error('Error al cargar temporadas desde Firestore:', err);
+            return [];
+        }
+    }
+
+    async function crearNuevaTemporada(esEdicion = false) {
+        const nombre = (esEdicion ? nombreNuevaTemporadaEditar : nombreNuevaTemporada).trim();
+        if (!nombre) {
+            alert('Por favor escribe un nombre para la temporada / colección (ej. Invierno, Ofertas).');
+            return;
+        }
+        setGuardandoTemporada(true);
+        try {
+            const idUser = await obtenerIdUsuario();
+            const nuevoId = await generarSiguienteIdNumerico('Temporadas', 'ID_Temporada', 1);
+            const desc = (esEdicion ? descNuevaTemporadaEditar : descripcionNuevaTemporada).trim() || null;
+            const nuevaTemp = {
+                ID_Temporada: nuevoId,
+                ID_User: idUser,
+                Nombre_Temporada: nombre,
+                Descripcion: desc,
+                Color_Badge: '#0284c7',
+                Fecha_Creacion: new Date().toISOString()
+            };
+
+            await setDoc(doc(db, 'Temporadas', String(nuevoId)), nuevaTemp);
+            setTemporadas((prev) => [...prev, nuevaTemp].sort((a, b) => Number(a.ID_Temporada) - Number(b.ID_Temporada)));
+
+            if (esEdicion) {
+                setTemporadaEditar(nuevoId);
+                setNombreNuevaTemporadaEditar('');
+                setDescNuevaTemporadaEditar('');
+                setCreandoTemporadaEditar(false);
+            } else {
+                setTemporadaSeleccionada(nuevoId);
+                setNombreNuevaTemporada('');
+                setDescripcionNuevaTemporada('');
+                setCreandoTemporada(false);
+            }
+        } catch (error) {
+            console.error('Error creando temporada en Firestore:', error);
+            alert('Error creando temporada: ' + error.message);
+        } finally {
+            setGuardandoTemporada(false);
         }
     }
 
@@ -458,6 +682,7 @@ function AdminInventario() {
 
             setVerificandoAcceso(false);
             cargarVariantes();
+            cargarTemporadas();
         });
 
         return () => unsubscribe();
@@ -513,11 +738,13 @@ function AdminInventario() {
         const nombreProd = (v.Productos?.Nombre_Producto || '').toLowerCase();
         const nombreTalla = (v.Talla?.Tipos_Talla?.Nombre_TipoTalla || '').toLowerCase();
         const nombreMarca = (v.Productos?.Marca?.Nombre_Marca || '').toLowerCase();
+        const nombreTemp = (v.Temporada?.Nombre_Temporada || v.Productos?.Temporada?.Nombre_Temporada || '').toLowerCase();
         const coincideBusqueda =
             !q ||
             nombreProd.includes(q) ||
             nombreTalla.includes(q) ||
             nombreMarca.includes(q) ||
+            nombreTemp.includes(q) ||
             String(v.ID_Variante).toLowerCase().includes(q);
 
         let coincideFiltro = true;
@@ -525,18 +752,33 @@ function AdminInventario() {
         if (filtroActivo === 'sinstock') coincideFiltro = stock === 0;
         if (filtroActivo === 'activos') coincideFiltro = true;
 
-        return coincideBusqueda && coincideFiltro;
+        let coincideTemp = true;
+        if (filtroTemporada !== 'todas') {
+            const idT = v.ID_Temporada ?? v.Productos?.ID_Temporada;
+            coincideTemp = String(idT) === String(filtroTemporada);
+        }
+
+        return coincideBusqueda && coincideFiltro && coincideTemp;
     });
 
     // ---------- Filtro para pestaña de Prendas Desactivadas ----------
     const inactivosFiltrados = variantes.filter((v) => {
         if (!esVarianteInactiva(v)) return false;
+
+        let coincideTemp = true;
+        if (filtroTemporada !== 'todas') {
+            const idT = v.ID_Temporada ?? v.Productos?.ID_Temporada;
+            coincideTemp = String(idT) === String(filtroTemporada);
+        }
+        if (!coincideTemp) return false;
+
         if (!busquedaInactivos.trim()) return true;
         const q = busquedaInactivos.toLowerCase();
         const nombre = (v.Productos?.Nombre_Producto || '').toLowerCase();
         const marca = (v.Productos?.Marca?.Nombre_Marca || '').toLowerCase();
         const talla = (v.Talla?.Tipos_Talla?.Nombre_TipoTalla || '').toLowerCase();
-        return nombre.includes(q) || marca.includes(q) || talla.includes(q) || String(v.ID_Variante).includes(q);
+        const nombreTemp = (v.Temporada?.Nombre_Temporada || v.Productos?.Temporada?.Nombre_Temporada || '').toLowerCase();
+        return nombre.includes(q) || marca.includes(q) || talla.includes(q) || nombreTemp.includes(q) || String(v.ID_Variante).includes(q);
     });
 
     // ---------- Contadores y filtro para Ingresos y Salidas ----------
@@ -678,6 +920,13 @@ function AdminInventario() {
         cargarMarcas();
         cargarCategorias();
         cargarColoresDisponibles();
+        cargarTemporadas();
+        
+        const idTempProd = v.Productos?.ID_Temporada ?? v.ID_Temporada ?? '';
+        setTemporadaEditar(idTempProd ? String(idTempProd) : '');
+        setCreandoTemporadaEditar(false);
+        setNombreNuevaTemporadaEditar('');
+        setDescNuevaTemporadaEditar('');
         
         let idPadre = v.Productos?.Categorias_Producto?.ID_CategoriaPadre;
         let idSub = v.Productos?.ID_Categoria;
@@ -725,21 +974,40 @@ function AdminInventario() {
         setMotivoPersonalizado('');
     }
 
-    // Abre el modal para gestionar descuentos y ofertas
+    // Formatea un objeto Date o string ISO a formato compatible con input datetime-local (YYYY-MM-DDTHH:mm) en hora local
+    function formatearParaInputDatetime(fecha) {
+        if (!fecha) return '';
+        const d = new Date(fecha);
+        if (isNaN(d.getTime())) return '';
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    // Abre el modal para gestionar descuentos y ofertas evaluando vigencia real
     function abrirModalDescuento(v) {
         setVarianteDescuento(v);
-        const porc = v.Porcentaje_Descuento ?? v.Productos?.Porcentaje_Descuento ?? '';
-        setPorcentajeDescuento(porc !== '' && porc != null ? String(porc) : '');
+        const estaVigente = esOfertaVigente(v) || esOfertaVigente(v?.Productos);
         
-        const fInicio = v.Fecha_Inicio_Oferta ?? v.Productos?.Fecha_Inicio_Oferta;
-        const fFin = v.Fecha_Fin_Oferta ?? v.Productos?.Fecha_Fin_Oferta;
-        
-        setFechaInicioOferta(fInicio ? new Date(fInicio).toISOString().slice(0, 16) : '');
-        setFechaFinOferta(fFin ? new Date(fFin).toISOString().slice(0, 16) : '');
+        if (estaVigente) {
+            // Oferta SÍ vigente: cargamos los datos vigentes para mostrarlos en el panel de bloqueo/desactivación
+            const porc = v.Porcentaje_Descuento ?? v.Productos?.Porcentaje_Descuento ?? '';
+            setPorcentajeDescuento(porc !== '' && porc != null ? String(porc) : '');
+            
+            const fInicio = v.Fecha_Inicio_Oferta ?? v.Productos?.Fecha_Inicio_Oferta;
+            const fFin = v.Fecha_Fin_Oferta ?? v.Productos?.Fecha_Fin_Oferta;
+            
+            setFechaInicioOferta(formatearParaInputDatetime(fInicio));
+            setFechaFinOferta(formatearParaInputDatetime(fFin));
+        } else {
+            // Oferta vencida, inactiva o inexistente: Formulario limpio y habilitado directamente para nueva oferta
+            setPorcentajeDescuento('');
+            setFechaInicioOferta(formatearParaInputDatetime(new Date()));
+            setFechaFinOferta('');
+        }
         setModalAbierto('descuento');
     }
 
-    // Guarda o elimina el descuento/oferta y lo registra en Auditoria_Descuentos
+    // Guarda o elimina el descuento/oferta, actualiza Promociones en segundo plano y registra en Auditoria_Descuentos
     async function guardarDescuento(quitar = false) {
         if (!varianteDescuento) return;
         const numPorcentaje = quitar ? 0 : parseFloat(porcentajeDescuento);
@@ -749,11 +1017,17 @@ function AdminInventario() {
                 alert('Por favor ingresa un porcentaje de descuento válido (entre 1 y 100).');
                 return;
             }
-            if (fechaInicioOferta && fechaFinOferta) {
-                if (new Date(fechaFinOferta) <= new Date(fechaInicioOferta)) {
-                    alert('La fecha y hora de finalización debe ser posterior a la de inicio.');
-                    return;
-                }
+            if (!fechaFinOferta) {
+                alert('Por favor selecciona la fecha y hora de finalización de la oferta.');
+                return;
+            }
+            if (new Date(fechaFinOferta) <= new Date()) {
+                alert('La fecha y hora de finalización debe ser mayor a la fecha y hora actual (futura).');
+                return;
+            }
+            if (fechaInicioOferta && new Date(fechaFinOferta) <= new Date(fechaInicioOferta)) {
+                alert('La fecha y hora de finalización debe ser posterior a la de inicio.');
+                return;
             }
         }
 
@@ -776,8 +1050,8 @@ function AdminInventario() {
                 }
             }
 
-            const idProd = varianteDescuento.ID_Producto;
-            const idVar = varianteDescuento.ID_Variante;
+            const idProd = Number(varianteDescuento.ID_Producto ?? varianteDescuento.Productos?.ID_Producto);
+            const idVar = Number(varianteDescuento.ID_Variante);
             const prodNombre = varianteDescuento.Productos?.Nombre_Producto || `Producto #${idProd}`;
             const precioOriginal = Number(varianteDescuento.Precio_Actual ?? 0);
             const precioConDescuento = calcularPrecioConDescuento(precioOriginal, numPorcentaje);
@@ -786,22 +1060,75 @@ function AdminInventario() {
                 Porcentaje_Descuento: numPorcentaje,
                 Fecha_Inicio_Oferta: (!quitar && fechaInicioOferta) ? new Date(fechaInicioOferta).toISOString() : null,
                 Fecha_Fin_Oferta: (!quitar && fechaFinOferta) ? new Date(fechaFinOferta).toISOString() : null,
-                Tiene_Descuento: numPorcentaje > 0,
-                Precio_Oferta: numPorcentaje > 0 ? precioConDescuento : precioOriginal
+                Tiene_Descuento: !quitar && numPorcentaje > 0,
+                Activo: (!quitar && numPorcentaje > 0) ? 1 : 0,
+                Precio_Oferta: (!quitar && numPorcentaje > 0) ? precioConDescuento : precioOriginal
             };
 
-            // 1. Actualizar Variante_Producto objetivo
+            // 1. Segundo plano: Asegurarse de que cualquier promoción previa quede con Activo = 0 (sin borrarla)
+            try {
+                const pidsBusqueda = Array.from(new Set([
+                    idProd,
+                    String(idProd),
+                    !isNaN(Number(idProd)) ? Number(idProd) : null
+                ].filter(val => val !== null && val !== undefined && val !== '')));
+
+                const qPromos = query(
+                    collection(db, 'Promociones'),
+                    where('ID_Producto', 'in', pidsBusqueda)
+                );
+                const snapPromos = await getDocs(qPromos);
+                for (const pDoc of snapPromos.docs) {
+                    if (!esDocPlantilla(pDoc)) {
+                        const pData = pDoc.data();
+                        if (pData.Activo !== 0) {
+                            await updateDoc(pDoc.ref, { Activo: 0 });
+                        }
+                    }
+                }
+            } catch (errPromosPrev) {
+                console.error('Error actualizando promociones anteriores en segundo plano:', errPromosPrev);
+            }
+
+            // 2. Si es una nueva oferta, registrar el nuevo documento en la colección Promociones
+            let idNuevaPromo = null;
+            if (!quitar && numPorcentaje > 0) {
+                try {
+                    idNuevaPromo = await generarSiguienteIdNumerico('Promociones', 'ID_Promocion', 1);
+                    const docNuevaPromo = {
+                        ID_Promocion: idNuevaPromo,
+                        ID_Producto: idProd,
+                        ID_Variante: idVar,
+                        Tipo_Descuento: 'Porcentaje',
+                        Porcentaje_Descuento: numPorcentaje,
+                        Valor_Descuento: numPorcentaje,
+                        Fecha_Inicio: datosOferta.Fecha_Inicio_Oferta || new Date().toISOString(),
+                        Fecha_Fin: datosOferta.Fecha_Fin_Oferta,
+                        Activo: 1,
+                        ID_UserAccion: Number(idUser) || 1,
+                        Fecha_Creacion: new Date().toISOString()
+                    };
+                    await setDoc(doc(db, 'Promociones', String(idNuevaPromo)), docNuevaPromo);
+                    datosOferta.ID_Promocion = idNuevaPromo;
+                } catch (errPromoNueva) {
+                    console.error('Error insertando nueva promoción en Promociones:', errPromoNueva);
+                }
+            }
+
+            // 3. Actualizar Variante_Producto objetivo
             await actualizarDocPorId('Variante_Producto', 'ID_Variante', idVar, datosOferta);
 
-            // 2. Actualizar Producto padre
+            // 4. Actualizar Producto padre
             await actualizarDocPorId('Productos', 'ID_Producto', idProd, {
                 Porcentaje_Descuento: datosOferta.Porcentaje_Descuento,
                 Fecha_Inicio_Oferta: datosOferta.Fecha_Inicio_Oferta,
                 Fecha_Fin_Oferta: datosOferta.Fecha_Fin_Oferta,
-                Tiene_Descuento: datosOferta.Tiene_Descuento
+                Tiene_Descuento: datosOferta.Tiene_Descuento,
+                Activo: datosOferta.Activo,
+                ID_Promocion: datosOferta.ID_Promocion ?? null
             });
 
-            // 3. Actualizar todas las variantes de este producto para consistencia (aplica a todas las tallas)
+            // 5. Actualizar todas las variantes de este producto para consistencia (aplica a todas las tallas)
             try {
                 const searchPids = Array.from(new Set([
                     idProd,
@@ -822,40 +1149,69 @@ function AdminInventario() {
                 console.error('Error actualizando variantes hermanas:', errVar);
             }
 
-            // 4. Registrar OBLIGATORIAMENTE en Auditoria_Descuentos
-            const idAuditoria = doc(collection(db, 'Auditoria_Descuentos')).id;
-            await setDoc(doc(db, 'Auditoria_Descuentos', idAuditoria), {
-                ID_AuditoriaDescuento: idAuditoria,
-                ID_Producto: String(idProd),
-                ID_Variante: String(idVar),
-                Nombre_Producto: prodNombre,
-                ID_User: String(idUser),
-                Usuario: usuarioNombre,
-                Correo: usuarioEmail,
-                Fecha_Cambio: new Date().toISOString(),
-                Estado_Anterior: {
-                    Precio_Original: precioOriginal,
-                    Porcentaje_Descuento: Number(varianteDescuento.Porcentaje_Descuento ?? varianteDescuento.Productos?.Porcentaje_Descuento ?? 0),
-                    Fecha_Inicio_Oferta: varianteDescuento.Fecha_Inicio_Oferta ?? varianteDescuento.Productos?.Fecha_Inicio_Oferta ?? null,
-                    Fecha_Fin_Oferta: varianteDescuento.Fecha_Fin_Oferta ?? varianteDescuento.Productos?.Fecha_Fin_Oferta ?? null
-                },
-                Estado_Nuevo: {
-                    Porcentaje_Descuento: numPorcentaje,
-                    Precio_Con_Descuento: precioConDescuento,
-                    Fecha_Inicio_Oferta: datosOferta.Fecha_Inicio_Oferta,
-                    Fecha_Fin_Oferta: datosOferta.Fecha_Fin_Oferta,
-                    Vigente: numPorcentaje > 0
-                },
-                Accion: quitar ? 'ELIMINAR_DESCUENTO' : 'APLICAR_DESCUENTO'
-            });
+            // 6. Registrar en Auditoria_Descuentos
+            try {
+                const idAuditoria = await generarSiguienteIdNumerico('Auditoria_Descuentos', 'ID_AuditoriaDescuento', 1);
+                await setDoc(doc(db, 'Auditoria_Descuentos', String(idAuditoria)), {
+                    ID_AuditoriaDescuento: idAuditoria,
+                    ID_Producto: String(idProd),
+                    ID_Variante: String(idVar),
+                    Nombre_Producto: prodNombre,
+                    ID_User: String(idUser),
+                    Usuario: usuarioNombre,
+                    Correo: usuarioEmail,
+                    Fecha_Cambio: new Date().toISOString(),
+                    Estado_Anterior: {
+                        Precio_Original: precioOriginal,
+                        Porcentaje_Descuento: Number(varianteDescuento.Porcentaje_Descuento ?? varianteDescuento.Productos?.Porcentaje_Descuento ?? 0),
+                        Fecha_Inicio_Oferta: varianteDescuento.Fecha_Inicio_Oferta ?? varianteDescuento.Productos?.Fecha_Inicio_Oferta ?? null,
+                        Fecha_Fin_Oferta: varianteDescuento.Fecha_Fin_Oferta ?? varianteDescuento.Productos?.Fecha_Fin_Oferta ?? null
+                    },
+                    Estado_Nuevo: {
+                        Porcentaje_Descuento: numPorcentaje,
+                        Precio_Con_Descuento: precioConDescuento,
+                        Fecha_Inicio_Oferta: datosOferta.Fecha_Inicio_Oferta,
+                        Fecha_Fin_Oferta: datosOferta.Fecha_Fin_Oferta,
+                        Vigente: !quitar && numPorcentaje > 0
+                    },
+                    Accion: quitar ? 'ELIMINAR_DESCUENTO' : 'APLICAR_DESCUENTO'
+                });
+            } catch (errAudit) {
+                console.error('Error registrando auditoría de descuento:', errAudit);
+            }
 
-            setModalAbierto(null);
+            if (quitar) {
+                // Al quitar la oferta vigente, desbloqueamos inmediatamente la interfaz local
+                setVarianteDescuento((prev) => ({
+                    ...prev,
+                    Porcentaje_Descuento: 0,
+                    Tiene_Descuento: false,
+                    Activo: 0,
+                    Fecha_Inicio_Oferta: null,
+                    Fecha_Fin_Oferta: null,
+                    Productos: {
+                        ...(prev?.Productos || {}),
+                        Porcentaje_Descuento: 0,
+                        Tiene_Descuento: false,
+                        Activo: 0,
+                        Fecha_Inicio_Oferta: null,
+                        Fecha_Fin_Oferta: null
+                    }
+                }));
+                setPorcentajeDescuento('');
+                setFechaInicioOferta(formatearParaInputDatetime(new Date()));
+                setFechaFinOferta('');
+                alert('Oferta vigente desactivada con éxito. Ya puedes asignar una nueva oferta.');
+            } else {
+                setModalAbierto(null);
+                alert(`¡Oferta del ${numPorcentaje}% aplicada correctamente!`);
+            }
+
             cargarVariantes();
             cargarAuditoria();
-            alert(quitar ? 'Descuento eliminado con éxito.' : `¡Oferta del ${numPorcentaje}% aplicada correctamente!`);
         } catch (error) {
             console.error('Error al guardar descuento:', error);
-            alert('Hubo un error al guardar la oferta.');
+            alert('Hubo un error al guardar la oferta: ' + (error?.message || 'Error desconocido'));
         } finally {
             setGuardandoDescuento(false);
         }
@@ -1084,7 +1440,8 @@ function AdminInventario() {
                 const datosUpdateProd = {
                     Nombre_Producto: nombreEditar,
                     ID_Marca: marcaEditar ? (Number(marcaEditar) || marcaEditar) : null,
-                    ID_Categoria: idCatFinal
+                    ID_Categoria: idCatFinal,
+                    ID_Temporada: temporadaEditar ? Number(temporadaEditar) : null
                 };
                 if (!isNaN(nuevoPrecioNum)) {
                     datosUpdateProd.Precio = nuevoPrecioNum;
@@ -1471,6 +1828,7 @@ function AdminInventario() {
                 tiposTallaSnap,
                 invSnap,
                 coloresSnap,
+                temporadasSnap,
             ] = await Promise.all([
                 getDocs(collection(db, 'Variante_Producto')),
                 getDocs(collection(db, 'Productos')),
@@ -1481,6 +1839,7 @@ function AdminInventario() {
                 getDocs(collection(db, 'Tipos_Talla')),
                 getDocs(collection(db, 'Inventario')),
                 getDocs(collection(db, 'Colores')),
+                getDocs(collection(db, 'Temporadas')).catch(() => null),
             ]);
 
             const marcasMap = indexarColeccion(marcasSnap, 'ID_Marca');
@@ -1493,6 +1852,27 @@ function AdminInventario() {
                     catMap[String(idC)] = catMap[idC];
                 }
             });
+
+            const temporadasMap = {};
+            if (temporadasSnap && !temporadasSnap.empty) {
+                temporadasSnap.docs.forEach((d) => {
+                    if (esDocPlantilla(d)) return;
+                    const td = d.data();
+                    const rawTid = td.ID_Temporada ?? d.id;
+                    const numTid = Number(rawTid);
+                    const itemT = {
+                        ...td,
+                        ID_Temporada: isNaN(numTid) ? rawTid : numTid,
+                        Nombre_Temporada: td.Nombre_Temporada || td.Nombre || '',
+                        Descripcion: td.Descripcion || '',
+                        Color_Badge: td.Color_Badge || null,
+                        _docId: d.id
+                    };
+                    temporadasMap[rawTid] = itemT;
+                    temporadasMap[String(rawTid)] = itemT;
+                    if (!isNaN(numTid)) temporadasMap[numTid] = itemT;
+                });
+            }
 
             const tiposTallaMap = indexarColeccion(tiposTallaSnap, 'ID_TipoTalla');
             const coloresMap = indexarColeccion(coloresSnap, 'ID_Color');
@@ -1563,6 +1943,8 @@ function AdminInventario() {
                     fotosPorProducto[String(pid)] || fotosPorProducto[String(d.id)] || []
                 );
                 const colorObj = coloresMap[p.ID_Color] || coloresMap[String(p.ID_Color)] || null;
+                const idTemp = p.ID_Temporada ?? p.ID_temporada ?? null;
+                const tempObj = idTemp != null ? (temporadasMap[idTemp] || temporadasMap[String(idTemp)] || null) : null;
                 const item = {
                     ...p,
                     ID_Producto: pid,
@@ -1570,10 +1952,12 @@ function AdminInventario() {
                     Nombre_Producto: p.Nombre_Producto || '',
                     Descripcion: p.Descripcion || '',
                     ID_Categoria: p.ID_Categoria ?? p.ID_categoria ?? null,
+                    ID_Temporada: idTemp != null && !isNaN(Number(idTemp)) ? Number(idTemp) : null,
                     Marca: marcasMap[p.ID_Marca] || marcasMap[String(p.ID_Marca)] || null,
                     Categorias_Producto: catMap[p.ID_Categoria ?? p.ID_categoria] || null,
                     Fotos_Productos: fotos,
-                    Colores: colorObj
+                    Colores: colorObj,
+                    Temporada: tempObj
                 };
                 prodMap[pid] = item;
                 prodMap[String(pid)] = item;
@@ -1658,7 +2042,9 @@ function AdminInventario() {
                     Talla: null,
                     ID_Talla: null,
                     Inventario: [{ ID_Inventario: null, Cantidad_Disponible: null }],
-                    Colores: p.Colores
+                    Colores: p.Colores,
+                    ID_Temporada: p.ID_Temporada,
+                    Temporada: p.Temporada
                 };
                 listaCompleta.push(filaBase);
 
@@ -1679,7 +2065,9 @@ function AdminInventario() {
                 hijas.forEach((vh) => {
                     listaCompleta.push({
                         ...vh,
-                        Productos: p
+                        Productos: p,
+                        ID_Temporada: p.ID_Temporada,
+                        Temporada: p.Temporada
                     });
                 });
             });
@@ -1874,6 +2262,10 @@ function AdminInventario() {
         setPrecioProducto('');
         setCategoriaSeleccionada('');
         setSubcategoriaSeleccionada('');
+        setTemporadaSeleccionada('');
+        setCreandoTemporada(false);
+        setNombreNuevaTemporada('');
+        setDescripcionNuevaTemporada('');
         setMarcaSeleccionada('');
         setColorSeleccionado('');
         setNombreNuevoColor('');
@@ -1909,8 +2301,9 @@ function AdminInventario() {
             // 1. Obtener siguiente código numérico secuencial garantizando ID_Producto 100% entero
             const idProducto = await generarSiguienteIdNumerico('Productos', 'ID_Producto', 10001);
             const nuevoCodigoNumerico = idProducto;
+            const idTempNum = temporadaSeleccionada ? (Number(temporadaSeleccionada) || null) : null;
 
-            // 2. Crear registro del Producto Base en la colección Productos (con su ID_Color)
+            // 2. Crear registro del Producto Base en la colección Productos (con su ID_Color y ID_Temporada opcional)
             const nuevoProducto = {
                 ID_Producto: idProducto,
                 Codigo_Producto: nuevoCodigoNumerico,
@@ -1918,6 +2311,7 @@ function AdminInventario() {
                 Descripcion: descripcionProducto.trim(),
                 Precio: parseFloat(precioProducto) || 0,
                 ID_Categoria: Number(idCategoriaFinal) || idCategoriaFinal,
+                ID_Temporada: idTempNum,
                 ID_Marca: marcaSeleccionada ? (Number(marcaSeleccionada) || marcaSeleccionada) : null,
                 ID_Color: Number(colorSeleccionado) || colorSeleccionado,
                 ID_EstadoProducto: 1,
@@ -2040,10 +2434,48 @@ function AdminInventario() {
                     {/* Barra de búsqueda para filtrar productos por nombre */}
                 <input
                     className="buscador"
-                    placeholder="Buscar producto"
+                    placeholder="Buscar producto por nombre, talla, marca o temporada..."
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
                 />
+
+                {/* Barra de Filtro Rápido por Temporada / Colección Especial */}
+                {temporadas.length > 0 && (
+                    <div className="filtro-temporadas-bar">
+                        <span className="filtro-temporadas-label">Temporada:</span>
+                        <button
+                            type="button"
+                            className={`btn-filtro-temporada ${filtroTemporada === 'todas' ? 'activo' : ''}`}
+                            onClick={() => setFiltroTemporada('todas')}
+                        >
+                            Todas las temporadas
+                        </button>
+                        {temporadas.map((t) => {
+                            const activo = String(filtroTemporada) === String(t.ID_Temporada);
+                            return (
+                                <button
+                                    key={t.ID_Temporada}
+                                    type="button"
+                                    className={`btn-filtro-temporada ${activo ? 'activo' : ''}`}
+                                    onClick={() => setFiltroTemporada(activo ? 'todas' : String(t.ID_Temporada))}
+                                    style={activo ? obtenerEstiloBadgeTemporada(t.Nombre_Temporada, t.Color_Badge) : undefined}
+                                >
+                                    {t.Nombre_Temporada}
+                                </button>
+                            );
+                        })}
+                        {filtroTemporada !== 'todas' && (
+                            <button
+                                type="button"
+                                className="btn-limpiar-filtro-temp"
+                                onClick={() => setFiltroTemporada('todas')}
+                                title="Quitar filtro de temporada"
+                            >
+                                ✕ Quitar filtro
+                            </button>
+                        )}
+                    </div>
+                )}
                     {/* solo un mensajito para que se vea que esta cargando los productos */}
                 {cargando ? (
                     <p>Cargando productos...</p>
@@ -2075,12 +2507,23 @@ function AdminInventario() {
                                     >
                                         <td><strong>{v.ID_Variante}</strong></td>
                                         <td>
-                                            <span>{v.Productos?.Nombre_Producto || '—'}</span>
-                                            {estaInactivo && (
-                                                <span style={{ fontSize: '0.75rem', color: '#777', marginLeft: '6px' }}>
-                                                    (Inactivo)
-                                                </span>
-                                            )}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                <span>{v.Productos?.Nombre_Producto || '—'}</span>
+                                                {v.Temporada?.Nombre_Temporada && (
+                                                    <span 
+                                                        className="badge-temporada"
+                                                        style={obtenerEstiloBadgeTemporada(v.Temporada.Nombre_Temporada, v.Temporada.Color_Badge)}
+                                                        title={v.Temporada.Descripcion || `Temporada / Colección: ${v.Temporada.Nombre_Temporada}`}
+                                                    >
+                                                        {v.Temporada.Nombre_Temporada}
+                                                    </span>
+                                                )}
+                                                {estaInactivo && (
+                                                    <span style={{ fontSize: '0.75rem', color: '#777', marginLeft: '6px' }}>
+                                                        (Inactivo)
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
 
                                         <td>
@@ -2159,9 +2602,10 @@ function AdminInventario() {
                                                 </button>
                                                 <button 
                                                     type="button" 
-                                                    title="Aplicar descuento / oferta" 
+                                                    title={(esOfertaVigente(v) || esOfertaVigente(v?.Productos)) ? "Ver / Desactivar oferta vigente" : "Agregar / Poner nueva oferta"} 
                                                     onClick={() => abrirModalDescuento(v)}
                                                     className="btn-accion-tabla"
+                                                    style={(esOfertaVigente(v) || esOfertaVigente(v?.Productos)) ? { backgroundColor: '#ffebee', borderColor: '#ef9a9a' } : {}}
                                                 >
                                                     <img src="/ICONOS/SALES.png" alt="Descuento" width={20} height={20} />
                                                 </button>
@@ -2210,10 +2654,48 @@ function AdminInventario() {
 
                         <input
                             className="buscador"
-                            placeholder="Buscar prenda desactivada por nombre, marca, talla o ID..."
+                            placeholder="Buscar prenda desactivada por nombre, marca, talla, temporada o ID..."
                             value={busquedaInactivos}
                             onChange={(e) => setBusquedaInactivos(e.target.value)}
                         />
+
+                        {/* Barra de Filtro Rápido por Temporada en Prendas Desactivadas */}
+                        {temporadas.length > 0 && (
+                            <div className="filtro-temporadas-bar">
+                                <span className="filtro-temporadas-label">Temporada:</span>
+                                <button
+                                    type="button"
+                                    className={`btn-filtro-temporada ${filtroTemporada === 'todas' ? 'activo' : ''}`}
+                                    onClick={() => setFiltroTemporada('todas')}
+                                >
+                                    Todas las temporadas
+                                </button>
+                                {temporadas.map((t) => {
+                                    const activo = String(filtroTemporada) === String(t.ID_Temporada);
+                                    return (
+                                        <button
+                                            key={t.ID_Temporada}
+                                            type="button"
+                                            className={`btn-filtro-temporada ${activo ? 'activo' : ''}`}
+                                            onClick={() => setFiltroTemporada(activo ? 'todas' : String(t.ID_Temporada))}
+                                            style={activo ? obtenerEstiloBadgeTemporada(t.Nombre_Temporada, t.Color_Badge) : undefined}
+                                        >
+                                            {t.Nombre_Temporada}
+                                        </button>
+                                    );
+                                })}
+                                {filtroTemporada !== 'todas' && (
+                                    <button
+                                        type="button"
+                                        className="btn-limpiar-filtro-temp"
+                                        onClick={() => setFiltroTemporada('todas')}
+                                        title="Quitar filtro de temporada"
+                                    >
+                                        ✕ Quitar filtro
+                                    </button>
+                                )}
+                            </div>
+                        )}
 
                         {cargando ? (
                             <p>Cargando prendas desactivadas...</p>
@@ -2243,19 +2725,29 @@ function AdminInventario() {
                                             >
                                                 <td><strong>{v.ID_Variante}</strong></td>
                                                 <td>
-                                                    <span>{v.Productos?.Nombre_Producto || '—'}</span>
-                                                    <span style={{
-                                                        fontSize: '0.72rem',
-                                                        backgroundColor: '#fff3e0',
-                                                        color: '#e65100',
-                                                        border: '1px solid #ffcc80',
-                                                        borderRadius: '4px',
-                                                        padding: '2px 6px',
-                                                        marginLeft: '8px',
-                                                        fontWeight: 600
-                                                    }}>
-                                                        Desactivada
-                                                    </span>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                        <span>{v.Productos?.Nombre_Producto || '—'}</span>
+                                                        {v.Temporada?.Nombre_Temporada && (
+                                                            <span 
+                                                                className="badge-temporada"
+                                                                style={obtenerEstiloBadgeTemporada(v.Temporada.Nombre_Temporada, v.Temporada.Color_Badge)}
+                                                                title={v.Temporada.Descripcion || `Temporada / Colección: ${v.Temporada.Nombre_Temporada}`}
+                                                            >
+                                                                {v.Temporada.Nombre_Temporada}
+                                                            </span>
+                                                        )}
+                                                        <span style={{
+                                                            fontSize: '0.72rem',
+                                                            backgroundColor: '#fff3e0',
+                                                            color: '#e65100',
+                                                            border: '1px solid #ffcc80',
+                                                            borderRadius: '4px',
+                                                            padding: '2px 6px',
+                                                            fontWeight: 600
+                                                        }}>
+                                                            Desactivada
+                                                        </span>
+                                                    </div>
                                                 </td>
                                                 <td>
                                                     {(esOfertaActiva(v) || esOfertaActiva(v.Productos)) ? (
@@ -2594,6 +3086,78 @@ function AdminInventario() {
                             </>
                             
                             
+                        )}
+
+                        {/* Selector de Temporada / Colección Especial (Opcional) */}
+                        <label>Temporada / Colección (Opcional)</label>
+                        {!creandoTemporada ? (
+                            <div className="select-con-boton">
+                                <select
+                                    value={temporadaSeleccionada}
+                                    onChange={(e) => setTemporadaSeleccionada(e.target.value)}
+                                >
+                                    <option value="">Ninguna / Permanente</option>
+                                    {temporadas.map((temp) => (
+                                        <option key={temp.ID_Temporada} value={temp.ID_Temporada}>
+                                            {temp.Nombre_Temporada} {temp.Descripcion ? `(${temp.Descripcion})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button type="button" onClick={() => setCreandoTemporada(true)}>+ Nueva</button>
+                            </div>
+                        ) : (
+                            <div className="box-nueva-temporada">
+                                <div className="box-nueva-temporada-header">
+                                    <span>+ Registrar Nueva Temporada / Colección</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setCreandoTemporada(false);
+                                            setNombreNuevaTemporada('');
+                                            setDescripcionNuevaTemporada('');
+                                        }}
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                                <div className="box-nueva-temporada-body">
+                                    <input
+                                        type="text"
+                                        placeholder="Nombre (ej. Invierno, Verano, Ofertas, Liquidación)"
+                                        value={nombreNuevaTemporada}
+                                        onChange={(e) => setNombreNuevaTemporada(e.target.value)}
+                                        style={{ width: '100%', padding: '7px 10px', fontSize: '0.88rem', boxSizing: 'border-box', marginBottom: '6px' }}
+                                    />
+                                    <input
+                                        type="text"
+                                        placeholder="Descripción opcional (ej. Ropa para clima frío)"
+                                        value={descripcionNuevaTemporada}
+                                        onChange={(e) => setDescripcionNuevaTemporada(e.target.value)}
+                                        style={{ width: '100%', padding: '7px 10px', fontSize: '0.88rem', boxSizing: 'border-box', marginBottom: '8px' }}
+                                    />
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => crearNuevaTemporada(false)}
+                                            disabled={guardandoTemporada}
+                                            className="btn-guardar-temp-rapida"
+                                        >
+                                            {guardandoTemporada ? 'Guardando...' : 'Guardar Temporada'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setCreandoTemporada(false);
+                                                setNombreNuevaTemporada('');
+                                                setDescripcionNuevaTemporada('');
+                                            }}
+                                            className="btn-cancelar-temp-rapida"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         )}
 
                         {/* Selector de Color del Producto Base con bolita visual y modal rápido para agregar colores */}
@@ -2943,6 +3507,78 @@ function AdminInventario() {
                         }
                     }}>Crear</button>
                     <button type="button" onClick={() => setCreandoMarcaEditar(false)}>Cancelar</button>
+                </div>
+            )}
+
+            {/* Selector de Temporada / Colección Especial (Opcional en Edición) */}
+            <label>Temporada / Colección (Opcional)</label>
+            {!creandoTemporadaEditar ? (
+                <div className="select-con-boton">
+                    <select
+                        value={temporadaEditar}
+                        onChange={(e) => setTemporadaEditar(e.target.value)}
+                    >
+                        <option value="">Ninguna / Permanente</option>
+                        {temporadas.map((temp) => (
+                            <option key={temp.ID_Temporada} value={temp.ID_Temporada}>
+                                {temp.Nombre_Temporada} {temp.Descripcion ? `(${temp.Descripcion})` : ''}
+                            </option>
+                        ))}
+                    </select>
+                    <button type="button" onClick={() => setCreandoTemporadaEditar(true)}>+ Nueva</button>
+                </div>
+            ) : (
+                <div className="box-nueva-temporada">
+                    <div className="box-nueva-temporada-header">
+                        <span>+ Registrar Nueva Temporada / Colección</span>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setCreandoTemporadaEditar(false);
+                                setNombreNuevaTemporadaEditar('');
+                                setDescNuevaTemporadaEditar('');
+                            }}
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <div className="box-nueva-temporada-body">
+                        <input
+                            type="text"
+                            placeholder="Nombre (ej. Invierno, Verano, Ofertas, Liquidación)"
+                            value={nombreNuevaTemporadaEditar}
+                            onChange={(e) => setNombreNuevaTemporadaEditar(e.target.value)}
+                            style={{ width: '100%', padding: '7px 10px', fontSize: '0.88rem', boxSizing: 'border-box', marginBottom: '6px' }}
+                        />
+                        <input
+                            type="text"
+                            placeholder="Descripción opcional (ej. Colección de Frío)"
+                            value={descNuevaTemporadaEditar}
+                            onChange={(e) => setDescNuevaTemporadaEditar(e.target.value)}
+                            style={{ width: '100%', padding: '7px 10px', fontSize: '0.88rem', boxSizing: 'border-box', marginBottom: '8px' }}
+                        />
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                                type="button"
+                                onClick={() => crearNuevaTemporada(true)}
+                                disabled={guardandoTemporada}
+                                className="btn-guardar-temp-rapida"
+                            >
+                                {guardandoTemporada ? 'Guardando...' : 'Guardar Temporada'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setCreandoTemporadaEditar(false);
+                                    setNombreNuevaTemporadaEditar('');
+                                    setDescNuevaTemporadaEditar('');
+                                }}
+                                className="btn-cancelar-temp-rapida"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -3300,111 +3936,227 @@ function AdminInventario() {
 )}
 
             {/* ---------- MODAL: GESTIÓN DE OFERTAS / DESCUENTOS ---------- */}
-            {modalAbierto === 'descuento' && (
-                <div className="modal-overlay">
-                    <div className="modal-box" style={{ maxWidth: '480px' }}>
-                        <div className="modal-header">
-                            <h2>Gestionar Oferta / Descuento</h2>
-                            <button onClick={() => setModalAbierto(null)}>✕</button>
-                        </div>
+            {modalAbierto === 'descuento' && (() => {
+                const tieneOfertaVigente = esOfertaVigente(varianteDescuento) || esOfertaVigente(varianteDescuento?.Productos);
+                const precioBase = Number(varianteDescuento?.Precio_Actual ?? 0);
+                const porcVigente = Number(varianteDescuento?.Porcentaje_Descuento ?? varianteDescuento?.Productos?.Porcentaje_Descuento ?? 0);
+                const fFinVigente = varianteDescuento?.Fecha_Fin_Oferta ?? varianteDescuento?.Productos?.Fecha_Fin_Oferta;
+                const precioConOfertaVigente = tieneOfertaVigente ? calcularPrecioConDescuento(precioBase, porcVigente) : precioBase;
 
-                        <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: '#555' }}>
-                            Producto: <strong>{varianteDescuento?.Productos?.Nombre_Producto || `Variante #${varianteDescuento?.ID_Variante}`}</strong>
-                            <br />
-                            Precio base actual: <strong>${varianteDescuento?.Precio_Actual ?? 0}</strong>
-                        </p>
+                const fechaFinPrevia = varianteDescuento?.Fecha_Fin_Oferta ?? varianteDescuento?.Productos?.Fecha_Fin_Oferta;
+                const tuvoOfertaVencida = !tieneOfertaVigente && (
+                    (varianteDescuento?.Porcentaje_Descuento > 0 || varianteDescuento?.Productos?.Porcentaje_Descuento > 0) ||
+                    Boolean(fechaFinPrevia)
+                );
 
-                        <label>Porcentaje de descuento (%)</label>
-                        <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            step="1"
-                            placeholder="Ej: 20 (para 20% de descuento)"
-                            value={porcentajeDescuento}
-                            onChange={(e) => setPorcentajeDescuento(e.target.value)}
-                        />
+                const porcInput = parseFloat(porcentajeDescuento) || 0;
+                const tienePorcInput = porcInput > 0 && porcInput <= 100;
+                const nuevoPrecioCalc = tienePorcInput ? calcularPrecioConDescuento(precioBase, porcInput) : precioBase;
+                const ahorroCalc = tienePorcInput ? Math.round((precioBase - nuevoPrecioCalc) * 100) / 100 : 0;
 
-                        <label>Fecha y hora de inicio de la oferta</label>
-                        <input
-                            type="datetime-local"
-                            value={fechaInicioOferta}
-                            onChange={(e) => setFechaInicioOferta(e.target.value)}
-                        />
+                return (
+                    <div className="modal-overlay">
+                        <div className="modal-box" style={{ maxWidth: '480px' }}>
+                            <div className="modal-header">
+                                <h2>{tieneOfertaVigente ? 'Oferta Vigente Activa' : 'Agregar / Poner Nueva Oferta'}</h2>
+                                <button onClick={() => setModalAbierto(null)}>✕</button>
+                            </div>
 
-                        <label>Fecha y hora de finalización de la oferta</label>
-                        <input
-                            type="datetime-local"
-                            value={fechaFinOferta}
-                            onChange={(e) => setFechaFinOferta(e.target.value)}
-                        />
+                            <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: '#555' }}>
+                                Producto: <strong>{varianteDescuento?.Productos?.Nombre_Producto || `Variante #${varianteDescuento?.ID_Variante}`}</strong>
+                                <br />
+                                Precio base actual: <strong>${precioBase.toFixed(2)}</strong>
+                            </p>
 
-                        {/* Tarjeta de cálculo en vivo */}
-                        {(() => {
-                            const precioBase = Number(varianteDescuento?.Precio_Actual ?? 0);
-                            const porc = parseFloat(porcentajeDescuento) || 0;
-                            const tienePorc = porc > 0 && porc <= 100;
-                            const precioFinal = tienePorc ? calcularPrecioConDescuento(precioBase, porc) : precioBase;
-                            const ahorro = tienePorc ? Math.round((precioBase - precioFinal) * 100) / 100 : 0;
+                            {/* CASO 1: BLOQUEO ÚNICO CUANDO LA OFERTA SÍ ESTÁ VIGENTE */}
+                            {tieneOfertaVigente ? (
+                                <div>
+                                    <div style={{
+                                        padding: '14px 16px',
+                                        backgroundColor: '#fff8e1',
+                                        border: '1.5px solid #ffe082',
+                                        borderRadius: '8px',
+                                        marginBottom: '16px'
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                            <span style={{ fontSize: '1.2rem' }}>🔒</span>
+                                            <strong style={{ color: '#b78103', fontSize: '1rem' }}>
+                                                Oferta actual vigente en curso
+                                            </strong>
+                                        </div>
 
-                            return (
-                                <div style={{
-                                    marginTop: '16px',
-                                    padding: '12px 14px',
-                                    backgroundColor: tienePorc ? '#f1f8e9' : '#f5f5f5',
-                                    border: `1px solid ${tienePorc ? '#c5e1a5' : '#ddd'}`,
-                                    borderRadius: '8px',
-                                    fontSize: '0.9rem'
-                                }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                        <span>Nuevo precio con oferta:</span>
-                                        <strong style={{ color: tienePorc ? '#2e7d32' : '#333', fontSize: '1.05rem' }}>
-                                            ${precioFinal.toFixed(2)}
-                                        </strong>
+                                        <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#6d4c41', lineHeight: '1.4' }}>
+                                            Este producto tiene una oferta activa que vence el{' '}
+                                            <strong>{fFinVigente ? new Date(fFinVigente).toLocaleString('es-MX') : '—'}</strong>.
+                                            Para asignarle una oferta nueva o modificar los términos, primero debes quitar o desactivar la oferta actual.
+                                        </p>
+
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: '1fr 1fr',
+                                            gap: '8px',
+                                            backgroundColor: '#ffffff',
+                                            padding: '10px 12px',
+                                            borderRadius: '6px',
+                                            fontSize: '0.85rem'
+                                        }}>
+                                            <div>
+                                                <span style={{ color: '#777', display: 'block', fontSize: '0.75rem' }}>Descuento:</span>
+                                                <strong style={{ color: '#d32f2f', fontSize: '1.05rem' }}>-{porcVigente}%</strong>
+                                            </div>
+                                            <div>
+                                                <span style={{ color: '#777', display: 'block', fontSize: '0.75rem' }}>Precio en oferta:</span>
+                                                <strong style={{ color: '#2e7d32', fontSize: '1.05rem' }}>${precioConOfertaVigente.toFixed(2)}</strong>
+                                            </div>
+                                            <div style={{ gridColumn: 'span 2', borderTop: '1px solid #f0f0f0', paddingTop: '6px' }}>
+                                                <span style={{ color: '#777', fontSize: '0.75rem' }}>Válida hasta: </span>
+                                                <strong style={{ fontSize: '0.82rem', color: '#333' }}>
+                                                    {fFinVigente ? new Date(fFinVigente).toLocaleString('es-MX') : '—'}
+                                                </strong>
+                                            </div>
+                                        </div>
                                     </div>
-                                    {tienePorc && (
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#558b2f', fontSize: '0.85rem' }}>
-                                            <span>Ahorro del cliente:</span>
-                                            <span>${ahorro.toFixed(2)} ({porc}%)</span>
+
+                                    <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setModalAbierto(null)}
+                                            style={{
+                                                flex: 1,
+                                                backgroundColor: '#f5f5f5',
+                                                color: '#333',
+                                                border: '1px solid #ddd',
+                                                borderRadius: '6px',
+                                                padding: '11px',
+                                                fontWeight: 600,
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Cerrar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => guardarDescuento(true)}
+                                            disabled={guardandoDescuento}
+                                            style={{
+                                                flex: 2,
+                                                backgroundColor: '#ffebee',
+                                                color: '#c62828',
+                                                border: '1.5px solid #ef9a9a',
+                                                borderRadius: '6px',
+                                                padding: '11px',
+                                                fontWeight: 700,
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {guardandoDescuento ? 'Desactivando...' : 'Quitar / Desactivar oferta vigente'}
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                /* CASO 2: FLUJO DIRECTO CUANDO NO TIENE OFERTA O YA VENCIÓ */
+                                <div>
+                                    {tuvoOfertaVencida && (
+                                        <div style={{
+                                            padding: '10px 12px',
+                                            backgroundColor: '#e8f5e9',
+                                            border: '1px solid #c8e6c9',
+                                            borderRadius: '6px',
+                                            marginBottom: '14px',
+                                            fontSize: '0.82rem',
+                                            color: '#2e7d32',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                        }}>
+                                            <span>✅</span>
+                                            <span>
+                                                La oferta previa ha vencido o está inactiva. Puedes ingresar los datos y aplicar una nueva oferta directamente.
+                                            </span>
                                         </div>
                                     )}
-                                </div>
-                            );
-                        })()}
 
-                        <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                            {(varianteDescuento?.Porcentaje_Descuento > 0 || varianteDescuento?.Productos?.Porcentaje_Descuento > 0) && (
-                                <button
-                                    type="button"
-                                    onClick={() => guardarDescuento(true)}
-                                    disabled={guardandoDescuento}
-                                    style={{
-                                        flex: 1,
-                                        backgroundColor: '#ffebee',
-                                        color: '#c62828',
-                                        border: '1px solid #ffcdd2',
-                                        borderRadius: '6px',
-                                        padding: '10px',
-                                        fontWeight: 600,
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    {guardandoDescuento ? 'Procesando...' : 'Quitar oferta'}
-                                </button>
+                                    <label>Porcentaje de descuento (%)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="100"
+                                        step="1"
+                                        placeholder="Ej: 20 (para 20% de descuento)"
+                                        value={porcentajeDescuento}
+                                        onChange={(e) => setPorcentajeDescuento(e.target.value)}
+                                    />
+
+                                    <label>Fecha y hora de inicio de la oferta</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={fechaInicioOferta}
+                                        onChange={(e) => setFechaInicioOferta(e.target.value)}
+                                    />
+
+                                    <label>Fecha y hora de finalización de la oferta (Requerida)</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={fechaFinOferta}
+                                        onChange={(e) => setFechaFinOferta(e.target.value)}
+                                    />
+
+                                    {/* Tarjeta de cálculo en vivo */}
+                                    <div style={{
+                                        marginTop: '16px',
+                                        padding: '12px 14px',
+                                        backgroundColor: tienePorcInput ? '#f1f8e9' : '#f5f5f5',
+                                        border: `1px solid ${tienePorcInput ? '#c5e1a5' : '#ddd'}`,
+                                        borderRadius: '8px',
+                                        fontSize: '0.9rem'
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                            <span>Nuevo precio con oferta:</span>
+                                            <strong style={{ color: tienePorcInput ? '#2e7d32' : '#333', fontSize: '1.05rem' }}>
+                                                ${nuevoPrecioCalc.toFixed(2)}
+                                            </strong>
+                                        </div>
+                                        {tienePorcInput && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#558b2f', fontSize: '0.85rem' }}>
+                                                <span>Ahorro del cliente:</span>
+                                                <span>${ahorroCalc.toFixed(2)} ({porcInput}%)</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setModalAbierto(null)}
+                                            style={{
+                                                flex: 1,
+                                                backgroundColor: '#f5f5f5',
+                                                color: '#333',
+                                                border: '1px solid #ddd',
+                                                borderRadius: '6px',
+                                                padding: '10px',
+                                                fontWeight: 600,
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn-guardar"
+                                            onClick={() => guardarDescuento(false)}
+                                            disabled={guardandoDescuento}
+                                            style={{ flex: 2, marginTop: 0 }}
+                                        >
+                                            {guardandoDescuento ? 'Guardando oferta...' : 'Agregar / Poner Nueva Oferta'}
+                                        </button>
+                                    </div>
+                                </div>
                             )}
-                            <button
-                                type="button"
-                                className="btn-guardar"
-                                onClick={() => guardarDescuento(false)}
-                                disabled={guardandoDescuento}
-                                style={{ flex: 2, marginTop: 0 }}
-                            >
-                                {guardandoDescuento ? 'Guardando...' : 'Aplicar oferta'}
-                            </button>
                         </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
             
         </div>
     );

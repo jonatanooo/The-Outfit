@@ -17,7 +17,9 @@ const COLECCIONES_PROTEGIDAS = new Set([
   'Tipos_Talla',
   'Marca',
   'Categorias_Producto',
-  'Almacenes'
+  'Almacenes',
+  'Temporadas',
+  'Temporada'
 ]);
 
 async function limpiarColeccion(nombreColeccion) {
