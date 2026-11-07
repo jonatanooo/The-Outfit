@@ -38,8 +38,8 @@ function Footer () {
             <div>
                 <ul>
                         <li className="Titulosfooter">RECOMENDACIONES</li>
-                        <li><a href="" className="direccionefooter">Temporada de Verano</a></li>
-                        <li><a href="" className="direccionefooter">Ofertas Agostinas</a></li>
+                        <li><a href="" className="direccionefooter">Temporada de Invierno</a></li>
+                        <li><a href="" className="direccionefooter">Ofertas Navideñas</a></li>
                 </ul>
             </div>
         </div>

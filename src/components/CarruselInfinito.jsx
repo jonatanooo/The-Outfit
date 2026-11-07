@@ -132,7 +132,6 @@ function CarruselInfinito({ idProducto }) {
                     <div className="infosuperior">
                         <div style={{ textAlign: 'left' }}>
                             <h3 style={{ margin: 0 }}>{producto?.nombre || ''}</h3>
-                            <span className="marca" style={{ display: 'block', marginTop: '0.2em' }}>{producto?.marca || 'The Outfit'}</span>
                         </div>
                         {estaEnOferta ? (
                             <div className="precio-wrap-detalle">
@@ -155,6 +154,9 @@ function CarruselInfinito({ idProducto }) {
                                 className="heart"
                             />
                         </button>
+                    </div>
+                    <div className="divmarca">
+                            <span className="marca" style={{ display: 'block', marginTop: '0.2em' }}>{producto?.marca || 'The Outfit'}</span>
                     </div>
                     <p className="referencia">REF #<span>{producto?.id ?? ''}</span></p>
                     <hr className="divisor" />

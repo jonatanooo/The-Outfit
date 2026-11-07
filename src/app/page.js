@@ -3,6 +3,7 @@ import CarruselPrendas from '../components/CarruselPrenda.jsx';
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { ID_CATEGORIA_MUJER, ID_CATEGORIA_HOMBRE } from '@/lib/productos'
+import Link from 'next/link';
 
 export default function Home() {
     return(
@@ -23,15 +24,17 @@ export default function Home() {
         </section>
 
         <section className="promobanner">
-            <video 
-                autoPlay 
-                loop 
-                muted 
-                playsInline 
-                style={{ pointerEvents: 'none', objectFit: 'cover', width: '100%', height: '100%' }}
-            >
-                <source src="https://res.cloudinary.com/elcfbtuk/video/upload/f_auto,q_auto:best/v1793893721/BannerWeb-Invierno.mp4" />
-            </video>
+            <Link href='/winter-season'>
+                <video 
+                    autoPlay 
+                    loop 
+                    muted 
+                    playsInline 
+                    style={{ pointerEvents: 'none', objectFit: 'cover', width: '100%', height: '100%' }}
+                >
+                    <source src="https://res.cloudinary.com/elcfbtuk/video/upload/f_auto,q_auto:best/v1793893721/BannerWeb-Invierno.mp4" />
+                </video>
+            </Link>
         
         </section>
             </main>
