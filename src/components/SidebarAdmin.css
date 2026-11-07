@@ -86,6 +86,7 @@
     white-space: nowrap;
     letter-spacing: 1px;
     display: inline-block;
+    margin-left: 5%;
 }
 
 .sidebar.recogido .sidebar-header {
