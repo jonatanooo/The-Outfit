@@ -1,40 +1,39 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth } from '@/lib/firebaseClient';
-import { onAuthStateChanged } from 'firebase/auth';
+import { useAuth } from '@/lib/AuthContext';
 import { verificarAccesoServidor } from '@/lib/usuario';
 
 export default function EmpleadoPage() {
     const router = useRouter();
+    const { user: authUser, loading: authLoading } = useAuth();
     const [usuario, setUsuario] = useState(null);
     const [verificando, setVerificando] = useState(true);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                router.replace('/login');
-                return;
-            }
+        if (authLoading) return;
 
+        let activo = true;
+        async function verificar() {
             try {
-                // Validación autoritativa de sesión y rol en el servidor (/api/auth/session)
                 const acceso = await verificarAccesoServidor('empleado');
+                if (!activo) return;
                 if (!acceso.autorizado) {
-                    router.replace('/');
+                    router.replace(acceso.rol === 'anonimo' ? '/login' : '/');
                     return;
                 }
 
-                setUsuario(user);
+                setUsuario(authUser || { uid: acceso.uid, email: '' });
                 setVerificando(false);
             } catch (err) {
                 console.error('Error al verificar permisos de empleado:', err);
-                router.replace('/');
+                if (activo) router.replace('/');
             }
-        });
+        }
 
-        return () => unsubscribe();
-    }, [router]);
+        verificar();
+        return () => { activo = false; };
+    }, [authUser, authLoading, router]);
 
     if (verificando || !usuario) {
         return null;

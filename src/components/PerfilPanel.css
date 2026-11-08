@@ -131,7 +131,28 @@
 }
 
 .perfil-panel button.logout.perfil-logout {
+    border: solid 1px black;
+    border-radius: 3em;
+    height: 2.2em;
     margin-top: 2em;
     margin-left: 0;
     width: 100%;
+    display: flex;
+    gap: 0.6em;
+    align-items: center;
+    justify-content: center;
+    color: black;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 0.85rem;
+    background-color: transparent;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.perfil-panel .logouticon {
+    width: 1.2em;
+    height: 1.2em;
+    object-fit: contain;
 }

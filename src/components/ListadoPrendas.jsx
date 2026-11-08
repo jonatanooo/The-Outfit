@@ -84,6 +84,7 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
     const [
       prodSnap,
       varSnap,
+      invSnap,
       catSnap,
       marcasSnap,
       fotosSnap,
@@ -94,6 +95,7 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
     ] = await Promise.all([
       getDocs(collection(db, "Productos")),
       getDocs(collection(db, "Variante_Producto")),
+      getDocs(collection(db, "Inventario")),
       getDocs(collection(db, "Categorias_Producto")),
       getDocs(collection(db, "Marca")),
       getDocs(collection(db, "Fotos_Productos")),
@@ -115,7 +117,7 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
       });
     }
 
-    // 1. Indexar Tipos_Talla y Colores
+    // 1. Indexar Tipos_Talla, Colores e Inventario
     const tiposTallaMap = {};
     tiposTallaSnap.docs.forEach((d) => {
       const data = d.data();
@@ -137,9 +139,35 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
     const coloresMap = {};
     coloresSnap.docs.forEach((d) => {
       const data = d.data();
-      const id = data.ID_Color ?? d.id;
-      coloresMap[id] = data;
-      coloresMap[String(id)] = data;
+      if (data._is_schema_template || d.id === '_schema_init') return;
+      const rawId = data.ID_Color ?? d.id;
+      const numId = Number(rawId);
+      const nombreColor = (data.Nombre_Color || data.Nombre || '').trim();
+      if (numId === 0 || !nombreColor) return;
+      const item = {
+        ...data,
+        ID_Color: !isNaN(numId) ? numId : rawId,
+        Nombre_Color: nombreColor,
+        Codigo_Hex: data.Codigo_Hex || data.Hex || '#666666'
+      };
+      coloresMap[item.ID_Color] = item;
+      coloresMap[String(item.ID_Color)] = item;
+      if (!isNaN(numId)) coloresMap[numId] = item;
+    });
+
+    const stockPorVariante = {};
+    invSnap.docs.forEach((d) => {
+      const inv = d.data();
+      if (inv._is_schema_template || d.id === '_schema_init') return;
+      const vid = inv.ID_Variante ?? d.id;
+      if (vid != null) {
+        const cantDisp = Number(inv.Cantidad_Disponible ?? 0);
+        if (!isNaN(cantDisp) && cantDisp > 0) {
+          stockPorVariante[vid] = (stockPorVariante[vid] || 0) + cantDisp;
+          stockPorVariante[String(vid)] = stockPorVariante[vid];
+          if (!isNaN(Number(vid))) stockPorVariante[Number(vid)] = stockPorVariante[vid];
+        }
+      }
     });
 
     // 2. Indexar Categorias y Marcas
@@ -172,17 +200,37 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
       }
     });
 
-    // 4. Indexar Variantes por Producto ensamblando Talla y Color
+    // 4. Indexar Variantes por Producto ensamblando Talla, Color y Stock disponible
     const variantesPorProducto = {};
     varSnap.docs.forEach((d) => {
       const v = d.data();
+      if (v._is_schema_template || d.id === '_schema_init') return;
       const pid = v.ID_Producto;
+      const vid = v.ID_Variante ?? d.id;
       if (pid != null) {
+        let tallaObj = tallaMap[v.ID_Talla] || tallaMap[String(v.ID_Talla)] || null;
+        if ((!tallaObj || !tallaObj.Tipos_Talla) && v.ID_TipoTalla != null) {
+          const tipoFallback = tiposTallaMap[v.ID_TipoTalla] || tiposTallaMap[String(v.ID_TipoTalla)] || null;
+          if (tipoFallback) {
+            tallaObj = {
+              ...(tallaObj || {}),
+              ID_Talla: v.ID_Talla ?? v.ID_TipoTalla,
+              ID_TipoTalla: v.ID_TipoTalla,
+              Tipos_Talla: tipoFallback
+            };
+          }
+        }
+        const stockVar =
+          stockPorVariante[vid] ??
+          stockPorVariante[String(vid)] ??
+          (!isNaN(Number(vid)) ? stockPorVariante[Number(vid)] : 0) ??
+          0;
         const varianteEnsamblada = {
           ...v,
-          ID_Variante: v.ID_Variante ?? d.id,
+          ID_Variante: vid,
           Precio_Actual: Number(v.Precio_Actual ?? 0),
-          Talla: tallaMap[v.ID_Talla] || tallaMap[String(v.ID_Talla)] || null,
+          Cantidad_Disponible: Number(stockVar),
+          Talla: tallaObj,
           Colores: coloresMap[v.ID_Color] || coloresMap[String(v.ID_Color)] || null
         };
         if (!variantesPorProducto[pid]) variantesPorProducto[pid] = [];
@@ -197,12 +245,14 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
     const filtroTallas = filtros.Tallas?.length > 0 ? filtros.Tallas : null;
 
     const vistos = new Map();
+    const coloresContextualesMap = new Map();
 
     for (const d of prodSnap.docs) {
       const p = d.data();
+      if (p._is_schema_template || d.id === '_schema_init') continue;
       const pid = p.ID_Producto ?? d.id;
       const estado = Number(p.ID_EstadoProducto ?? 1);
-      if (estado === 2) continue; // Inactivo
+      if (estado !== 1) continue; // Inactivo u oculto
 
       const categoria = catMap[p.ID_Categoria ?? p.ID_categoria] || null;
 
@@ -255,8 +305,51 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
         }
       }
 
-      // Obtener variantes del producto
-      const vars = variantesPorProducto[pid] || variantesPorProducto[String(pid)] || [];
+      // Obtener variantes activas del producto
+      const vars = (variantesPorProducto[pid] || variantesPorProducto[String(pid)] || []).filter(
+        (v) => Number(v.ID_EstadoProducto ?? 1) === 1
+      );
+
+      const ofertaProd = esOfertaActiva(p);
+      const algunaVarOferta = vars.some((v) => esOfertaActiva(v));
+      const enOferta = ofertaProd || algunaVarOferta;
+
+      if (soloOfertas && !enOferta) {
+        continue;
+      }
+
+      // Validación de disponibilidad real para el filtro contextual de colores (ANTES de aplicar filtroColores):
+      // Un color solo se muestra si el producto activo en esta categoría/género/temporada tiene stock real disponible
+      // (es decir, que sus variantes en Variante_Producto e Inventario sumen Cantidad_Disponible > 0).
+      const varsConStock = vars.filter((v) => Number(v.Cantidad_Disponible ?? 0) > 0);
+      const stockTotalProducto = vars.reduce((acc, v) => acc + Number(v.Cantidad_Disponible ?? 0), 0);
+
+      if (stockTotalProducto > 0) {
+        const idsColoresDisponiblesProducto = new Set();
+        varsConStock.forEach((v) => {
+          const idCol = v.ID_Color ?? p.ID_Color ?? null;
+          if (idCol != null && idCol !== '') {
+            idsColoresDisponiblesProducto.add(idCol);
+          }
+        });
+        if (p.ID_Color != null && p.ID_Color !== '') {
+          idsColoresDisponiblesProducto.add(p.ID_Color);
+        }
+
+        idsColoresDisponiblesProducto.forEach((idCol) => {
+          const colorCruze =
+            coloresMap[idCol] ||
+            coloresMap[String(idCol)] ||
+            (!isNaN(Number(idCol)) ? coloresMap[Number(idCol)] : null);
+          if (colorCruze && colorCruze.ID_Color != null) {
+            coloresContextualesMap.set(String(colorCruze.ID_Color), {
+              ID_Color: colorCruze.ID_Color,
+              Nombre_Color: colorCruze.Nombre_Color,
+              Codigo_Hex: colorCruze.Codigo_Hex
+            });
+          }
+        });
+      }
 
       // Filtro por variantes (colores o tallas)
       let variantesCoincidentes = vars;
@@ -265,6 +358,7 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
         const nombresColoresFiltro = filtroColores.map((c) => String(c).trim().toLowerCase());
 
         variantesCoincidentes = variantesCoincidentes.filter((v) => {
+          if (Number(v.Cantidad_Disponible ?? 0) <= 0) return false;
           const idColorVar = v.ID_Color != null ? Number(v.ID_Color) : (v.Colores?.ID_Color != null ? Number(v.Colores.ID_Color) : null);
           const idColorProd = p.ID_Color != null ? Number(p.ID_Color) : null;
           const nombreColorVar = (v.Colores?.Nombre_Color || '').trim().toLowerCase();
@@ -303,14 +397,6 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
 
       const marcaObj = marcasMap[p.ID_Marca] || null;
 
-      const ofertaProd = esOfertaActiva(p);
-      const algunaVarOferta = vars.some((v) => esOfertaActiva(v));
-      const enOferta = ofertaProd || algunaVarOferta;
-
-      if (soloOfertas && !enOferta) {
-        continue;
-      }
-
       const porcentaje = Number(
         p.Porcentaje_Descuento ??
         p.porcentajeDescuento ??
@@ -345,10 +431,14 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
     if (orden === "Precio: menor a mayor") resultado.sort((a, b) => (a.precio ?? 0) - (b.precio ?? 0));
     if (orden === "Precio: mayor a menor") resultado.sort((a, b) => (b.precio ?? 0) - (a.precio ?? 0));
 
-    return resultado;
+    const coloresDisponibles = Array.from(coloresContextualesMap.values()).sort((a, b) =>
+      (a.Nombre_Color || '').localeCompare(b.Nombre_Color || '')
+    );
+
+    return { productos: resultado, coloresDisponibles };
   } catch (error) {
     console.error("Error buscando productos filtrados en Firestore:", error);
-    return [];
+    return { productos: [], coloresDisponibles: [] };
   }
 }
 
@@ -356,6 +446,7 @@ async function buscarProductosFiltrados(filtros = {}, idCategoriaPadre = null, s
 function ListadoPrendas({
   filtros,
   onResultados,
+  onColoresDisponibles,
   idCategoriaPadre,
   soloOfertas = false,
   soloWinterSeason = false
@@ -363,22 +454,34 @@ function ListadoPrendas({
   const [prendas, setPrendas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const { esFavorito, alternarFavorito } = useFavoritos();
+  const filtrosKey = JSON.stringify(filtros || {});
 
   useEffect(() => {
     let activo = true;
 
     async function cargar() {
       setCargando(true);
-      const data = await buscarProductosFiltrados(filtros, idCategoriaPadre, soloOfertas, soloWinterSeason);
+      const { productos: data, coloresDisponibles } = await buscarProductosFiltrados(
+        filtros,
+        idCategoriaPadre,
+        soloOfertas,
+        soloWinterSeason
+      );
       if (!activo) return;
       setPrendas(data);
       setCargando(false);
       onResultados?.(data.length);
+      onColoresDisponibles?.((prev) => {
+        const prevKey = JSON.stringify(prev || []);
+        const nextKey = JSON.stringify(coloresDisponibles || []);
+        return prevKey === nextKey ? prev : coloresDisponibles;
+      });
     }
 
     cargar();
     return () => { activo = false; };
-  }, [filtros, idCategoriaPadre, soloOfertas, soloWinterSeason]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtrosKey, idCategoriaPadre, soloOfertas, soloWinterSeason]);
 
   if (cargando) {
     return (

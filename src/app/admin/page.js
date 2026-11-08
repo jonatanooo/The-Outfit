@@ -1,38 +1,36 @@
 "use client";
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth } from '@/lib/firebaseClient';
-import { onAuthStateChanged } from 'firebase/auth';
+import { useAuth } from '@/lib/AuthContext';
 import { verificarAccesoServidor } from '@/lib/usuario';
 import './Admin.css';
 
 export default function AdminPage() {
     const router = useRouter();
+    const { loading: authLoading } = useAuth();
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                router.replace('/login');
-                return;
-            }
+        if (authLoading) return;
 
+        let activo = true;
+        async function verificar() {
             try {
-                // Validación autoritativa de sesión y rol en el servidor (/api/auth/session)
                 const acceso = await verificarAccesoServidor('admin');
+                if (!activo) return;
                 if (!acceso.autorizado) {
-                    router.replace('/');
+                    router.replace(acceso.rol === 'anonimo' ? '/login' : '/');
                     return;
                 }
-
                 router.replace('/Inventario');
             } catch (err) {
                 console.error('Error al verificar permisos de administrador:', err);
-                router.replace('/');
+                if (activo) router.replace('/');
             }
-        });
+        }
 
-        return () => unsubscribe();
-    }, [router]);
+        verificar();
+        return () => { activo = false; };
+    }, [authLoading, router]);
 
     return null;
 }

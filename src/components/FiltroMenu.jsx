@@ -1,42 +1,24 @@
 "use client"
 import './FiltroMenu.css'
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { db } from '@/lib/firebaseClient';
-import { collection, getDocs } from 'firebase/firestore';
 
-function FiltroMenu({ onAplicarFiltros, categoriasDisponibles = [], filtrosActivos = {}, cantidadResultados = 0 }) {
+function FiltroMenu({
+    onAplicarFiltros,
+    categoriasDisponibles = [],
+    coloresDisponibles = [],
+    filtrosActivos = {},
+    cantidadResultados = 0
+}) {
     const [filtroAbierto, setFiltroAbierto] = useState(false);
-    const [listaColores, setListaColores] = useState([]);
 
     const filtroRef = useRef(null);
     const filtroBtnRef = useRef(null);
 
-    // Cargar colores dinámicamente desde la colección Colores de Firebase
-    useEffect(() => {
-        let activo = true;
-        async function cargarColores() {
-            try {
-                const snap = await getDocs(collection(db, "Colores"));
-                if (!activo) return;
-                const items = snap.docs.map((d) => {
-                    const data = d.data();
-                    const rawId = data.ID_Color ?? d.id;
-                    const numId = Number(rawId);
-                    return {
-                        ID_Color: isNaN(numId) ? rawId : numId,
-                        Nombre_Color: data.Nombre_Color || data.Nombre || 'Sin nombre',
-                        Codigo_Hex: data.Codigo_Hex || data.Hex || '#666666'
-                    };
-                });
-                items.sort((a, b) => (a.Nombre_Color || '').localeCompare(b.Nombre_Color || ''));
-                setListaColores(items);
-            } catch (err) {
-                console.error("Error cargando colores en FiltroMenu:", err);
-            }
-        }
-        cargarColores();
-        return () => { activo = false; };
-    }, []);
+    const listaColores = useMemo(() => {
+        return [...coloresDisponibles].sort((a, b) =>
+            (a.Nombre_Color || '').localeCompare(b.Nombre_Color || '')
+        );
+    }, [coloresDisponibles]);
 
     const coloresMap = useMemo(() => {
         const map = {};
@@ -73,7 +55,7 @@ function FiltroMenu({ onAplicarFiltros, categoriasDisponibles = [], filtrosActiv
                 hex: c.Codigo_Hex
             }))
         },
-        { id: 3, titulo: "Tallas", tipo: "multiple", opciones: ["S", "M", "L", "XL", "XXL"] },
+        { id: 3, titulo: "Tallas", tipo: "multiple", opciones: ["XS", "S", "M", "L", "XL", "XXL"] },
         { id: 4, titulo: "Ordenar Por", tipo: "unica", opciones: ["Precio: menor a mayor", "Precio: mayor a menor", "Más nuevo"] },
     ];
 
@@ -215,7 +197,11 @@ function FiltroMenu({ onAplicarFiltros, categoriasDisponibles = [], filtrosActiv
                                 <img src="/ICONOS/Flechaabajo.png" alt="desplegar" id="bajar" />
                             </button>
                             <div className='filtro-acordeon-contenido contenido'>
-                                {seccion.opciones.map((opcion) => {
+                                {seccion.opciones.length === 0 ? (
+                                    <p style={{ fontSize: '0.85rem', color: '#888', margin: '0.5em 0' }}>
+                                        Sin opciones disponibles
+                                    </p>
+                                ) : seccion.opciones.map((opcion) => {
                                     const esObjeto = typeof opcion === 'object' && opcion !== null;
                                     const valor = esObjeto ? opcion.valor : opcion;
                                     const label = esObjeto ? opcion.label : opcion;

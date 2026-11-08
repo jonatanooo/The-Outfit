@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { db } from "@/lib/firebaseClient";
 import { collection, getDocs } from "firebase/firestore";
 import { useSearchParams } from "next/navigation";
@@ -11,6 +11,7 @@ function PaginaCategoriaContenido({ idCategoriaPadre, categoriaFija = null }) {
   const categoriaQuery = categoriaFija || searchParams.get('categoria') || searchParams.get('subcategoria') || searchParams.get('temporada');
 
   const [subcategorias, setSubcategorias] = useState([]);
+  const [coloresDisponibles, setColoresDisponibles] = useState([]);
   const [prevQuery, setPrevQuery] = useState(categoriaQuery);
   const [filtrosManuales, setFiltrosManuales] = useState(null);
   const [cantidadResultados, setCantidadResultados] = useState(0);
@@ -21,7 +22,9 @@ function PaginaCategoriaContenido({ idCategoriaPadre, categoriaFija = null }) {
     setFiltrosManuales(null);
   }
 
-  const filtrosActivos = filtrosManuales ?? (categoriaQuery ? { Categorias: [categoriaQuery] } : {});
+  const filtrosActivos = useMemo(() => {
+    return filtrosManuales ?? (categoriaQuery ? { Categorias: [categoriaQuery] } : {});
+  }, [filtrosManuales, categoriaQuery]);
 
   useEffect(() => {
     async function cargarSubcategorias() {
@@ -45,21 +48,27 @@ function PaginaCategoriaContenido({ idCategoriaPadre, categoriaFija = null }) {
     cargarSubcategorias();
   }, [idCategoriaPadre]);
 
-  const filtrosCombinados = {
+  const filtrosCombinados = useMemo(() => ({
     ...filtrosActivos,
     Categorias: filtrosActivos.Categorias?.length > 0 ? filtrosActivos.Categorias : null,
-  };
+  }), [filtrosActivos]);
 
   return (
     <>
       <FiltroMenu
         onAplicarFiltros={setFiltrosManuales}
         categoriasDisponibles={subcategorias}
+        coloresDisponibles={coloresDisponibles}
         filtrosActivos={filtrosActivos}
         cantidadResultados={cantidadResultados}
       />
       <div className="prenda-wrap-listado">
-        <ListadoPrendas filtros={filtrosCombinados} onResultados={setCantidadResultados} idCategoriaPadre={idCategoriaPadre} />
+        <ListadoPrendas
+          filtros={filtrosCombinados}
+          onResultados={setCantidadResultados}
+          onColoresDisponibles={setColoresDisponibles}
+          idCategoriaPadre={idCategoriaPadre}
+        />
       </div>
     </>
   );

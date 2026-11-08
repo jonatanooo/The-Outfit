@@ -86,6 +86,28 @@ transition: color 0.3s ease;
     border-radius: 13%;
     margin-left: 5px;
     background-color: white;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.header-v2 .btn-admin {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 5px;
+    margin-right: 5px;
+    padding: 0 10px;
+    height: clamp(20px, 4vw, 35px);
+    background-color: white;
+    color: black;
+    border-radius: 13%;
+    font-family: "DM Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(0.65rem, 1.1vw, 0.8rem);
+    text-decoration: none;
+    white-space: nowrap;
 }
 
 
@@ -386,15 +408,17 @@ filter: brightness(0) invert(1);
     font-family: "DM Sans", sans-serif;
     font-weight: 600;
     text-decoration: none;
-    white-space: nowrap;
+    font-size: 0.85rem;
+    background-color: transparent;
     cursor: pointer;
+    white-space: nowrap;
 }
 
 .header-v2 .logouticon
 {
-    display: flex;
-    width: clamp(20px,4vw,30px);
-    height: clamp(20px,4vw,30px);
+    width: 1.2em;
+    height: 1.2em;
+    object-fit: contain;
 }
 
 .header-v2 .partsubca {

@@ -3,14 +3,15 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import SidebarAdmin from '@/components/SidebarAdmin.jsx';
-import { db, auth } from '@/lib/firebaseClient';
-import { onAuthStateChanged } from 'firebase/auth';
+import { db } from '@/lib/firebaseClient';
+import { useAuth } from '@/lib/AuthContext';
 import { verificarAccesoServidor, obtenerIdUsuario } from '@/lib/usuario';
 import { collection, getDocs, doc, getDoc, setDoc, updateDoc, query, where } from 'firebase/firestore';
 import './transacciones.css';
 
 function AdminTransacciones() {
     const router = useRouter();
+    const { loading: authLoading } = useAuth();
     const [verificandoAcceso, setVerificandoAcceso] = useState(true);
     // estados de la tabla principal
     const [busqueda, setBusqueda] = useState('');
@@ -29,25 +30,25 @@ function AdminTransacciones() {
 
     // Verificación obligatoria de sesión y rol en el servidor antes de cargar pedidos
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                router.replace('/login');
-                return;
-            }
+        if (authLoading) return;
 
+        let activo = true;
+        async function verificar() {
             const acceso = await verificarAccesoServidor('admin');
+            if (!activo) return;
             if (!acceso.autorizado) {
-                router.replace('/');
+                router.replace(acceso.rol === 'anonimo' ? '/login' : '/');
                 return;
             }
 
             setVerificandoAcceso(false);
             cargarPedidos();
             cargarEstados();
-        });
+        }
 
-        return () => unsubscribe();
-    }, [router]);
+        verificar();
+        return () => { activo = false; };
+    }, [authLoading, router]);
 
     // catalogo de estados para el "guardar cambios"
     async function cargarEstados() {

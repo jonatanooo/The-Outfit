@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { db } from "@/lib/firebaseClient";
 import { collection, getDocs } from "firebase/firestore";
 import FiltroMenu from "./FiltroMenu";
@@ -7,6 +7,7 @@ import ListadoPrendas from "./ListadoPrendas";
 
 function PaginaWinterSeasonContenido({ idCategoriaPadre }) {
   const [subcategorias, setSubcategorias] = useState([]);
+  const [coloresDisponibles, setColoresDisponibles] = useState([]);
   const [filtrosActivos, setFiltrosActivos] = useState({});
   const [cantidadResultados, setCantidadResultados] = useState(0);
 
@@ -31,16 +32,17 @@ function PaginaWinterSeasonContenido({ idCategoriaPadre }) {
     return () => { activo = false; };
   }, [idCategoriaPadre]);
 
-  const filtrosCombinados = {
+  const filtrosCombinados = useMemo(() => ({
     ...filtrosActivos,
     Categorias: filtrosActivos.Categorias?.length > 0 ? filtrosActivos.Categorias : null,
-  };
+  }), [filtrosActivos]);
 
   return (
     <>
       <FiltroMenu
         onAplicarFiltros={setFiltrosActivos}
         categoriasDisponibles={subcategorias}
+        coloresDisponibles={coloresDisponibles}
         filtrosActivos={filtrosActivos}
         cantidadResultados={cantidadResultados}
       />
@@ -48,6 +50,7 @@ function PaginaWinterSeasonContenido({ idCategoriaPadre }) {
         <ListadoPrendas
           filtros={filtrosCombinados}
           onResultados={setCantidadResultados}
+          onColoresDisponibles={setColoresDisponibles}
           idCategoriaPadre={idCategoriaPadre}
           soloWinterSeason={true}
         />

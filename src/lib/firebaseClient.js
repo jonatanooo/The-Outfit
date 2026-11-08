@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 
 /**
@@ -31,6 +31,9 @@ function obtenerAuthSeguro() {
       );
       if (typeof window !== 'undefined' || tieneApiKey) {
         _authInstance = getAuth(app);
+        if (typeof window !== 'undefined') {
+          setPersistence(_authInstance, browserLocalPersistence).catch(() => {});
+        }
       }
     } catch (e) {
       console.warn('Advertencia: Firebase Auth client no se pudo inicializar en este entorno:', e?.message);

@@ -11,7 +11,6 @@ import {
   GoogleAuthProvider,
   setPersistence,
   browserLocalPersistence,
-  browserSessionPersistence,
   signOut
 } from 'firebase/auth';
 import { sincronizarSesionServidor } from '@/lib/usuario';
@@ -74,7 +73,7 @@ export default function LoginPage() {
   const [correo, setCorreo] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [mantenerSesion, setMantenerSesion] = useState(false);
+  const [mantenerSesion, setMantenerSesion] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [enviandoReset, setEnviandoReset] = useState(false);
@@ -112,10 +111,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await setPersistence(
-        auth,
-        mantenerSesion ? browserLocalPersistence : browserSessionPersistence
-      );
+      await setPersistence(auth, browserLocalPersistence);
 
       const userCredential = await signInWithEmailAndPassword(auth, correo, password);
       const user = userCredential.user;
@@ -163,6 +159,7 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     try {
+      await setPersistence(auth, browserLocalPersistence);
       const provider = new GoogleAuthProvider();
       const cred = await signInWithPopup(auth, provider);
       const sesion = await sincronizarSesionServidor(cred.user);

@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { db, auth } from '@/lib/firebaseClient';
-import { onAuthStateChanged } from 'firebase/auth';
+import { db } from '@/lib/firebaseClient';
 import { collection, getDocs } from 'firebase/firestore';
+import { useAuth } from '@/lib/AuthContext';
 import { verificarAccesoServidor } from '@/lib/usuario';
 import SidebarAdmin from '@/components/SidebarAdmin';
 import RevenueChart from '@/components/RevenueChart';
@@ -47,6 +47,7 @@ function calcularVariacion(actual, anterior) {
 
 export default function ReportesPage() {
     const router = useRouter();
+    const { user: authUser, loading: authLoading } = useAuth();
     const [usuario, setUsuario] = useState(null);
     const [verificando, setVerificando] = useState(true);
 
@@ -191,31 +192,30 @@ export default function ReportesPage() {
     }
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                router.replace('/login');
-                return;
-            }
+        if (authLoading) return;
 
+        let activo = true;
+        async function verificar() {
             try {
-                // Validación autoritativa de sesión y rol en el servidor (/api/auth/session)
                 const acceso = await verificarAccesoServidor('admin');
+                if (!activo) return;
                 if (!acceso.autorizado) {
-                    router.replace('/');
+                    router.replace(acceso.rol === 'anonimo' ? '/login' : '/');
                     return;
                 }
 
-                setUsuario(user);
+                setUsuario(authUser || { uid: acceso.uid });
                 setVerificando(false);
                 await cargarDatos();
             } catch (err) {
                 console.error('Error verificando usuario en reportes:', err);
-                router.replace('/');
+                if (activo) router.replace('/');
             }
-        });
+        }
 
-        return () => unsubscribe();
-    }, [router]);
+        verificar();
+        return () => { activo = false; };
+    }, [authUser, authLoading, router]);
 
     // --- calculos derivados (ingresos, pedidos, ticket promedio, serie diaria, top productos) ---
     const reporte = useMemo(() => {

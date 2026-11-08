@@ -43,7 +43,7 @@ function Buscador({ onClose }) {
                             ID_Producto: data.ID_Producto ?? d.id
                         }
                     })
-                    .filter((p) => (Number(p.ID_EstadoProducto) ?? 1) !== 2 && (p.Nombre_Producto || '').toLowerCase().includes(queryL))
+                    .filter((p) => Number(p.ID_EstadoProducto ?? 1) === 1 && (p.Nombre_Producto || '').toLowerCase().includes(queryL))
                     .slice(0, 8)
 
                 if (filtrados.length === 0) {

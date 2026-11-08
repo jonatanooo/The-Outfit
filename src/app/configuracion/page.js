@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { db, auth } from '@/lib/firebaseClient';
-import { onAuthStateChanged } from 'firebase/auth';
+import { db } from '@/lib/firebaseClient';
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { useAuth } from '@/lib/AuthContext';
 import { verificarAccesoServidor } from '@/lib/usuario';
 import SidebarAdmin from '@/components/SidebarAdmin';
 import AdminHeader from '@/components/AdminHeader';
@@ -11,34 +11,34 @@ import '../admin/Admin.css';
 
 export default function ConfiguracionPage() {
     const router = useRouter();
+    const { user: authUser, loading: authLoading } = useAuth();
     const [usuario, setUsuario] = useState(null);
     const [verificando, setVerificando] = useState(true);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                router.replace('/login');
-                return;
-            }
+        if (authLoading) return;
 
+        let activo = true;
+        async function verificar() {
             try {
-                // Validación autoritativa de sesión y rol en el servidor (/api/auth/session)
                 const acceso = await verificarAccesoServidor('admin');
+                if (!activo) return;
                 if (!acceso.autorizado) {
-                    router.replace('/');
+                    router.replace(acceso.rol === 'anonimo' ? '/login' : '/');
                     return;
                 }
 
-                setUsuario(user);
+                setUsuario(authUser || { uid: acceso.uid });
                 setVerificando(false);
             } catch (err) {
                 console.error('Error al verificar admin en configuracion:', err);
-                router.replace('/');
+                if (activo) router.replace('/');
             }
-        });
+        }
 
-        return () => unsubscribe();
-    }, [router]);
+        verificar();
+        return () => { activo = false; };
+    }, [authUser, authLoading, router]);
 
     const limpiarTallas = async () => {
         if (!confirm('¿Estás seguro de que deseas limpiar y unificar las tallas en la base de datos?')) return;

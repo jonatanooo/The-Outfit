@@ -9,6 +9,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import PerfilPanel from './PerfilPanel';
 import Buscador from './Buscador';
 import { useCarrito } from '@/lib/CarritoContext';
+import { useAuth } from '@/lib/AuthContext';
 import { sincronizarSesionServidor } from '@/lib/usuario';
 
 function Header ({ siempreSolido = false }) {
@@ -17,7 +18,8 @@ function Header ({ siempreSolido = false }) {
     // menuAbierto reemplaza la clase .abierto del menu
     const [scrolled, setScrolled] = useState(false)
     const [menuAbierto, setMenuAbierto] = useState(false)
-    const { totalItems } = useCarrito();
+    const { totalItems, limpiarCarritoLocal } = useCarrito();
+    const { user: authUser, loading: authLoading } = useAuth();
     const router = useRouter();
     const [categorias, setCategorias] = useState([
         {
@@ -26,7 +28,7 @@ function Header ({ siempreSolido = false }) {
             href: '',
             subcategorias: [
                 { label: 'Ver Todo', href: '/productos' },
-                { label: 'WINTER SEASON', href: '/winter-season?genero=mujer' }
+                { label: 'WINTER SEASON', href: '/productos/winter-season' }
             ]
         },
         {
@@ -35,7 +37,7 @@ function Header ({ siempreSolido = false }) {
             href: '',
             subcategorias: [
                 { label: 'Ver Todo', href: '/productos-hombre' },
-                { label: 'WINTER SEASON', href: '/winter-season?genero=hombre' }
+                { label: 'WINTER SEASON', href: '/productos-hombre/winter-season' }
             ]
         },
         { id: 'ofertas', label: 'OFERTAS', href: '/ofertas' }
@@ -73,7 +75,7 @@ function Header ({ siempreSolido = false }) {
                         href: '',
                         subcategorias: [
                             { label: 'Ver Todo', href: '/productos' },
-                            { label: 'WINTER SEASON', href: '/winter-season?genero=mujer' },
+                            { label: 'WINTER SEASON', href: '/productos/winter-season' },
                             ...subMujer
                         ]
                     },
@@ -83,7 +85,7 @@ function Header ({ siempreSolido = false }) {
                         href: '',
                         subcategorias: [
                             { label: 'Ver Todo', href: '/productos-hombre' },
-                            { label: 'WINTER SEASON', href: '/winter-season?genero=hombre' },
+                            { label: 'WINTER SEASON', href: '/productos-hombre/winter-season' },
                             ...subHombre
                         ]
                     },
@@ -162,44 +164,46 @@ function Header ({ siempreSolido = false }) {
 
     // guarda el usuario logueado (o null) validando su estado y rol contra el servidor
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-            if (currentUser) {
-                const sesion = await sincronizarSesionServidor(currentUser);
-                if (sesion.baneado) {
-                    alert('Tu cuenta fue baneada. No tienes acceso al sitio.');
-                    await signOut(auth);
-                    setUsuario(null);
-                    router.push('/login');
-                    return;
-                }
+        if (authLoading) return;
 
-                if (sesion.authenticated) {
-                    const rolAutoritativo = sesion.rol || 'usuario';
-                    const esAdmin = rolAutoritativo === 'admin';
-                    const enriched = {
-                        ...currentUser,
-                        esAdmin,
-                        app_metadata: {
-                            rol:
-                                rolAutoritativo === 'admin'
-                                    ? 'admin'
-                                    : rolAutoritativo === 'empleado'
-                                    ? 'empleado'
-                                    : 'authenticated'
-                        }
-                    };
-                    setUsuario(enriched);
-                } else {
-                    setUsuario(null);
-                }
+        let activo = true;
+        async function sincronizarUsuarioHeader() {
+            const sesion = await sincronizarSesionServidor(authUser || null);
+            if (!activo) return;
+
+            if (sesion.baneado) {
+                alert('Tu cuenta fue baneada. No tienes acceso al sitio.');
+                await signOut(auth).catch(() => {});
+                setUsuario(null);
+                router.push('/login');
+                return;
+            }
+
+            if (sesion.authenticated) {
+                const rolAutoritativo = sesion.rol || 'usuario';
+                const esAdmin = rolAutoritativo === 'admin';
+                const baseUser = authUser || { uid: sesion.uid, email: sesion.email || '' };
+                const enriched = {
+                    ...baseUser,
+                    esAdmin,
+                    app_metadata: {
+                        rol:
+                            rolAutoritativo === 'admin'
+                                ? 'admin'
+                                : rolAutoritativo === 'empleado'
+                                ? 'empleado'
+                                : 'authenticated'
+                    }
+                };
+                setUsuario(enriched);
             } else {
-                await fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {});
                 setUsuario(null);
             }
-        });
+        }
 
-        return () => unsubscribe();
-    }, [router]);
+        sincronizarUsuarioHeader();
+        return () => { activo = false; };
+    }, [authUser, authLoading, router]);
 
     const handleClickPerfil = () => {
         if (sesionActiva) {
@@ -212,6 +216,7 @@ function Header ({ siempreSolido = false }) {
 
     // 🔓 FUNCIÓN PARA CERRAR SESIÓN
     const handleCerrarSesion = async () => {
+        limpiarCarritoLocal();
         await fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {});
         await signOut(auth);
         setUsuario(null);
@@ -266,15 +271,14 @@ function Header ({ siempreSolido = false }) {
                     <img src="/ICONOS/Person.png" alt="Perfil" className="profileicon"/>
                 </button>
 
-                <a href="/favoritos" className="contenedor-favoritos">
+                <Link href="/favoritos" className="contenedor-favoritos">
                     <img src="/ICONOS/Heart.png" alt="Favoritos" className="hearticon"/>
-                    
-                </a>
+                </Link>
 
-                <a href="/carrito" className='contenedor-carrito'>
+                <Link href="/carrito" className='contenedor-carrito'>
                     <img src="/ICONOS/Shopping Cart.png" alt="Carrito" className="carritoicon"/>
                     {totalItems > 0 && <span className="nav-badge">{totalItems}</span>}
-                </a>
+                </Link>
 
                 </div>
         </nav>
@@ -336,7 +340,7 @@ function Header ({ siempreSolido = false }) {
                 abierto={perfilAbierto}
                 usuario={usuario}
                 onClose={() => setPerfilAbierto(false)}
-                onSesionCerrada={() => setUsuario(null)}
+                onSesionCerrada={() => { setUsuario(null); limpiarCarritoLocal(); }}
             />
 
                 {/* en el operador ternario no comparamos nada, solo con preguntar si categoriaActiva tiene un valor verdadero (no es null). Si es cualquier string vacio lo toma como true  */}

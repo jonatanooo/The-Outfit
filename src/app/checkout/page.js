@@ -15,6 +15,7 @@ import {
   limit
 } from 'firebase/firestore'
 import { obtenerIdUsuario } from '@/lib/usuario'
+import { useAuth } from '@/lib/AuthContext'
 import { esOfertaActiva, calcularPrecioConDescuento } from '@/lib/descuentos'
 import { useCarrito } from '@/lib/CarritoContext'
 import './checkout.css'
@@ -46,6 +47,7 @@ function textoDireccion(dir) {
 
 export default function CheckoutPage() {
   const router = useRouter();
+  const { loading: authLoading } = useAuth();
   const {
     items,
     cargado,
@@ -81,6 +83,7 @@ export default function CheckoutPage() {
 
   // Sesión requerida: un pedido siempre queda ligado a un ID_User.
   useEffect(() => {
+    if (authLoading) return;
     obtenerIdUsuario().then((id) => {
       if (!id) {
         router.push('/login');
@@ -89,7 +92,7 @@ export default function CheckoutPage() {
       setIdUsuario(id);
       setVerificandoSesion(false);
     });
-  }, [router]);
+  }, [authLoading, router]);
 
   // Revalidar precios reales desde Firestore al entrar al checkout
   useEffect(() => {
