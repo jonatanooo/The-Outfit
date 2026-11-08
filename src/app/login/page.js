@@ -13,7 +13,8 @@ import {
   browserLocalPersistence,
   signOut
 } from 'firebase/auth';
-import { sincronizarSesionServidor } from '@/lib/usuario';
+import { sincronizarSesionServidor, sincronizarOCrearUsuarioEnFirestore } from '@/lib/usuario';
+import { useAuth } from '@/lib/AuthContext';
 import Footer from '@/components/Footer';
 
 /* ---------- Iconos SVG (redes + ojo + Google) ---------- */
@@ -70,6 +71,7 @@ const IconGoogle = (props) => (
 
 export default function LoginPage() {
   const router = useRouter();
+  const { refrescarPerfilAuth } = useAuth();
   const [correo, setCorreo] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -133,8 +135,9 @@ export default function LoginPage() {
         return;
       }
 
-      // Refrescar el token local para incorporar los Custom Claims firmados por el servidor
+      // Refrescar el token local y el contexto global de autenticación
       await user.getIdToken(true).catch(() => {});
+      await refrescarPerfilAuth(user);
 
       if (sesionServidor.rol === 'admin') {
         router.push('/admin');
@@ -158,20 +161,93 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    if (loading) return;
+    setError('');
+    setLoading(true);
+
     try {
+      // 1. Configurar persistencia en browserLocalPersistence y abrir popup de Google
       await setPersistence(auth, browserLocalPersistence);
       const provider = new GoogleAuthProvider();
-      const cred = await signInWithPopup(auth, provider);
-      const sesion = await sincronizarSesionServidor(cred.user);
+      provider.setCustomParameters({ prompt: 'select_account' });
+
+      const result = await signInWithPopup(auth, provider);
+      const googleUser = result.user;
+
+      // Obtener inmediatamente uid, email, displayName y el token real actualizado
+      const { uid, email, displayName } = googleUser;
+      const idToken = await googleUser.getIdToken(true);
+
+      if (!uid || !idToken) {
+        throw new Error('No se pudo obtener el token de autenticación de Google.');
+      }
+
+      // 2. Sincronizar o crear automáticamente el documento del usuario en la colección User
+      const perfilUser = await sincronizarOCrearUsuarioEnFirestore({
+        uid,
+        email,
+        displayName,
+        phoneNumber: googleUser.phoneNumber || null,
+      });
+
+      // Verificar si la cuenta está inactiva o baneada en la colección User
+      const estadoUsuario = perfilUser?.ID_EstadoUsuario != null ? Number(perfilUser.ID_EstadoUsuario) : 1;
+      if (estadoUsuario === 2 || estadoUsuario === 3) {
+        await signOut(auth);
+        setError('Tu cuenta fue baneada o desactivada. No tienes acceso al sitio.');
+        setLoading(false);
+        return;
+      }
+
+      // 3. Sincronizar sesión con el servidor (/api/auth/session) y actualizar AuthContext
+      const sesion = await sincronizarSesionServidor(googleUser);
       if (sesion.baneado) {
         await signOut(auth);
         setError('Tu cuenta fue baneada. No tienes acceso al sitio.');
+        setLoading(false);
         return;
       }
-      router.push('/');
+
+      await refrescarPerfilAuth(googleUser);
+
+      // Determinar redirección según su rol (ID_Rol === 1 o rol === 'admin' -> panel admin)
+      const idRolNum = Number(perfilUser?.ID_Rol ?? sesion?.idRol ?? 3);
+      const rolEfectivo = sesion?.rol || (idRolNum === 1 ? 'admin' : idRolNum === 2 ? 'empleado' : 'usuario');
+
+      if (rolEfectivo === 'admin' || idRolNum === 1) {
+        router.push('/admin');
+      } else if (rolEfectivo === 'empleado' || idRolNum === 2) {
+        router.push('/empleado');
+      } else {
+        router.push('/');
+      }
     } catch (error) {
-      console.error('Error al iniciar con Google:', error);
-      alert('Error al iniciar sesión con Google. Intenta de nuevo.');
+      // Ignorar de forma silenciosa si el usuario simplemente cerró la ventana emergente
+      if (
+        error?.code === 'auth/popup-closed-by-user' ||
+        error?.code === 'auth/cancelled-popup-request'
+      ) {
+        return;
+      }
+
+      console.error('Error al iniciar sesión con Google:', error);
+      if (error?.code === 'auth/unauthorized-domain') {
+        setError(
+          'Dominio no autorizado para Google Sign-In (auth/unauthorized-domain). Agrega este dominio en Firebase Console > Authentication > Settings > Authorized domains.'
+        );
+      } else if (error?.code === 'auth/popup-blocked') {
+        setError(
+          'El navegador bloqueó la ventana emergente de Google. Permite las ventanas emergentes en este sitio e inténtalo de nuevo.'
+        );
+      } else if (error?.code === 'auth/operation-not-allowed') {
+        setError(
+          'El proveedor de Google aún no está habilitado en Firebase Console > Authentication > Sign-in method.'
+        );
+      } else {
+        setError(error?.message || 'Error al iniciar sesión con Google. Intenta de nuevo.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

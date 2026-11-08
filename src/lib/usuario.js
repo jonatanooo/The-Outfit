@@ -1,5 +1,150 @@
 import { auth, db } from './firebaseClient';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+
+function esDocPlantillaUser(docSnap) {
+  if (!docSnap) return true;
+  if (docSnap.id === '_schema_init' || docSnap.id === '_placeholder') return true;
+  const data = typeof docSnap.data === 'function' ? docSnap.data() : docSnap;
+  return Boolean(data?._is_schema_template || data?._info);
+}
+
+/**
+ * Genera el siguiente ID_User estrictamente numérico entero secuencial en la colección User.
+ */
+async function generarSiguienteIdUserNumerico() {
+  try {
+    const snap = await getDocs(collection(db, 'User'));
+    let maxId = 0;
+    snap.docs.forEach((d) => {
+      if (esDocPlantillaUser(d)) return;
+      const data = d.data();
+      const raw = data?.ID_User ?? d.id;
+      const val = Number(raw);
+      if (!isNaN(val) && Number.isInteger(val) && val > maxId && val < 2000000000) {
+        maxId = val;
+      }
+    });
+    return maxId + 1;
+  } catch (err) {
+    console.error('Error generando ID_User numérico secuencial:', err);
+    return Math.floor(10000 + (Date.now() % 899999));
+  }
+}
+
+/**
+ * Separa un displayName completo en { nombres, apellidos }.
+ */
+export function separarDisplayName(displayName = '', fallbackEmail = '') {
+  const limpio = String(displayName || '').trim().replace(/\s+/g, ' ');
+  if (!limpio) {
+    const baseCorreo = String(fallbackEmail || '').split('@')[0] || 'Usuario';
+    return { nombres: baseCorreo, apellidos: '' };
+  }
+  const partes = limpio.split(' ');
+  if (partes.length === 1) {
+    return { nombres: partes[0], apellidos: '' };
+  }
+  return {
+    nombres: partes[0],
+    apellidos: partes.slice(1).join(' '),
+  };
+}
+
+/**
+ * Sincroniza o crea automáticamente el registro del usuario en la colección `User` de Firestore
+ * (especialmente al iniciar sesión con Google por primera vez o vincular un correo existente).
+ */
+export async function sincronizarOCrearUsuarioEnFirestore(firebaseUser) {
+  if (!firebaseUser || !firebaseUser.uid) return null;
+
+  const uid = firebaseUser.uid;
+  const emailRaw = String(firebaseUser.email || '').trim();
+  const emailLower = emailRaw.toLowerCase();
+  const candidatosCorreo = Array.from(new Set([emailRaw, emailLower].filter(Boolean)));
+
+  try {
+    // 1. Buscar por Document ID directo === uid
+    const directRef = doc(db, 'User', uid);
+    const directSnap = await getDoc(directRef);
+    if (directSnap.exists() && !esDocPlantillaUser(directSnap)) {
+      const data = directSnap.data();
+      if (!data.auth_id) {
+        await updateDoc(directRef, { auth_id: uid }).catch(() => {});
+      }
+      return { ...data, auth_id: uid, _docId: directSnap.id };
+    }
+
+    // 2. Buscar por auth_id === uid
+    const snapAuth = await getDocs(
+      query(collection(db, 'User'), where('auth_id', '==', uid))
+    );
+    const docsAuth = snapAuth.docs.filter((d) => !esDocPlantillaUser(d));
+    if (docsAuth.length > 0) {
+      const d = docsAuth[0];
+      return { ...d.data(), _docId: d.id };
+    }
+
+    // 3. Buscar por Correo (exacto o en minúsculas)
+    if (candidatosCorreo.length > 0) {
+      const snapEmail = await getDocs(
+        query(collection(db, 'User'), where('Correo', 'in', candidatosCorreo))
+      );
+      const docsEmail = snapEmail.docs.filter((d) => !esDocPlantillaUser(d));
+      if (docsEmail.length > 0) {
+        const docEncontrado = docsEmail[0];
+        const data = docEncontrado.data();
+        // Vincular su auth_id si aún no lo tenía o actualizarlo al uid autenticado de Google
+        if (data.auth_id !== uid) {
+          await updateDoc(docEncontrado.ref, { auth_id: uid }).catch(() => {});
+        }
+        return { ...data, auth_id: uid, _docId: docEncontrado.id };
+      }
+    }
+
+    // 4. Primera vez que entra con Google (No existe en User) -> Crear automáticamente
+    const nuevoIdUser = await generarSiguienteIdUserNumerico();
+    const { nombres, apellidos } = separarDisplayName(firebaseUser.displayName, emailLower);
+    const baseUsername = (emailLower.split('@')[0] || 'usuario')
+      .replace(/[^a-z0-9_.-]/gi, '_')
+      .toLowerCase();
+
+    // Garantizar que el nombre de Usuario sea único
+    let nombreUsuarioUnico = baseUsername;
+    try {
+      const snapUserCheck = await getDocs(
+        query(collection(db, 'User'), where('Usuario', '==', baseUsername))
+      );
+      if (!snapUserCheck.empty) {
+        nombreUsuarioUnico = `${baseUsername}_${nuevoIdUser}`;
+      }
+    } catch {
+      nombreUsuarioUnico = `${baseUsername}_${nuevoIdUser}`;
+    }
+
+    const nuevoRegistroUser = {
+      ID_User: nuevoIdUser,
+      auth_id: uid,
+      Nombres: nombres,
+      Apellidos: apellidos,
+      Usuario: nombreUsuarioUnico,
+      Correo: emailLower || emailRaw,
+      Telefono: firebaseUser.phoneNumber || null,
+      DUI: null,
+      Password_Hash: null,
+      Puesto: 'Usuario normal',
+      ID_Rol: 3, // Rol Cliente
+      ID_EstadoUsuario: 1, // Estado Activo
+      Es_Empleado: false,
+      Fecha_Creacion: new Date().toISOString(),
+    };
+
+    await setDoc(doc(db, 'User', String(nuevoIdUser)), nuevoRegistroUser);
+    return { ...nuevoRegistroUser, _docId: String(nuevoIdUser) };
+  } catch (err) {
+    console.error('Error sincronizando o creando usuario en colección User:', err);
+    return null;
+  }
+}
 
 /**
  * Resuelve en Firestore los datos de rol y estado de un usuario autenticado en Firebase Auth.
@@ -11,40 +156,10 @@ async function resolverDatosUsuarioFirestore(user) {
   let docId = null;
 
   try {
-    // 1. Buscar por Document ID directo igual a user.uid
-    const docSnap = await getDoc(doc(db, 'User', user.uid));
-    if (docSnap.exists()) {
-      userData = docSnap.data();
-      docId = docSnap.id;
-    }
-
-    // 2. Buscar por campo inmutable auth_id === user.uid
-    if (!userData) {
-      const snapAuth = await getDocs(
-        query(collection(db, 'User'), where('auth_id', '==', user.uid))
-      );
-      if (!snapAuth.empty) {
-        userData = snapAuth.docs[0].data();
-        docId = snapAuth.docs[0].id;
-      }
-    }
-
-    // 3. Buscar por Correo siempre que no pertenezca a otro auth_id distinto
-    if (!userData && user.email) {
-      const snapEmail = await getDocs(
-        query(collection(db, 'User'), where('Correo', '==', user.email))
-      );
-      if (!snapEmail.empty) {
-        const docEncontrado = snapEmail.docs[0];
-        const candidate = docEncontrado.data();
-        if (!candidate.auth_id || candidate.auth_id === user.uid) {
-          userData = candidate;
-          docId = docEncontrado.id;
-          if (!candidate.auth_id) {
-            await updateDoc(docEncontrado.ref, { auth_id: user.uid }).catch(() => {});
-          }
-        }
-      }
+    const sincronizado = await sincronizarOCrearUsuarioEnFirestore(user);
+    if (sincronizado) {
+      userData = sincronizado;
+      docId = sincronizado._docId || String(sincronizado.ID_User ?? user.uid);
     }
   } catch (err) {
     console.error('Error consultando usuario en Firestore:', err);
@@ -79,8 +194,10 @@ async function resolverDatosUsuarioFirestore(user) {
 
   return {
     idUser: userData?.ID_User ?? docId ?? user.uid,
+    idRol: userData?.ID_Rol ?? (rol === 'admin' ? 1 : rol === 'empleado' ? 2 : 3),
     rol,
     baneado,
+    userData,
   };
 }
 
@@ -113,6 +230,10 @@ export async function sincronizarSesionServidor(userOverride = null) {
       return { authenticated: false, rol: 'anonimo' };
     }
 
+    // Sincronizar o crear automáticamente el documento del usuario en la colección User
+    // antes de notificar al servidor para garantizar que ya tenga su ID_User entero secuencial
+    const userDocSincronizado = await sincronizarOCrearUsuarioEnFirestore(user);
+
     const idToken = await user.getIdToken(true);
     try {
       const res = await fetch('/api/auth/session', {
@@ -134,7 +255,12 @@ export async function sincronizarSesionServidor(userOverride = null) {
       }
 
       if (res.ok && data?.authenticated) {
-        return data;
+        return {
+          ...data,
+          idUser: userDocSincronizado?.ID_User ?? data.idUser,
+          idRol: userDocSincronizado?.ID_Rol ?? data.idRol ?? (data.rol === 'admin' ? 1 : data.rol === 'empleado' ? 2 : 3),
+          userData: userDocSincronizado || null,
+        };
       }
     } catch {
       // Continuar al respaldo directo con Firestore si el endpoint falla
@@ -154,7 +280,9 @@ export async function sincronizarSesionServidor(userOverride = null) {
       authenticated: true,
       uid: user.uid,
       idUser: infoFallback.idUser,
+      idRol: infoFallback.idRol,
       rol: infoFallback.rol,
+      userData: infoFallback.userData || null,
       emailVerified: Boolean(user.emailVerified),
     };
   } catch (error) {
@@ -245,25 +373,10 @@ export async function obtenerIdUsuario() {
       return data.ID_User ?? snapAuth.docs[0].id;
     }
 
-    // 3. Buscar por Correo siempre que el documento no pertenezca a otro auth_id distinto
-    if (user.email) {
-      const qEmail = query(collection(db, 'User'), where('Correo', '==', user.email));
-      const snapEmail = await getDocs(qEmail);
-      if (!snapEmail.empty) {
-        const docEncontrado = snapEmail.docs[0];
-        const data = docEncontrado.data();
-
-        if (data.auth_id && data.auth_id !== user.uid) {
-          console.warn('Intento de vinculación bloqueado: el correo ya pertenece a otro auth_id.');
-          return null;
-        }
-
-        if (!data.auth_id) {
-          await updateDoc(docEncontrado.ref, { auth_id: user.uid }).catch(() => {});
-        }
-
-        return data.ID_User ?? docEncontrado.id;
-      }
+    // 3. Buscar por Correo o crear si es cuenta nueva de proveedor OAuth
+    const sincronizado = await sincronizarOCrearUsuarioEnFirestore(user);
+    if (sincronizado && sincronizado.ID_User != null) {
+      return sincronizado.ID_User;
     }
 
     return user.uid;
@@ -285,40 +398,13 @@ export async function obtenerPerfilUsuario() {
     const user = auth.currentUser;
     if (!user) return null;
 
-    // 1. Buscar documento directo por UID
-    const docRef = doc(db, 'User', user.uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data(), email: user.email };
-    }
-
-    // 2. Buscar por campo inmutable auth_id
-    const qAuth = query(collection(db, 'User'), where('auth_id', '==', user.uid));
-    const snapAuth = await getDocs(qAuth);
-    if (!snapAuth.empty) {
-      const d = snapAuth.docs[0];
-      return { id: d.id, ...d.data(), email: user.email };
-    }
-
-    // 3. Buscar por Correo siempre que no pertenezca a otro auth_id distinto
-    if (user.email) {
-      const qEmail = query(collection(db, 'User'), where('Correo', '==', user.email));
-      const snapEmail = await getDocs(qEmail);
-      if (!snapEmail.empty) {
-        const d = snapEmail.docs[0];
-        const data = d.data();
-
-        if (data.auth_id && data.auth_id !== user.uid) {
-          console.warn('Intento de acceso a perfil bloqueado: auth_id no coincide.');
-          return null;
-        }
-
-        if (!data.auth_id) {
-          await updateDoc(d.ref, { auth_id: user.uid }).catch(() => {});
-        }
-
-        return { id: d.id, ...data, email: user.email };
-      }
+    const sincronizado = await sincronizarOCrearUsuarioEnFirestore(user);
+    if (sincronizado) {
+      return {
+        id: sincronizado._docId || String(sincronizado.ID_User ?? user.uid),
+        ...sincronizado,
+        email: user.email,
+      };
     }
 
     return null;

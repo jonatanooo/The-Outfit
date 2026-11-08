@@ -58,7 +58,7 @@ function esEntidadActiva(entidad) {
 }
 
 export function CarritoProvider({ children }) {
-  const { user: authUser, loading: authLoading } = useAuth();
+  const { user: authUser, idUser: authIdUser, loading: authLoading } = useAuth();
   // Estado inicial estrictamente vacío [] (sin datos mock ni precargados)
   const [items, setItems] = useState([]);
   const [cargado, setCargado] = useState(false);
@@ -420,7 +420,7 @@ export function CarritoProvider({ children }) {
       idCarritoRef.current = null;
 
       try {
-        const idUser = await obtenerIdUsuario();
+        const idUser = authIdUser || (await obtenerIdUsuario());
         if (!activo) return;
 
         if (!idUser) {
@@ -448,7 +448,7 @@ export function CarritoProvider({ children }) {
       activo = false;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authUser, authLoading]);
+  }, [authUser, authIdUser, authLoading]);
 
   // Persiste copia rápida en localStorage únicamente bajo la clave del usuario autenticado
   useEffect(() => {

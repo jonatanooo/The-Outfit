@@ -58,6 +58,7 @@ function decodificarJwtFirebase(idToken) {
     return {
       uid,
       email: payload.email || '',
+      name: payload.name || '',
       email_verified: Boolean(payload.email_verified),
       rol: payload.rol,
       admin: payload.admin,
@@ -105,6 +106,7 @@ async function verificarTokenFirebase(idToken) {
           return {
             uid: account.localId,
             email: account.email || jwtDecoded?.email || '',
+            name: account.displayName || jwtDecoded?.name || '',
             email_verified: Boolean(account.emailVerified),
             rol: jwtDecoded?.rol,
             admin: jwtDecoded?.admin,
@@ -120,18 +122,42 @@ async function verificarTokenFirebase(idToken) {
   return jwtDecoded;
 }
 
+function separarDisplayNameServidor(displayName = '', fallbackEmail = '') {
+  const limpio = String(displayName || '').trim().replace(/\s+/g, ' ');
+  if (!limpio) {
+    const baseCorreo = String(fallbackEmail || '').split('@')[0] || 'Usuario';
+    return { nombres: baseCorreo, apellidos: '' };
+  }
+  const partes = limpio.split(' ');
+  if (partes.length === 1) {
+    return { nombres: partes[0], apellidos: '' };
+  }
+  return {
+    nombres: partes[0],
+    apellidos: partes.slice(1).join(' '),
+  };
+}
+
 /**
- * Busca el documento del usuario en la colección `User` de Firestore.
- * Intenta con `adminDb` y, si falla por credenciales en Vercel, usa `db` (Firebase SDK).
+ * Busca el documento del usuario en la colección `User` de Firestore, o lo crea
+ * automáticamente con ID_User entero secuencial si ingresa por primera vez (ej. con Google).
  */
-async function buscarDocumentoUsuario(uid, email) {
+async function buscarDocumentoUsuario(uid, email, displayName = '') {
+  const emailRaw = String(email || '').trim();
+  const emailLower = emailRaw.toLowerCase();
+  const candidatosCorreo = Array.from(new Set([emailRaw, emailLower].filter(Boolean)));
+
   // Intento A: Firebase Admin Firestore (solo si tiene credenciales válidas en el entorno)
   if (tieneCredencialesAdmin()) {
     try {
       const directRef = adminDb.collection('User').doc(uid);
       const directSnap = await directRef.get();
-      if (directSnap.exists) {
-        return { userData: directSnap.data(), docId: directSnap.id };
+      if (directSnap.exists && directSnap.id !== '_schema_init' && directSnap.id !== '_placeholder') {
+        const data = directSnap.data();
+        if (!data.auth_id) {
+          await directRef.set({ auth_id: uid }, { merge: true }).catch(() => {});
+        }
+        return { userData: { ...data, auth_id: uid }, docId: directSnap.id };
       }
 
       const authSnap = await adminDb
@@ -143,21 +169,68 @@ async function buscarDocumentoUsuario(uid, email) {
         return { userData: authSnap.docs[0].data(), docId: authSnap.docs[0].id };
       }
 
-      if (email) {
+      if (candidatosCorreo.length > 0) {
         const emailSnap = await adminDb
           .collection('User')
-          .where('Correo', '==', email)
+          .where('Correo', 'in', candidatosCorreo)
           .limit(1)
           .get();
         if (!emailSnap.empty) {
           const candidateData = emailSnap.docs[0].data();
-          if (!candidateData.auth_id || candidateData.auth_id === uid) {
+          if (candidateData.auth_id !== uid) {
             await emailSnap.docs[0].ref.set({ auth_id: uid }, { merge: true }).catch(() => {});
-            return { userData: candidateData, docId: emailSnap.docs[0].id };
           }
+          return { userData: { ...candidateData, auth_id: uid }, docId: emailSnap.docs[0].id };
         }
       }
-      return { userData: null, docId: null };
+
+      // Si no existe en la colección User, crearlo automáticamente con ID_User entero secuencial
+      const allUsersSnap = await adminDb.collection('User').get();
+      let maxId = 0;
+      allUsersSnap.docs.forEach((d) => {
+        if (d.id === '_schema_init' || d.id === '_placeholder') return;
+        const data = d.data();
+        if (data?._is_schema_template || data?._info) return;
+        const num = Number(data?.ID_User ?? d.id);
+        if (!isNaN(num) && Number.isInteger(num) && num > maxId && num < 2000000000) {
+          maxId = num;
+        }
+      });
+      const nuevoIdUser = maxId + 1;
+      const { nombres, apellidos } = separarDisplayNameServidor(displayName, emailLower);
+      const baseUsername = (emailLower.split('@')[0] || 'usuario')
+        .replace(/[^a-z0-9_.-]/gi, '_')
+        .toLowerCase();
+
+      let nombreUsuarioUnico = baseUsername;
+      const checkUserSnap = await adminDb
+        .collection('User')
+        .where('Usuario', '==', baseUsername)
+        .limit(1)
+        .get();
+      if (!checkUserSnap.empty) {
+        nombreUsuarioUnico = `${baseUsername}_${nuevoIdUser}`;
+      }
+
+      const nuevoUserDoc = {
+        ID_User: nuevoIdUser,
+        auth_id: uid,
+        Nombres: nombres,
+        Apellidos: apellidos,
+        Usuario: nombreUsuarioUnico,
+        Correo: emailLower || emailRaw,
+        Telefono: null,
+        DUI: null,
+        Password_Hash: null,
+        Puesto: 'Usuario normal',
+        ID_Rol: 3,
+        ID_EstadoUsuario: 1,
+        Es_Empleado: false,
+        Fecha_Creacion: new Date().toISOString(),
+      };
+
+      await adminDb.collection('User').doc(String(nuevoIdUser)).set(nuevoUserDoc);
+      return { userData: nuevoUserDoc, docId: String(nuevoIdUser) };
     } catch {
       // Caer al Intento B
     }
@@ -165,34 +238,20 @@ async function buscarDocumentoUsuario(uid, email) {
 
   // Intento B: Respaldo con Firebase SDK (`db`) cuando Admin SDK no tiene llave en Preview/Production
   try {
-    const { db } = await import('@/lib/firebaseClient');
-    const { collection, doc, getDoc, getDocs, query, setDoc, where } = await import('firebase/firestore');
-    const directSnap = await getDoc(doc(db, 'User', uid));
-    if (directSnap.exists()) {
-      return { userData: directSnap.data(), docId: directSnap.id };
-    }
-
-    const authSnap = await getDocs(
-      query(collection(db, 'User'), where('auth_id', '==', uid))
-    );
-    if (!authSnap.empty) {
-      return { userData: authSnap.docs[0].data(), docId: authSnap.docs[0].id };
-    }
-
-    if (email) {
-      const emailSnap = await getDocs(
-        query(collection(db, 'User'), where('Correo', '==', email))
-      );
-      if (!emailSnap.empty) {
-        const candidateData = emailSnap.docs[0].data();
-        if (!candidateData.auth_id || candidateData.auth_id === uid) {
-          await setDoc(emailSnap.docs[0].ref, { auth_id: uid }, { merge: true }).catch(() => {});
-          return { userData: candidateData, docId: emailSnap.docs[0].id };
-        }
-      }
+    const { sincronizarOCrearUsuarioEnFirestore } = await import('@/lib/usuario');
+    const sincronizado = await sincronizarOCrearUsuarioEnFirestore({
+      uid,
+      email: emailLower || emailRaw,
+      displayName,
+    });
+    if (sincronizado) {
+      return {
+        userData: sincronizado,
+        docId: sincronizado._docId || String(sincronizado.ID_User ?? uid),
+      };
     }
   } catch (errClient) {
-    console.error('Error buscando usuario en Firestore:', errClient);
+    console.error('Error buscando o creando usuario en Firestore:', errClient);
   }
   return { userData: null, docId: null };
 }
@@ -200,9 +259,10 @@ async function buscarDocumentoUsuario(uid, email) {
 async function resolverAutorizacionUsuario(decodedToken) {
   const uid = decodedToken.uid;
   const email = decodedToken.email || '';
+  const displayName = decodedToken.name || decodedToken.displayName || '';
   const emailVerified = decodedToken.email_verified === true;
 
-  const { userData, docId } = await buscarDocumentoUsuario(uid, email);
+  const { userData, docId } = await buscarDocumentoUsuario(uid, email, displayName);
 
   const estadoNum = userData ? Number(userData.ID_EstadoUsuario) : 1;
   const baneado = Boolean(userData && (estadoNum === 2 || estadoNum === 3));
