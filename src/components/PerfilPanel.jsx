@@ -4,12 +4,14 @@ import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebaseClient';
 import { signOut, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { useCarrito } from '@/lib/CarritoContext';
 import './PerfilPanel.css';
 
 // El padre (Header) llama a ref.current.refrescar() justo antes de abrir el panel,
 // para recargar los campos con los datos actuales del usuario.
 const PerfilPanel = forwardRef(function PerfilPanel({ abierto, usuario, onClose, onSesionCerrada }, ref) {
     const router = useRouter();
+    const { limpiarCarritoLocal } = useCarrito();
     const [nombre, setNombre] = useState('');
     const [telefono, setTelefono] = useState('');
     const [guardando, setGuardando] = useState(false);
@@ -86,6 +88,8 @@ const PerfilPanel = forwardRef(function PerfilPanel({ abierto, usuario, onClose,
     };
 
     const handleCerrarSesion = async () => {
+        limpiarCarritoLocal();
+        await fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {});
         await signOut(auth);
         onSesionCerrada?.();
         onClose();

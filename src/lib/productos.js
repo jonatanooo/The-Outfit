@@ -270,6 +270,13 @@ export function useProducto(idProducto) {
           return;
         }
 
+        // Si el Producto Base está inactivo u oculto, no permitir visualizarlo ni comprarlo
+        const estadoProducto = prodData.ID_EstadoProducto != null ? Number(prodData.ID_EstadoProducto) : 1;
+        if (estadoProducto !== 1) {
+          setProducto(null);
+          return;
+        }
+
         const pid = prodData.ID_Producto ?? prodData.id;
         const pidValues = Array.from(new Set([
           pid,
@@ -335,7 +342,8 @@ function normalizarTalla(v, tallaMap = {}, tiposTallaMap = {}, inventarioMap = {
 
   // Sin dato, la variante se considera activa.
   const idEstado = v.ID_EstadoProducto != null ? Number(v.ID_EstadoProducto) : 1;
-  const activa = idEstado === 1;
+  const estadoPadre = prodData?.ID_EstadoProducto != null ? Number(prodData.ID_EstadoProducto) : 1;
+  const activa = idEstado === 1 && estadoPadre === 1;
 
   const invList = inventarioMap[v.ID_Variante] || inventarioMap[String(v.ID_Variante)] || [];
   const stock = invList.reduce(
@@ -361,7 +369,8 @@ function normalizarTalla(v, tallaMap = {}, tiposTallaMap = {}, inventarioMap = {
     enOferta,
     porcentajeDescuento: enOferta ? porcentaje : 0,
     stock,
-    disponible: activa && (stock > 0 || invList.length === 0),
+    activa,
+    disponible: activa && stock > 0,
   };
 }
 

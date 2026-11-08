@@ -24,7 +24,7 @@ export default function Home() {
         </section>
 
         <section className="promobanner">
-            <Link href='/winter-season'>
+            <Link href='/productos/winter-season'>
                 <video 
                     autoPlay 
                     loop 

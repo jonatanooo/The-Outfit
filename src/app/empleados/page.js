@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import SidebarAdmin from '@/components/SidebarAdmin'
 import { db, auth } from '@/lib/firebaseClient'
-import { onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth'
+import { sendPasswordResetEmail } from 'firebase/auth'
+import { useAuth } from '@/lib/AuthContext'
 import { verificarAccesoServidor, obtenerIdUsuario } from '@/lib/usuario'
 import {
   collection,
@@ -58,6 +59,7 @@ async function actualizarUser(idUser, campos) {
 
 export default function EmpleadosPage() {
   const router = useRouter();
+  const { loading: authLoading } = useAuth();
   const [verificandoAcceso, setVerificandoAcceso] = useState(true);
   const [empleados, setEmpleados] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -70,24 +72,24 @@ export default function EmpleadosPage() {
   const [errorForm, setErrorForm] = useState('');
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.replace('/login');
-        return;
-      }
+    if (authLoading) return;
 
+    let activo = true;
+    async function verificar() {
       const acceso = await verificarAccesoServidor('admin');
+      if (!activo) return;
       if (!acceso.autorizado) {
-        router.replace('/');
+        router.replace(acceso.rol === 'anonimo' ? '/login' : '/');
         return;
       }
 
       setVerificandoAcceso(false);
       await cargarEmpleados();
-    });
+    }
 
-    return () => unsubscribe();
-  }, [router]);
+    verificar();
+    return () => { activo = false; };
+  }, [authLoading, router]);
 
   async function cargarEmpleados() {
     setCargando(true);

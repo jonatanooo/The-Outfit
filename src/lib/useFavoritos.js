@@ -11,15 +11,19 @@ import {
   doc
 } from 'firebase/firestore';
 import { obtenerIdUsuario } from './usuario';
+import { useAuth } from './AuthContext';
 
 // Maneja el estado de "favoritos" del usuario logueado contra la colección
 // "Favoritos" de Firestore: qué IDs de producto tiene marcados, y agregar/quitar.
 export function useFavoritos() {
+  const { user: authUser, loading: authLoading } = useAuth();
   const [favoritos, setFavoritos] = useState(new Set());
   const [idUsuario, setIdUsuario] = useState(null);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
+
     let activo = true;
 
     async function cargar() {
@@ -63,7 +67,7 @@ export function useFavoritos() {
 
     cargar();
     return () => { activo = false; };
-  }, []);
+  }, [authUser, authLoading]);
 
   const esFavorito = useCallback((idProducto) => {
     return favoritos.has(idProducto) || favoritos.has(Number(idProducto)) || favoritos.has(String(idProducto));

@@ -98,7 +98,18 @@ export async function sincronizarSesionServidor(userOverride = null) {
     }
     const user = userOverride || auth.currentUser;
     if (!user) {
-      await fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {});
+      // Consultar si ya existe cookie de sesión válida antes de invalidar
+      try {
+        const resGet = await fetch('/api/auth/session', { method: 'GET' });
+        if (resGet.ok) {
+          const dataGet = await resGet.json().catch(() => null);
+          if (dataGet?.authenticated) {
+            return dataGet;
+          }
+        }
+      } catch {
+        // ignorar
+      }
       return { authenticated: false, rol: 'anonimo' };
     }
 
@@ -165,11 +176,7 @@ export async function verificarAccesoServidor(rolRequerido = 'admin') {
     }
 
     const user = auth.currentUser;
-    if (!user) {
-      return { autorizado: false, rol: 'anonimo', uid: null, idUser: null };
-    }
-
-    const sesion = await sincronizarSesionServidor(user);
+    const sesion = await sincronizarSesionServidor(user || null);
     if (!sesion.authenticated || sesion.baneado) {
       return { autorizado: false, rol: 'anonimo', uid: null, idUser: null };
     }
@@ -188,7 +195,7 @@ export async function verificarAccesoServidor(rolRequerido = 'admin') {
     return {
       autorizado,
       rol,
-      uid: sesion.uid || user.uid,
+      uid: sesion.uid || user?.uid || null,
       idUser: sesion.idUser ?? null,
     };
   } catch (error) {
@@ -207,7 +214,20 @@ export async function obtenerIdUsuario() {
     }
 
     const user = auth.currentUser;
-    if (!user) return null;
+    if (!user) {
+      try {
+        const res = await fetch('/api/auth/session', { method: 'GET' });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data?.authenticated && data?.idUser != null) {
+            return data.idUser;
+          }
+        }
+      } catch {
+        // ignorar
+      }
+      return null;
+    }
 
     // 1. Buscar por Document ID directo igual a user.uid
     const docRef = doc(db, 'User', user.uid);

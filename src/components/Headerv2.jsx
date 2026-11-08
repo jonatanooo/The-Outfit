@@ -9,6 +9,8 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import PerfilPanel from './PerfilPanel';
 import Buscador from './Buscador';
 import { useCarrito } from '@/lib/CarritoContext';
+import { useAuth } from '@/lib/AuthContext';
+import { sincronizarSesionServidor } from '@/lib/usuario';
 
 function Headerv2 () {
     // comentario Jona
@@ -16,7 +18,8 @@ function Headerv2 () {
     // menuAbierto reemplaza la clase .abierto del menu
     const [scrolled, setScrolled] = useState(false)
     const [menuAbierto, setMenuAbierto] = useState(false)
-    const { totalItems } = useCarrito();
+    const { totalItems, limpiarCarritoLocal } = useCarrito();
+    const { user: authUser, loading: authLoading } = useAuth();
     const [buscadorAbierto, setBuscadorAbierto] = useState(false)
     const [usuario, setUsuario] = useState(null)
     const [perfilAbierto, setPerfilAbierto] = useState(false)
@@ -30,7 +33,7 @@ function Headerv2 () {
             href: '',
             subcategorias: [
                 { label: 'Ver Todo', href: '/productos' },
-                { label: 'WINTER SEASON', href: '/winter-season?genero=mujer' }
+                { label: 'WINTER SEASON', href: '/productos/winter-season' }
             ]
         },
         {
@@ -39,7 +42,7 @@ function Headerv2 () {
             href: '',
             subcategorias: [
                 { label: 'Ver Todo', href: '/productos-hombre' },
-                { label: 'WINTER SEASON', href: '/winter-season?genero=hombre' }
+                { label: 'WINTER SEASON', href: '/productos-hombre/winter-season' }
             ]
         },
         { id: 'ofertas', label: 'OFERTAS', href: '/ofertas' }
@@ -77,7 +80,7 @@ function Headerv2 () {
                         href: '',
                         subcategorias: [
                             { label: 'Ver Todo', href: '/productos' },
-                            { label: 'WINTER SEASON', href: '/winter-season?genero=mujer' },
+                            { label: 'WINTER SEASON', href: '/productos/winter-season' },
                             ...subMujer
                         ]
                     },
@@ -87,7 +90,7 @@ function Headerv2 () {
                         href: '',
                         subcategorias: [
                             { label: 'Ver Todo', href: '/productos-hombre' },
-                            { label: 'WINTER SEASON', href: '/winter-season?genero=hombre' },
+                            { label: 'WINTER SEASON', href: '/productos-hombre/winter-season' },
                             ...subHombre
                         ]
                     },
@@ -161,65 +164,46 @@ function Headerv2 () {
 
     // guarda el usuario logueado (o null) para mostrar el botón de perfil/cerrar sesión
     useEffect(() => {
-        const verificarBaneo = async (userObj) => {
-            if (!userObj || !userObj.email) return false;
-            try {
-                const qUser = query(collection(db, 'User'), where('Correo', '==', userObj.email));
-                const snapUser = await getDocs(qUser);
-                if (!snapUser.empty) {
-                    const uData = snapUser.docs[0].data();
-                    if (Number(uData.ID_EstadoUsuario) === 2 || uData.ID_EstadoUsuario === 2) {
-                        alert('Tu cuenta fue baneada. No tienes acceso al sitio.');
-                        await signOut(auth);
-                        router.push('/login');
-                        return true;
-                    }
-                }
-            } catch (err) {
-                console.error('Error al verificar baneo:', err);
+        if (authLoading) return;
+
+        let activo = true;
+        async function sincronizarUsuarioHeader() {
+            const sesion = await sincronizarSesionServidor(authUser || null);
+            if (!activo) return;
+
+            if (sesion.baneado) {
+                alert('Tu cuenta fue baneada. No tienes acceso al sitio.');
+                await signOut(auth).catch(() => {});
+                setUsuario(null);
+                router.push('/login');
+                return;
             }
-            return false;
-        };
 
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-            if (currentUser) {
-                const baneado = await verificarBaneo(currentUser);
-                if (!baneado) {
-                    let esAdmin = false;
-                    try {
-                        const tokenResult = await currentUser.getIdTokenResult(true).catch(() => null);
-                        esAdmin = tokenResult?.claims?.rol === 'admin' || tokenResult?.claims?.role === 'admin';
-
-                        if (!esAdmin) {
-                            const qUser = query(collection(db, 'User'), where('Correo', '==', currentUser.email));
-                            const snapUser = await getDocs(qUser);
-                            if (!snapUser.empty) {
-                                const uData = snapUser.docs[0].data();
-                                if (Number(uData.ID_Rol) === 1 || (uData.Puesto || '').toLowerCase() === 'administrador') {
-                                    esAdmin = true;
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('Error resolviendo rol de usuario:', e);
+            if (sesion.authenticated) {
+                const rolAutoritativo = sesion.rol || 'usuario';
+                const esAdmin = rolAutoritativo === 'admin';
+                const baseUser = authUser || { uid: sesion.uid, email: sesion.email || '' };
+                const enriched = {
+                    ...baseUser,
+                    esAdmin,
+                    app_metadata: {
+                        rol:
+                            rolAutoritativo === 'admin'
+                                ? 'admin'
+                                : rolAutoritativo === 'empleado'
+                                ? 'empleado'
+                                : 'authenticated'
                     }
-
-                    const enriched = {
-                        ...currentUser,
-                        esAdmin,
-                        app_metadata: { rol: esAdmin ? 'admin' : 'authenticated' }
-                    };
-                    setUsuario(enriched);
-                } else {
-                    setUsuario(null);
-                }
+                };
+                setUsuario(enriched);
             } else {
                 setUsuario(null);
             }
-        });
+        }
 
-        return () => unsubscribe();
-    }, [router]);
+        sincronizarUsuarioHeader();
+        return () => { activo = false; };
+    }, [authUser, authLoading, router]);
 
     const handleClickPerfil = () => {
         if (sesionActiva) {
@@ -231,6 +215,8 @@ function Headerv2 () {
     }
 
     const handleCerrarSesion = async () => {
+        limpiarCarritoLocal();
+        await fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {});
         await signOut(auth);
         setUsuario(null);
         router.push('/login');
@@ -284,13 +270,14 @@ function Headerv2 () {
                     <img src="/ICONOS/Person.png" alt="Perfil" className="profileicon"/>
                 </button>
 
-                <a href="/favoritos">
+                <Link href="/favoritos" className="contenedor-favoritos">
                     <img src="/ICONOS/Heart.png" alt="Favoritos" className="hearticon"/>
-                </a>
+                </Link>
 
-                <a href="/carrito" className='contenedor-carrito'>
+                <Link href="/carrito" className='contenedor-carrito'>
                     <img src="/ICONOS/Shopping Cart.png" alt="Carrito" className="carritoicon"/>
-                </a>
+                    {totalItems > 0 && <span className="nav-badge">{totalItems}</span>}
+                </Link>
 
                 </div>
         </nav>
@@ -348,7 +335,7 @@ function Headerv2 () {
                 abierto={perfilAbierto}
                 usuario={usuario}
                 onClose={() => setPerfilAbierto(false)}
-                onSesionCerrada={() => setUsuario(null)}
+                onSesionCerrada={() => { setUsuario(null); limpiarCarritoLocal(); }}
             />
 
                 {/* en el operador ternario no comparamos nada, solo con preguntar si categoriaActiva tiene un valor verdadero (no es null). Si es cualquier string vacio lo toma como true  */}

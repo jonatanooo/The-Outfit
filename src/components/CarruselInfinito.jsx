@@ -188,12 +188,12 @@ function CarruselInfinito({ idProducto }) {
 
                     <button
                         type="button"
-                        className={`anadircesta ${(!tallaSeleccionada || tallas.length === 0) ? 'boton-inactivo' : ''}`}
-                        disabled={!tallaSeleccionada || tallas.length === 0}
+                        className={`anadircesta ${(!tallaSeleccionada || !tallaActiva?.disponible || tallas.length === 0) ? 'boton-inactivo' : ''}`}
+                        disabled={!tallaSeleccionada || !tallaActiva?.disponible || tallas.length === 0}
                         onClick={() => {
                             if (!tallaSeleccionada || tallas.length === 0) return;
                             const talla = tallas.find((t) => t.idVariante === tallaSeleccionada);
-                            if (!talla) return;
+                            if (!talla || !talla.disponible) return;
 
                             const precioBaseItem = Number(talla.precioOriginal ?? producto.precioOriginal ?? producto.precio ?? 0);
                             const porcentajeItem = Number(talla.porcentajeDescuento || producto.porcentajeDescuento || 0);

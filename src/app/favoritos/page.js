@@ -11,7 +11,7 @@ import { useCarrito } from '@/lib/CarritoContext'
 import './favoritos.css'
 
 function obtenerVariantes(variantes) {
-  const activas = (variantes ?? []).filter((v) => (v.ID_EstadoProducto ?? 1) === 1);
+  const activas = (variantes ?? []).filter((v) => Number(v.ID_EstadoProducto ?? 1) === 1);
   const porTalla = new Map();
 
   for (const v of activas) {
@@ -182,7 +182,7 @@ export default function FavoritosPage() {
               Variante_Producto: variantesPorProducto[pid] || variantesPorProducto[String(pid)] || []
             };
           })
-          .filter((p) => pidsFavoritos.has(String(p.ID_Producto)))
+          .filter((p) => pidsFavoritos.has(String(p.ID_Producto)) && Number(p.ID_EstadoProducto ?? 1) === 1)
           .map((p) => {
             const variantes = obtenerVariantes(p.Variante_Producto);
             const hayStock = variantes.some((v) => v.stock > 0);

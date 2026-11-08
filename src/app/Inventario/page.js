@@ -23,6 +23,7 @@ import {
     limit
 } from 'firebase/firestore';
 import { obtenerIdUsuario, verificarAccesoServidor } from '@/lib/usuario';
+import { useAuth } from '@/lib/AuthContext';
 import { esOfertaActiva, esOfertaVigente, calcularPrecioConDescuento } from '@/lib/descuentos';
 import './AdminInventario.css';
 
@@ -295,6 +296,7 @@ function obtenerEstiloBadgeTemporada(nombre = '', colorBadge = null) {
 
 function AdminInventario() {
     const router = useRouter();
+    const { loading: authLoading } = useAuth();
     const [verificandoAcceso, setVerificandoAcceso] = useState(true);
     // ---------- ESTADOS DE LA TABLA PRINCIPAL ----------
     const [filtroActivo, setFiltroActivo] = useState('todos'); // 'activos' | 'inactivos' | 'bajo' | 'sinstock'
@@ -694,25 +696,25 @@ function AdminInventario() {
 
     // ---------- VERIFICACIÓN DE SESIÓN/ROL EN SERVIDOR Y CARGA INICIAL ----------
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                router.replace('/login');
-                return;
-            }
+        if (authLoading) return;
 
+        let activo = true;
+        async function verificar() {
             const acceso = await verificarAccesoServidor('admin');
+            if (!activo) return;
             if (!acceso.autorizado) {
-                router.replace('/');
+                router.replace(acceso.rol === 'anonimo' ? '/login' : '/');
                 return;
             }
 
             setVerificandoAcceso(false);
             cargarVariantes();
             cargarTemporadas();
-        });
+        }
 
-        return () => unsubscribe();
-    }, [router]);
+        verificar();
+        return () => { activo = false; };
+    }, [authLoading, router]);
 
     useEffect(() => {
         if (verificandoAcceso) return;
@@ -1249,57 +1251,110 @@ function AdminInventario() {
         }
     }
 
-    // Activa o desactiva un producto (variante) y registra en Auditoria_CambioEstado_Producto
+    // Activa o desactiva un producto base (en cascada sobre todas sus variantes hijas)
+    // o una variante individual (talla) sin afectar al producto base ni a las demás tallas,
+    // y registra el cambio en Auditoria_CambioEstado_Producto.
     async function alternarEstadoProducto(v) {
         const inactivoAhora = esVarianteInactiva(v);
         const estadoAnterior = Number(v.ID_EstadoProducto ?? (inactivoAhora ? 2 : 1));
         const nuevoEstado = inactivoAhora ? 1 : (idEstadoInactivo ?? 2);
+        const esBase = Boolean(v.esProductoBase || !v.ID_Talla);
+        const idProd = v.ID_Producto ?? v.ID_Variante;
 
         try {
-            // 1. Actualizar el estado de la variante
-            await actualizarDocPorId('Variante_Producto', 'ID_Variante', v.ID_Variante, {
-                ID_EstadoProducto: nuevoEstado
-            });
+            if (esBase) {
+                // 1A. Desactivación / Activación en Cascada desde el Producto Base:
+                // Actualiza ID_EstadoProducto en Productos y en TODAS sus variantes vinculadas en Variante_Producto
+                await actualizarDocPorId('Productos', 'ID_Producto', idProd, {
+                    ID_EstadoProducto: nuevoEstado
+                });
 
-            // 2. Actualizar el estado del producto padre solo si todas las variantes quedan inactivas, o si se está activando
-            if (v.ID_Producto) {
-                const hermanas = variantes.filter(
-                    (item) =>
-                        String(item.ID_Producto) === String(v.ID_Producto) &&
-                        String(item.ID_Variante) !== String(v.ID_Variante)
+                const candidatosProd = Array.from(
+                    new Set([idProd, String(idProd), !isNaN(Number(idProd)) ? Number(idProd) : null].filter((x) => x != null))
                 );
-                const algunaHermanaActiva = hermanas.some((h) => !esVarianteInactiva(h));
-                const estadoProductoPadre = nuevoEstado === 1 ? 1 : (algunaHermanaActiva ? 1 : nuevoEstado);
+                const snapVariantesHijas = await getDocs(
+                    query(collection(db, 'Variante_Producto'), where('ID_Producto', 'in', candidatosProd))
+                );
 
-                await actualizarDocPorId('Productos', 'ID_Producto', v.ID_Producto, {
-                    ID_EstadoProducto: estadoProductoPadre
+                const promesasVariantes = snapVariantesHijas.docs
+                    .filter((d) => !esDocPlantilla(d))
+                    .map((d) => updateDoc(d.ref, { ID_EstadoProducto: nuevoEstado }));
+
+                if (promesasVariantes.length > 0) {
+                    await Promise.all(promesasVariantes);
+                }
+
+                // Registrar en Auditoria_CambioEstado_Producto con ID_Auditoria entero
+                try {
+                    const idUserAccionRaw = await obtenerIdUsuario();
+                    const idUserAccion = !isNaN(Number(idUserAccionRaw)) ? Number(idUserAccionRaw) : idUserAccionRaw;
+                    const idAuditEstado = await generarSiguienteIdNumerico('Auditoria_CambioEstado_Producto', 'ID_Auditoria', 1);
+                    const idProdNum = !isNaN(Number(idProd)) ? Number(idProd) : idProd;
+
+                    await setDoc(doc(db, 'Auditoria_CambioEstado_Producto', String(idAuditEstado)), {
+                        ID_Auditoria: idAuditEstado,
+                        ID_Producto: idProdNum,
+                        ID_UserAccion: idUserAccion,
+                        ID_EstadoAnterior: estadoAnterior,
+                        ID_EstadoNuevo: nuevoEstado,
+                        Fecha: new Date().toISOString()
+                    });
+                } catch (errAudit) {
+                    console.error('Error guardando Auditoria_CambioEstado_Producto:', errAudit);
+                }
+
+                // Actualizar estado local en cascada (Producto Base + todas sus tallas hijas)
+                setVariantes((prev) =>
+                    prev.map((item) => {
+                        if (String(item.ID_Producto) === String(idProd)) {
+                            return {
+                                ...item,
+                                ID_EstadoProducto: nuevoEstado,
+                                Productos: item.Productos
+                                    ? { ...item.Productos, ID_EstadoProducto: nuevoEstado }
+                                    : item.Productos
+                            };
+                        }
+                        return item;
+                    })
+                );
+            } else {
+                // 1B. Desactivación / Activación Individual por Talla (Variante):
+                // Modifica ÚNICAMENTE el ID_EstadoProducto de este ID_Variante sin afectar al Producto Base ni a las demás tallas
+                await actualizarDocPorId('Variante_Producto', 'ID_Variante', v.ID_Variante, {
+                    ID_EstadoProducto: nuevoEstado
                 });
-            }
 
-            // 3. Registrar en Auditoria_CambioEstado_Producto
-            try {
-                const idUserAccion = await obtenerIdUsuario();
-                const idAuditEstado = doc(collection(db, 'Auditoria_CambioEstado_Producto')).id;
-                await setDoc(doc(db, 'Auditoria_CambioEstado_Producto', idAuditEstado), {
-                    ID_Auditoria: idAuditEstado,
-                    ID_Producto: v.ID_Producto ?? null,
-                    ID_Variante: v.ID_Variante,
-                    ID_UserAccion: idUserAccion,
-                    ID_EstadoAnterior: estadoAnterior,
-                    ID_EstadoNuevo: nuevoEstado,
-                    Fecha: new Date().toISOString()
-                });
-            } catch (errAudit) {
-                console.error('Error guardando Auditoria_CambioEstado_Producto:', errAudit);
-            }
+                // Registrar en Auditoria_CambioEstado_Producto con ID_Auditoria entero
+                try {
+                    const idUserAccionRaw = await obtenerIdUsuario();
+                    const idUserAccion = !isNaN(Number(idUserAccionRaw)) ? Number(idUserAccionRaw) : idUserAccionRaw;
+                    const idAuditEstado = await generarSiguienteIdNumerico('Auditoria_CambioEstado_Producto', 'ID_Auditoria', 1);
+                    const idProdNum = v.ID_Producto != null && !isNaN(Number(v.ID_Producto)) ? Number(v.ID_Producto) : (v.ID_Producto ?? null);
+                    const idVarNum = !isNaN(Number(v.ID_Variante)) ? Number(v.ID_Variante) : v.ID_Variante;
 
-            setVariantes((prev) => 
-                prev.map((item) => 
-                    item.ID_Variante === v.ID_Variante 
-                        ? { ...item, ID_EstadoProducto: nuevoEstado } 
-                        : item
-                )
-            );
+                    await setDoc(doc(db, 'Auditoria_CambioEstado_Producto', String(idAuditEstado)), {
+                        ID_Auditoria: idAuditEstado,
+                        ID_Producto: idProdNum,
+                        ID_Variante: idVarNum,
+                        ID_UserAccion: idUserAccion,
+                        ID_EstadoAnterior: estadoAnterior,
+                        ID_EstadoNuevo: nuevoEstado,
+                        Fecha: new Date().toISOString()
+                    });
+                } catch (errAudit) {
+                    console.error('Error guardando Auditoria_CambioEstado_Producto:', errAudit);
+                }
+
+                // Actualizar estado local únicamente de esta variante específica
+                setVariantes((prev) =>
+                    prev.map((item) =>
+                        !item.esProductoBase && String(item.ID_Variante) === String(v.ID_Variante)
+                            ? { ...item, ID_EstadoProducto: nuevoEstado }
+                            : item
+                    )
+                );
+            }
         } catch (err) {
             console.error('Error al cambiar el estado del producto:', err);
             alert('Hubo un error al intentar cambiar el estado del producto.');
@@ -2876,7 +2931,11 @@ function AdminInventario() {
                                                 </button>
                                                 <button 
                                                     type="button" 
-                                                    title="Desactivar producto (mover a Prendas desactivadas)" 
+                                                    title={
+                                                        esBase
+                                                            ? "Desactivar Producto Base y todas sus tallas en cascada"
+                                                            : `Desactivar únicamente la talla ${v.Talla?.Tipos_Talla?.Nombre_TipoTalla || v.Talla?.Nombre_TipoTalla || v.ID_Talla}`
+                                                    } 
                                                     onClick={() => alternarEstadoProducto(v)}
                                                     className="btn-accion-tabla"
                                                 >
@@ -3103,7 +3162,11 @@ function AdminInventario() {
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            title="Volver a activar prenda"
+                                                            title={
+                                                                esBase
+                                                                    ? "Activar Producto Base y todas sus tallas en cascada"
+                                                                    : `Activar únicamente la talla ${v.Talla?.Tipos_Talla?.Nombre_TipoTalla || v.Talla?.Nombre_TipoTalla || v.ID_Talla}`
+                                                            }
                                                             onClick={() => alternarEstadoProducto(v)}
                                                             style={{
                                                                 display: 'inline-flex',
@@ -3120,7 +3183,7 @@ function AdminInventario() {
                                                                 whiteSpace: 'nowrap'
                                                             }}
                                                         >
-                                                            <span>👁️</span> Activar
+                                                            <span>👁️</span> {esBase ? 'Activar Todo' : 'Activar Talla'}
                                                         </button>
                                                     </div>
                                                 </td>
