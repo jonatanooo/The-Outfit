@@ -8,9 +8,9 @@ import { getStorage } from 'firebase/storage';
  */
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'the-outfit-2480c.firebaseapp.com',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'the-outfit-2480c',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'the-outfit-2480c.firebasestorage.app',
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'the-outfit-b0003.firebaseapp.com',
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'the-outfit-b0003',
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'the-outfit-b0003.firebasestorage.app',
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
@@ -42,15 +42,6 @@ function obtenerAuthSeguro() {
   return _authInstance || /** @type {any} */ ({});
 }
 
-export const auth = new Proxy(
-  {},
-  {
-    get(_target, prop) {
-      const instancia = obtenerAuthSeguro();
-      const val = instancia[prop];
-      return typeof val === 'function' ? val.bind(instancia) : val;
-    },
-  }
-);
+export const auth = obtenerAuthSeguro();
 
 export const storage = getStorage(app);
