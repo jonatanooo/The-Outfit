@@ -1,4 +1,5 @@
 import { auth, db } from './firebaseClient';
+import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 function esDocPlantillaUser(docSnap) {
@@ -51,8 +52,91 @@ export function separarDisplayName(displayName = '', fallbackEmail = '') {
 }
 
 /**
+ * Espera a que Firebase Auth termine de restaurar la sesión local en el navegador.
+ */
+async function obtenerUsuarioFirebaseActual(userOverride = null) {
+  if (userOverride) return userOverride;
+  try {
+    if (typeof auth.authStateReady === 'function') {
+      await auth.authStateReady();
+    }
+  } catch {
+    // ignorar
+  }
+  if (auth.currentUser) return auth.currentUser;
+
+  return new Promise((resolve) => {
+    let resuelto = false;
+    const timer = setTimeout(() => {
+      if (!resuelto) {
+        resuelto = true;
+        resolve(auth.currentUser || null);
+      }
+    }, 1200);
+
+    try {
+      const unsub = onAuthStateChanged(
+        auth,
+        (u) => {
+          if (!resuelto) {
+            resuelto = true;
+            clearTimeout(timer);
+            unsub();
+            resolve(u || null);
+          }
+        },
+        () => {
+          if (!resuelto) {
+            resuelto = true;
+            clearTimeout(timer);
+            resolve(auth.currentUser || null);
+          }
+        }
+      );
+    } catch {
+      clearTimeout(timer);
+      resolve(auth.currentUser || null);
+    }
+  });
+}
+
+/**
+ * Determina la prioridad de privilegio de un documento User (1 = Admin, 2 = Empleado, 3 = Cliente).
+ */
+function calcularPrioridadRolDoc(data) {
+  if (!data) return 3;
+  const idRol = Number(data.ID_Rol);
+  const puesto = String(data.Puesto || '').trim().toLowerCase();
+  const rolCampo = String(data.Rol || '').trim().toLowerCase();
+
+  if (
+    idRol === 1 ||
+    puesto === 'admin' ||
+    puesto === 'administrador' ||
+    rolCampo === 'admin' ||
+    rolCampo === 'administrador'
+  ) {
+    return 1;
+  }
+
+  if (
+    idRol === 2 ||
+    data.Es_Empleado === true ||
+    data.Es_Empleado === 'true' ||
+    puesto === 'empleado' ||
+    rolCampo === 'empleado'
+  ) {
+    return 2;
+  }
+
+  return 3;
+}
+
+/**
  * Sincroniza o crea automáticamente el registro del usuario en la colección `User` de Firestore
  * (especialmente al iniciar sesión con Google por primera vez o vincular un correo existente).
+ * Si existen múltiples documentos asociados al mismo UID o Correo, consolida el rol de mayor privilegio
+ * (Administrador / Empleado) para garantizar acceso inmediato al Panel de Administración.
  */
 export async function sincronizarOCrearUsuarioEnFirestore(firebaseUser) {
   if (!firebaseUser || !firebaseUser.uid) return null;
@@ -63,42 +147,88 @@ export async function sincronizarOCrearUsuarioEnFirestore(firebaseUser) {
   const candidatosCorreo = Array.from(new Set([emailRaw, emailLower].filter(Boolean)));
 
   try {
+    const docsEncontradosMap = new Map();
+
     // 1. Buscar por Document ID directo === uid
     const directRef = doc(db, 'User', uid);
     const directSnap = await getDoc(directRef);
     if (directSnap.exists() && !esDocPlantillaUser(directSnap)) {
-      const data = directSnap.data();
-      if (!data.auth_id) {
-        await updateDoc(directRef, { auth_id: uid }).catch(() => {});
-      }
-      return { ...data, auth_id: uid, _docId: directSnap.id };
+      docsEncontradosMap.set(directSnap.id, {
+        ref: directRef,
+        id: directSnap.id,
+        data: directSnap.data(),
+      });
     }
 
     // 2. Buscar por auth_id === uid
     const snapAuth = await getDocs(
       query(collection(db, 'User'), where('auth_id', '==', uid))
     );
-    const docsAuth = snapAuth.docs.filter((d) => !esDocPlantillaUser(d));
-    if (docsAuth.length > 0) {
-      const d = docsAuth[0];
-      return { ...d.data(), _docId: d.id };
-    }
+    snapAuth.docs.forEach((d) => {
+      if (!esDocPlantillaUser(d) && !docsEncontradosMap.has(d.id)) {
+        docsEncontradosMap.set(d.id, { ref: d.ref, id: d.id, data: d.data() });
+      }
+    });
 
     // 3. Buscar por Correo (exacto o en minúsculas)
     if (candidatosCorreo.length > 0) {
       const snapEmail = await getDocs(
         query(collection(db, 'User'), where('Correo', 'in', candidatosCorreo))
       );
-      const docsEmail = snapEmail.docs.filter((d) => !esDocPlantillaUser(d));
-      if (docsEmail.length > 0) {
-        const docEncontrado = docsEmail[0];
-        const data = docEncontrado.data();
-        // Vincular su auth_id si aún no lo tenía o actualizarlo al uid autenticado de Google
-        if (data.auth_id !== uid) {
-          await updateDoc(docEncontrado.ref, { auth_id: uid }).catch(() => {});
+      snapEmail.docs.forEach((d) => {
+        if (!esDocPlantillaUser(d) && !docsEncontradosMap.has(d.id)) {
+          docsEncontradosMap.set(d.id, { ref: d.ref, id: d.id, data: d.data() });
         }
-        return { ...data, auth_id: uid, _docId: docEncontrado.id };
+      });
+    }
+
+    const listaCoincidencias = Array.from(docsEncontradosMap.values());
+
+    if (listaCoincidencias.length > 0) {
+      // Ordenar para elegir el documento con mayor privilegio (Admin = 1, Empleado = 2, Cliente = 3)
+      listaCoincidencias.sort(
+        (a, b) => calcularPrioridadRolDoc(a.data) - calcularPrioridadRolDoc(b.data)
+      );
+
+      const mejorDoc = listaCoincidencias[0];
+      const mejorPrioridad = calcularPrioridadRolDoc(mejorDoc.data);
+      const mejorData = { ...mejorDoc.data };
+
+      const camposSync = {};
+      if (mejorData.auth_id !== uid) {
+        camposSync.auth_id = uid;
+        mejorData.auth_id = uid;
       }
+      if (mejorPrioridad === 1 && Number(mejorData.ID_Rol) !== 1) {
+        camposSync.ID_Rol = 1;
+        camposSync.Es_Empleado = true;
+        mejorData.ID_Rol = 1;
+        mejorData.Es_Empleado = true;
+      } else if (mejorPrioridad === 2 && Number(mejorData.ID_Rol) !== 1 && Number(mejorData.ID_Rol) !== 2) {
+        camposSync.ID_Rol = 2;
+        camposSync.Es_Empleado = true;
+        mejorData.ID_Rol = 2;
+        mejorData.Es_Empleado = true;
+      }
+
+      if (Object.keys(camposSync).length > 0) {
+        await updateDoc(mejorDoc.ref, camposSync).catch(() => {});
+      }
+
+      // Si había otros documentos duplicados para el mismo usuario, sincronizarles el mismo rol
+      if (listaCoincidencias.length > 1 && (mejorPrioridad === 1 || mejorPrioridad === 2)) {
+        for (let i = 1; i < listaCoincidencias.length; i++) {
+          const otro = listaCoincidencias[i];
+          await updateDoc(otro.ref, {
+            auth_id: uid,
+            ID_Rol: mejorPrioridad,
+            Es_Empleado: true,
+            Puesto: mejorPrioridad === 1 ? 'Administrador' : 'Empleado',
+          }).catch(() => {});
+        }
+      }
+
+      return { ...mejorData, _docId: mejorDoc.id };
     }
 
     // 4. Primera vez que entra con Google (No existe en User) -> Crear automáticamente
@@ -147,6 +277,58 @@ export async function sincronizarOCrearUsuarioEnFirestore(firebaseUser) {
 }
 
 /**
+ * Determina si un documento de la colección `User` pertenece a la lista de Empleados/Administradores.
+ */
+export function esRegistroEmpleadoOAdmin(userData) {
+  if (!userData) return false;
+  const idRol = Number(userData.ID_Rol);
+  const puesto = String(userData.Puesto || '').trim().toLowerCase();
+  const rolCampo = String(userData.Rol || '').trim().toLowerCase();
+  return (
+    idRol === 1 ||
+    idRol === 2 ||
+    userData.Es_Empleado === true ||
+    puesto === 'admin' ||
+    puesto === 'administrador' ||
+    puesto === 'empleado' ||
+    rolCampo === 'admin' ||
+    rolCampo === 'administrador' ||
+    rolCampo === 'empleado'
+  );
+}
+
+/**
+ * Calcula el identificador de rol normalizado ('admin' | 'empleado' | 'usuario') a partir del documento `User`.
+ */
+export function obtenerRolDesdeUserDoc(userData) {
+  if (!userData) return 'usuario';
+  const idRol = Number(userData.ID_Rol);
+  const puesto = String(userData.Puesto || '').trim().toLowerCase();
+  const rolCampo = String(userData.Rol || '').trim().toLowerCase();
+
+  if (
+    idRol === 1 ||
+    puesto === 'admin' ||
+    puesto === 'administrador' ||
+    rolCampo === 'admin' ||
+    rolCampo === 'administrador'
+  ) {
+    return 'admin';
+  }
+
+  if (
+    idRol === 2 ||
+    userData.Es_Empleado === true ||
+    puesto === 'empleado' ||
+    rolCampo === 'empleado'
+  ) {
+    return 'empleado';
+  }
+
+  return 'usuario';
+}
+
+/**
  * Resuelve en Firestore los datos de rol y estado de un usuario autenticado en Firebase Auth.
  */
 async function resolverDatosUsuarioFirestore(user) {
@@ -167,30 +349,7 @@ async function resolverDatosUsuarioFirestore(user) {
 
   const estadoNum = userData ? Number(userData.ID_EstadoUsuario) : 1;
   const baneado = Boolean(userData && (estadoNum === 2 || estadoNum === 3));
-
-  let rol = 'usuario';
-  if (userData) {
-    const puesto = String(userData.Puesto || '').trim().toLowerCase();
-    const rolCampo = String(userData.Rol || '').trim().toLowerCase();
-    const idRol = Number(userData.ID_Rol);
-
-    if (
-      idRol === 1 ||
-      puesto === 'admin' ||
-      puesto === 'administrador' ||
-      rolCampo === 'admin' ||
-      rolCampo === 'administrador'
-    ) {
-      rol = 'admin';
-    } else if (
-      idRol === 2 ||
-      userData.Es_Empleado === true ||
-      puesto === 'empleado' ||
-      rolCampo === 'empleado'
-    ) {
-      rol = 'empleado';
-    }
-  }
+  const rol = obtenerRolDesdeUserDoc(userData);
 
   return {
     idUser: userData?.ID_User ?? docId ?? user.uid,
@@ -210,17 +369,35 @@ async function resolverDatosUsuarioFirestore(user) {
  */
 export async function sincronizarSesionServidor(userOverride = null) {
   try {
-    if (!userOverride && typeof auth.authStateReady === 'function') {
-      await auth.authStateReady();
-    }
-    const user = userOverride || auth.currentUser;
+    const user = await obtenerUsuarioFirebaseActual(userOverride);
     if (!user) {
       // Consultar si ya existe cookie de sesión válida antes de invalidar
       try {
         const resGet = await fetch('/api/auth/session', { method: 'GET' });
         if (resGet.ok) {
           const dataGet = await resGet.json().catch(() => null);
-          if (dataGet?.authenticated) {
+          if (dataGet?.authenticated && dataGet?.uid) {
+            // Verificar el rol en tiempo real contra Firestore usando el uid/email de la cookie
+            const userDocFromCookie = await sincronizarOCrearUsuarioEnFirestore({
+              uid: dataGet.uid,
+              email: dataGet.email || '',
+            });
+            if (userDocFromCookie) {
+              const estadoCookie = Number(userDocFromCookie.ID_EstadoUsuario ?? 1);
+              if (estadoCookie === 2 || estadoCookie === 3) {
+                return { authenticated: false, baneado: true, rol: 'baneado' };
+              }
+              const rolReal = obtenerRolDesdeUserDoc(userDocFromCookie);
+              return {
+                ...dataGet,
+                rol: rolReal,
+                idUser: userDocFromCookie.ID_User ?? dataGet.idUser,
+                idRol:
+                  userDocFromCookie.ID_Rol ??
+                  (rolReal === 'admin' ? 1 : rolReal === 'empleado' ? 2 : 3),
+                userData: userDocFromCookie,
+              };
+            }
             return dataGet;
           }
         }
@@ -233,8 +410,18 @@ export async function sincronizarSesionServidor(userOverride = null) {
     // Sincronizar o crear automáticamente el documento del usuario en la colección User
     // antes de notificar al servidor para garantizar que ya tenga su ID_User entero secuencial
     const userDocSincronizado = await sincronizarOCrearUsuarioEnFirestore(user);
+    const estadoLocal = userDocSincronizado ? Number(userDocSincronizado.ID_EstadoUsuario ?? 1) : 1;
+    if (estadoLocal === 2 || estadoLocal === 3) {
+      return {
+        authenticated: false,
+        baneado: true,
+        rol: 'baneado',
+      };
+    }
 
-    const idToken = await user.getIdToken(true);
+    const rolFirestore = userDocSincronizado ? obtenerRolDesdeUserDoc(userDocSincronizado) : null;
+
+    const idToken = await user.getIdToken();
     try {
       const res = await fetch('/api/auth/session', {
         method: 'POST',
@@ -242,7 +429,11 @@ export async function sincronizarSesionServidor(userOverride = null) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify({ idToken }),
+        body: JSON.stringify({
+          idToken,
+          rolClient: rolFirestore,
+          idUserClient: userDocSincronizado?.ID_User,
+        }),
       });
 
       const data = await res.json().catch(() => null);
@@ -255,10 +446,15 @@ export async function sincronizarSesionServidor(userOverride = null) {
       }
 
       if (res.ok && data?.authenticated) {
+        const rolEfectivo = rolFirestore || data.rol || 'usuario';
         return {
           ...data,
+          rol: rolEfectivo,
           idUser: userDocSincronizado?.ID_User ?? data.idUser,
-          idRol: userDocSincronizado?.ID_Rol ?? data.idRol ?? (data.rol === 'admin' ? 1 : data.rol === 'empleado' ? 2 : 3),
+          idRol:
+            userDocSincronizado?.ID_Rol ??
+            data.idRol ??
+            (rolEfectivo === 'admin' ? 1 : rolEfectivo === 'empleado' ? 2 : 3),
           userData: userDocSincronizado || null,
         };
       }
@@ -292,43 +488,47 @@ export async function sincronizarSesionServidor(userOverride = null) {
 }
 
 /**
- * Verifica la sesión y el rol del usuario contra el servidor (/api/auth/session) y Firestore.
+ * Verifica la sesión y el rol del usuario contra el servidor (/api/auth/session) y la colección `User` en Firestore.
+ * Solo los usuarios que pertenecen a la lista de Empleados (`ID_Rol` administrativo/empleado o `Es_Empleado == true`)
+ * tienen permiso para ver y navegar por el Panel de Administrador.
  *
  * @param {'admin' | 'empleado' | 'autenticado'} rolRequerido
- * @returns {Promise<{autorizado: boolean, rol: string, uid: string|null, idUser: any}>}
+ * @returns {Promise<{autorizado: boolean, rol: string, idRol: number|null, uid: string|null, idUser: any}>}
  */
 export async function verificarAccesoServidor(rolRequerido = 'admin') {
   try {
-    if (typeof auth.authStateReady === 'function') {
-      await auth.authStateReady();
-    }
-
-    const user = auth.currentUser;
+    const user = await obtenerUsuarioFirebaseActual();
     const sesion = await sincronizarSesionServidor(user || null);
     if (!sesion.authenticated || sesion.baneado) {
-      return { autorizado: false, rol: 'anonimo', uid: null, idUser: null };
+      return { autorizado: false, rol: 'anonimo', idRol: null, uid: null, idUser: null };
     }
 
     const rol = sesion.rol || 'usuario';
-    let autorizado = false;
+    const idRol = Number(sesion.idRol ?? (rol === 'admin' ? 1 : rol === 'empleado' ? 2 : 3));
+    const perteneceAEmpleados =
+      rol === 'admin' ||
+      rol === 'empleado' ||
+      idRol === 1 ||
+      idRol === 2 ||
+      esRegistroEmpleadoOAdmin(sesion.userData);
 
-    if (rolRequerido === 'admin') {
-      autorizado = rol === 'admin';
-    } else if (rolRequerido === 'empleado') {
-      autorizado = rol === 'empleado' || rol === 'admin';
+    let autorizado = false;
+    if (rolRequerido === 'admin' || rolRequerido === 'empleado') {
+      autorizado = perteneceAEmpleados;
     } else {
       autorizado = true;
     }
 
     return {
       autorizado,
-      rol,
+      rol: perteneceAEmpleados ? (idRol === 1 || rol === 'admin' ? 'admin' : 'empleado') : 'usuario',
+      idRol,
       uid: sesion.uid || user?.uid || null,
       idUser: sesion.idUser ?? null,
     };
   } catch (error) {
     console.error('Error verificando acceso en el servidor:', error);
-    return { autorizado: false, rol: 'anonimo', uid: null, idUser: null };
+    return { autorizado: false, rol: 'anonimo', idRol: null, uid: null, idUser: null };
   }
 }
 

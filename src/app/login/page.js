@@ -139,10 +139,8 @@ export default function LoginPage() {
       await user.getIdToken(true).catch(() => {});
       await refrescarPerfilAuth(user);
 
-      if (sesionServidor.rol === 'admin') {
+      if (sesionServidor.rol === 'admin' || sesionServidor.rol === 'empleado') {
         router.push('/admin');
-      } else if (sesionServidor.rol === 'empleado') {
-        router.push('/empleado');
       } else {
         router.push('/');
       }
@@ -210,14 +208,18 @@ export default function LoginPage() {
 
       await refrescarPerfilAuth(googleUser);
 
-      // Determinar redirección según su rol (ID_Rol === 1 o rol === 'admin' -> panel admin)
+      // Determinar redirección según su rol (ID_Rol === 1 o 2 / Es_Empleado -> panel admin)
       const idRolNum = Number(perfilUser?.ID_Rol ?? sesion?.idRol ?? 3);
       const rolEfectivo = sesion?.rol || (idRolNum === 1 ? 'admin' : idRolNum === 2 ? 'empleado' : 'usuario');
 
-      if (rolEfectivo === 'admin' || idRolNum === 1) {
+      if (
+        rolEfectivo === 'admin' ||
+        rolEfectivo === 'empleado' ||
+        idRolNum === 1 ||
+        idRolNum === 2 ||
+        perfilUser?.Es_Empleado === true
+      ) {
         router.push('/admin');
-      } else if (rolEfectivo === 'empleado' || idRolNum === 2) {
-        router.push('/empleado');
       } else {
         router.push('/');
       }

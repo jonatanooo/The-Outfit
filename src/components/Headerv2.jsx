@@ -19,13 +19,19 @@ function Headerv2 () {
     const [scrolled, setScrolled] = useState(false)
     const [menuAbierto, setMenuAbierto] = useState(false)
     const { totalItems, limpiarCarritoLocal } = useCarrito();
-    const { user: authUser, loading: authLoading } = useAuth();
+    const { user: authUser, userProfile, esAdminOEmpleado, loading: authLoading } = useAuth();
     const [buscadorAbierto, setBuscadorAbierto] = useState(false)
     const [usuario, setUsuario] = useState(null)
     const [perfilAbierto, setPerfilAbierto] = useState(false)
     const perfilPanelRef = useRef(null)
     const router = useRouter();
-    const sesionActiva = !!usuario
+    const usuarioActivo = usuario || (authUser ? { ...authUser, ...(userProfile || {}) } : null)
+    const sesionActiva = Boolean(usuarioActivo)
+    const mostrarBotonAdmin = Boolean(
+        esAdminOEmpleado ||
+        usuario?.app_metadata?.rol === 'admin' ||
+        usuario?.app_metadata?.rol === 'empleado'
+    )
     const [categorias, setCategorias] = useState([
         {
             id: 'mujer',
@@ -251,10 +257,8 @@ function Headerv2 () {
                     >
                         <img src="/ICONOS/Search.png" alt="Buscar" className="searchicon"/>
                     </button>
-                {/* En el proyecto solo hay 2 roles con panel propio: admin y empleado.
-                    Este acceso rapido solo se muestra para admin (empleado ya tiene su
-                    propio panel en /empleado). */}
-                {usuario?.app_metadata?.rol === 'admin' && (
+                {/* Acceso al Panel de Administración para usuarios que pertenecen a la lista de Empleados (Admin o Empleado) */}
+                {mostrarBotonAdmin && (
                     <Link href="/Inventario" className="btn-admin">
                         ADMIN
                     </Link>
@@ -333,7 +337,7 @@ function Headerv2 () {
             <PerfilPanel
                 ref={perfilPanelRef}
                 abierto={perfilAbierto}
-                usuario={usuario}
+                usuario={usuarioActivo}
                 onClose={() => setPerfilAbierto(false)}
                 onSesionCerrada={() => { setUsuario(null); limpiarCarritoLocal(); }}
             />

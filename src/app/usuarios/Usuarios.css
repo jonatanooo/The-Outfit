@@ -1,0 +1,494 @@
+.admin-layout {
+    display: flex;
+    min-height: 100vh;
+    background-color: #e4e0de;
+}
+
+.admin-content {
+    flex: 1;
+    padding: 32px;
+}
+
+.admin-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.admin-top h1 {
+    font-size: 1.8rem;
+    color: #0f0808;
+    margin: 0;
+}
+
+.btn-agregar {
+    background-color: #0f0808;
+    color: #ffffff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color 0.2s ease;
+}
+
+.btn-agregar:hover {
+    background-color: #333333;
+}
+
+/* ---------- Sistema de Pestañas (Tabs) ---------- */
+.usuarios-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #d1cbc7;
+    padding-bottom: 0;
+}
+
+.usuarios-tab-btn {
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #5c534f;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: -2px;
+    transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+    border-radius: 8px 8px 0 0;
+}
+
+.usuarios-tab-btn:hover {
+    color: #0f0808;
+    background-color: rgba(255, 255, 255, 0.45);
+}
+
+.usuarios-tab-btn.activa {
+    color: #0f0808;
+    border-bottom-color: #0f0808;
+    background-color: rgba(255, 255, 255, 0.75);
+}
+
+.usuarios-tab-count {
+    background-color: #ded8d4;
+    color: #2b2320;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.usuarios-tab-btn.activa .usuarios-tab-count {
+    background-color: #0f0808;
+    color: #ffffff;
+}
+
+.buscador {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid #160a0a;
+    background-color: #ffffff;
+    color: #0f0808;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 0.95rem;
+}
+
+.buscador:focus {
+    outline: none;
+    border-color: rgb(22, 13, 13);
+}
+
+.tabla-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tabla-productos {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: rgb(253, 252, 252);
+    color: #0f0808;
+}
+
+.tabla-productos th {
+    text-align: left;
+    padding: 14px 16px;
+    background-color: #ffffff;
+    font-size: 0.85rem;
+    color: #0f0808;
+    border-bottom: 1px solid #141010;
+    white-space: nowrap;
+}
+
+.tabla-productos td {
+    padding: 14px 16px;
+    border-bottom: 1px solid #eee;
+    font-size: 0.9rem;
+    vertical-align: middle;
+}
+
+.tabla-productos tr:last-child td {
+    border-bottom: none;
+}
+
+.usuarios-nombre-principal {
+    font-weight: 600;
+    color: #0f0808;
+}
+
+.usuarios-subtexto {
+    font-size: 0.78rem;
+    color: #777;
+    margin-top: 2px;
+}
+
+.empleados-correo,
+.empleados-secundario {
+    color: #555;
+}
+
+/* Badges de Rol */
+.rol-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.rol-badge.admin {
+    background-color: #ede9fe;
+    color: #5b21b6;
+    border: 1px solid #c4b5fd;
+}
+
+.rol-badge.empleado {
+    background-color: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #7dd3fc;
+}
+
+.rol-badge.cliente {
+    background-color: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+
+.empleados-activo {
+    color: #2e7d32;
+    font-weight: 600;
+}
+
+.empleados-inactivo {
+    color: #d32f2f;
+    font-weight: 600;
+}
+
+.empleados-acciones {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.btn-accion-editar {
+    background-color: #f3f1ef;
+    border: 1px solid #d2ccc8;
+    color: #0f0808;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background-color 0.15s ease;
+}
+
+.btn-accion-editar:hover {
+    background-color: #e4dfdc;
+}
+
+.btn-accion-estado {
+    background-color: #f9f8f8;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 6px 9px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.15s ease;
+}
+
+.btn-accion-estado:hover {
+    background-color: #ece9e7;
+}
+
+/* ---------- Modal ---------- */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(35, 30, 30, 0.48);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 300;
+    padding: 16px;
+}
+
+.modal-box {
+    background: rgb(250, 249, 249);
+    border-radius: 12px;
+    padding: 28px 32px;
+    width: 640px;
+    max-width: 96%;
+    max-height: 92vh;
+    overflow-y: auto;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+}
+
+.empleados-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e5e0dd;
+}
+
+.empleados-modal-header h2 {
+    font-size: 1.3rem;
+    color: #0f0808;
+    margin: 0;
+}
+
+.empleados-incorporacion {
+    color: #777;
+    font-size: 0.8rem;
+    margin: 4px 0 0;
+}
+
+.btn-cerrar-modal {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    color: #444;
+}
+
+.empleados-badge {
+    align-self: center;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.empleados-badge.activo {
+    background: #d7f0dc;
+    color: #1b6b30;
+}
+
+.empleados-badge.inactivo {
+    background: #f8d7da;
+    color: #a1272f;
+}
+
+.empleados-modal-body {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+}
+
+.empleados-modal-campos {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.campos-fila-doble {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.campo-grupo {
+    display: flex;
+    flex-direction: column;
+}
+
+.empleados-modal-campos label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #444;
+    margin-top: 12px;
+    margin-bottom: 4px;
+}
+
+.empleados-modal-campos input,
+.empleados-modal-campos select {
+    padding: 9px 11px;
+    border: 1px solid #c9c4c0;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #0f0808;
+    background-color: #ffffff;
+}
+
+.empleados-modal-campos input:focus,
+.empleados-modal-campos select:focus {
+    outline: none;
+    border-color: #0f0808;
+}
+
+/* Sección de Contraseña en el Modal */
+.seccion-password-modal {
+    margin-top: 18px;
+    padding: 14px;
+    background-color: #f3f0ee;
+    border: 1px solid #ded8d4;
+    border-radius: 8px;
+}
+
+.seccion-password-titulo {
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: #1f1715;
+    margin: 0 0 8px 0;
+}
+
+.password-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.password-input-row input {
+    flex: 1;
+}
+
+.btn-toggle-pwd {
+    background: #ffffff;
+    border: 1px solid #c9c4c0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    color: #333;
+}
+
+.btn-reset-email {
+    margin-top: 10px;
+    width: 100%;
+    background-color: #ffffff;
+    color: #0f0808;
+    border: 1px solid #0f0808;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.btn-reset-email:hover:not(:disabled) {
+    background-color: #ebe6e3;
+}
+
+.btn-reset-email:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.empleados-avatar {
+    width: 120px;
+    height: 120px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 12px;
+}
+
+.empleados-avatar svg {
+    width: 60%;
+    height: 60%;
+    color: #222;
+}
+
+.empleados-error {
+    color: #b91c1c;
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    margin-top: 14px;
+}
+
+.empleados-exito {
+    color: #166534;
+    background-color: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    margin-top: 14px;
+}
+
+.btn-guardar {
+    width: 100%;
+    background: #0f0808;
+    color: #ffffff;
+    border: none;
+    padding: 11px;
+    border-radius: 6px;
+    margin-top: 20px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.btn-guardar:hover:not(:disabled) {
+    background: #2b2320;
+}
+
+.btn-guardar:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+    .empleados-modal-body {
+        flex-direction: column;
+    }
+
+    .campos-fila-doble {
+        grid-template-columns: 1fr;
+    }
+
+    .empleados-avatar {
+        align-self: center;
+    }
+}
