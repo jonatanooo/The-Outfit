@@ -135,11 +135,27 @@
 
 @media (max-width: 560px) {
     .favoritos-main {
-        padding: 100px 1.5em 3em;
+        padding: 90px 12px 3em;
     }
 
     .favoritos-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        row-gap: 20px;
+    }
+
+    .favorito-heart {
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .favorito-add {
+        min-height: 44px;
+        border-radius: 9999px;
+        font-weight: 700;
     }
 }
 

@@ -156,3 +156,26 @@
     height: 1.2em;
     object-fit: contain;
 }
+
+@media (max-width: 767px) {
+    .perfil-panel {
+        width: 100vw;
+        z-index: 110;
+    }
+
+    .perfil-exitbuttondiv {
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 1.2em;
+        margin-top: 0.8em;
+    }
+
+    .perfil-input,
+    .perfil-guardar,
+    .perfil-panel button.logout.perfil-logout {
+        min-height: 48px;
+    }
+}

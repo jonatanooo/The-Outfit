@@ -138,9 +138,39 @@ function separarDisplayNameServidor(displayName = '', fallbackEmail = '') {
   };
 }
 
+function calcularPrioridadRolServidor(data) {
+  if (!data) return 3;
+  const idRol = Number(data.ID_Rol);
+  const puesto = String(data.Puesto || '').trim().toLowerCase();
+  const rolCampo = String(data.Rol || '').trim().toLowerCase();
+
+  if (
+    idRol === 1 ||
+    puesto === 'admin' ||
+    puesto === 'administrador' ||
+    rolCampo === 'admin' ||
+    rolCampo === 'administrador'
+  ) {
+    return 1;
+  }
+
+  if (
+    idRol === 2 ||
+    data.Es_Empleado === true ||
+    data.Es_Empleado === 'true' ||
+    puesto === 'empleado' ||
+    rolCampo === 'empleado'
+  ) {
+    return 2;
+  }
+
+  return 3;
+}
+
 /**
  * Busca el documento del usuario en la colección `User` de Firestore, o lo crea
  * automáticamente con ID_User entero secuencial si ingresa por primera vez (ej. con Google).
+ * Si existen múltiples documentos asociados al mismo UID o Correo, selecciona el de mayor privilegio.
  */
 async function buscarDocumentoUsuario(uid, email, displayName = '') {
   const emailRaw = String(email || '').trim();
@@ -150,38 +180,52 @@ async function buscarDocumentoUsuario(uid, email, displayName = '') {
   // Intento A: Firebase Admin Firestore (solo si tiene credenciales válidas en el entorno)
   if (tieneCredencialesAdmin()) {
     try {
+      const encontradosMap = new Map();
+
       const directRef = adminDb.collection('User').doc(uid);
       const directSnap = await directRef.get();
       if (directSnap.exists && directSnap.id !== '_schema_init' && directSnap.id !== '_placeholder') {
-        const data = directSnap.data();
-        if (!data.auth_id) {
-          await directRef.set({ auth_id: uid }, { merge: true }).catch(() => {});
-        }
-        return { userData: { ...data, auth_id: uid }, docId: directSnap.id };
+        encontradosMap.set(directSnap.id, {
+          ref: directRef,
+          id: directSnap.id,
+          data: directSnap.data(),
+        });
       }
 
       const authSnap = await adminDb
         .collection('User')
         .where('auth_id', '==', uid)
-        .limit(1)
         .get();
-      if (!authSnap.empty) {
-        return { userData: authSnap.docs[0].data(), docId: authSnap.docs[0].id };
-      }
+      authSnap.docs.forEach((d) => {
+        if (d.id !== '_schema_init' && d.id !== '_placeholder' && !encontradosMap.has(d.id)) {
+          encontradosMap.set(d.id, { ref: d.ref, id: d.id, data: d.data() });
+        }
+      });
 
       if (candidatosCorreo.length > 0) {
         const emailSnap = await adminDb
           .collection('User')
           .where('Correo', 'in', candidatosCorreo)
-          .limit(1)
           .get();
-        if (!emailSnap.empty) {
-          const candidateData = emailSnap.docs[0].data();
-          if (candidateData.auth_id !== uid) {
-            await emailSnap.docs[0].ref.set({ auth_id: uid }, { merge: true }).catch(() => {});
+        emailSnap.docs.forEach((d) => {
+          if (d.id !== '_schema_init' && d.id !== '_placeholder' && !encontradosMap.has(d.id)) {
+            encontradosMap.set(d.id, { ref: d.ref, id: d.id, data: d.data() });
           }
-          return { userData: { ...candidateData, auth_id: uid }, docId: emailSnap.docs[0].id };
+        });
+      }
+
+      const lista = Array.from(encontradosMap.values());
+      if (lista.length > 0) {
+        lista.sort(
+          (a, b) => calcularPrioridadRolServidor(a.data) - calcularPrioridadRolServidor(b.data)
+        );
+        const mejor = lista[0];
+        const mejorData = { ...mejor.data };
+        if (mejorData.auth_id !== uid) {
+          await mejor.ref.set({ auth_id: uid }, { merge: true }).catch(() => {});
+          mejorData.auth_id = uid;
         }
+        return { userData: mejorData, docId: mejor.id };
       }
 
       // Si no existe en la colección User, crearlo automáticamente con ID_User entero secuencial
@@ -339,6 +383,18 @@ export async function POST(request) {
 
     const authInfo = await resolverAutorizacionUsuario(decodedToken);
 
+    // Si el cliente ya consultó Firestore directamente y detectó rol 'admin' o 'empleado',
+    // asegurar que la cookie refleje el rol actualizado en caso de demora de propagación
+    if (
+      authInfo.rol === 'usuario' &&
+      (body.rolClient === 'admin' || body.rolClient === 'empleado')
+    ) {
+      authInfo.rol = body.rolClient;
+    }
+    if (body.idUserClient != null && authInfo.idUser === authInfo.uid) {
+      authInfo.idUser = body.idUserClient;
+    }
+
     if (authInfo.baneado) {
       if (tieneCredencialesAdmin()) {
         await adminAuth.revokeRefreshTokens(authInfo.uid).catch(() => {});
@@ -418,7 +474,16 @@ export async function GET(request) {
     if (sessionCookie) {
       const signedPayload = verificarTokenSesionFirmado(sessionCookie);
       if (signedPayload && signedPayload.uid) {
-        if (signedPayload.baneado) {
+        // Revalidar el rol y estado actual contra la colección User en Firestore
+        // para que cualquier ascenso a Empleado o Administrador surta efecto de inmediato
+        const liveAuthInfo = await resolverAutorizacionUsuario({
+          uid: signedPayload.uid,
+          email: signedPayload.email || '',
+          email_verified: true,
+          rol: signedPayload.rol,
+        });
+
+        if (liveAuthInfo.baneado || signedPayload.baneado) {
           const response = NextResponse.json(
             { authenticated: false, baneado: true, rol: 'baneado' },
             { status: 403 }
@@ -426,13 +491,38 @@ export async function GET(request) {
           response.cookies.delete(SESSION_COOKIE_NAME);
           return response;
         }
-        return NextResponse.json({
+
+        const rolVigente = liveAuthInfo.rol || signedPayload.rol || 'usuario';
+        const idUserVigente = liveAuthInfo.idUser ?? signedPayload.idUser;
+
+        const response = NextResponse.json({
           authenticated: true,
           uid: signedPayload.uid,
-          idUser: signedPayload.idUser,
-          rol: signedPayload.rol || 'usuario',
+          email: signedPayload.email || liveAuthInfo.email || '',
+          idUser: idUserVigente,
+          rol: rolVigente,
           emailVerified: true,
         });
+
+        if (rolVigente !== signedPayload.rol) {
+          const refreshedCookie = firmarTokenSesion({
+            uid: signedPayload.uid,
+            email: signedPayload.email || liveAuthInfo.email || '',
+            idUser: idUserVigente,
+            rol: rolVigente,
+            baneado: false,
+            exp: Date.now() + SESSION_EXPIRES_IN,
+          });
+          response.cookies.set(SESSION_COOKIE_NAME, refreshedCookie, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: Math.floor(SESSION_EXPIRES_IN / 1000),
+          });
+        }
+
+        return response;
       }
     }
 

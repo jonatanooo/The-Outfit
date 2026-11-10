@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { verificarAccesoServidor } from '@/lib/usuario';
@@ -7,8 +7,6 @@ import { verificarAccesoServidor } from '@/lib/usuario';
 export default function EmpleadoPage() {
     const router = useRouter();
     const { user: authUser, loading: authLoading } = useAuth();
-    const [usuario, setUsuario] = useState(null);
-    const [verificando, setVerificando] = useState(true);
 
     useEffect(() => {
         if (authLoading) return;
@@ -23,8 +21,7 @@ export default function EmpleadoPage() {
                     return;
                 }
 
-                setUsuario(authUser || { uid: acceso.uid, email: '' });
-                setVerificando(false);
+                router.replace('/Inventario');
             } catch (err) {
                 console.error('Error al verificar permisos de empleado:', err);
                 if (activo) router.replace('/');
@@ -35,14 +32,5 @@ export default function EmpleadoPage() {
         return () => { activo = false; };
     }, [authUser, authLoading, router]);
 
-    if (verificando || !usuario) {
-        return null;
-    }
-
-    return (
-        <div style={{ padding: '40px' }}>
-            <h1>Panel de Empleado</h1>
-            <p>Bienvenido, {usuario.email}. Esta sección está en construcción.</p>
-        </div>
-    );
+    return null;
 }

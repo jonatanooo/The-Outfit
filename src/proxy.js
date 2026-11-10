@@ -2,18 +2,17 @@ import { NextResponse } from 'next/server';
 
 const SESSION_COOKIE_NAME = '__session';
 
-// Rutas exclusivas para el rol "admin"
-const RUTAS_SOLO_ADMIN = [
+// Rutas del Panel de Administración (exclusivas para usuarios que pertenecen a la lista de Empleados: Admin o Empleado)
+const RUTAS_PANEL_ADMIN = [
   '/admin',
   '/Inventario',
   '/transacciones',
   '/reportes',
+  '/usuarios',
   '/empleados',
   '/configuracion',
+  '/empleado',
 ];
-
-// Rutas permitidas para "empleado" o "admin"
-const RUTAS_EMPLEADO = ['/empleado'];
 
 /**
  * Decodifica Base64URL de forma compatible con Edge y Node.js sin dependencias pesadas.
@@ -89,26 +88,28 @@ function leerSesionDesdeCookie(cookieValue) {
 export async function proxy(request) {
   const { pathname } = request.nextUrl;
 
-  const requiereAdmin = RUTAS_SOLO_ADMIN.some(
+  // Redirigir ruta heredada /empleados hacia la nueva ruta /usuarios
+  if (
+    pathname.toLowerCase() === '/empleados' ||
+    pathname.toLowerCase().startsWith('/empleados/')
+  ) {
+    return NextResponse.redirect(new URL('/usuarios', request.url));
+  }
+
+  const requiereAccesoPanel = RUTAS_PANEL_ADMIN.some(
     (ruta) =>
       pathname.toLowerCase() === ruta.toLowerCase() ||
       pathname.toLowerCase().startsWith(`${ruta.toLowerCase()}/`)
   );
 
-  const requiereEmpleado = RUTAS_EMPLEADO.some(
-    (ruta) =>
-      pathname.toLowerCase() === ruta.toLowerCase() ||
-      pathname.toLowerCase().startsWith(`${ruta.toLowerCase()}/`)
-  );
-
-  if (!requiereAdmin && !requiereEmpleado) {
+  if (!requiereAccesoPanel) {
     return NextResponse.next();
   }
 
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-  // Si aún no hay cookie (o el cliente está sincronizando tras login), la página
-  // ejecutará verificarAccesoServidor(user) para autorizar o redirigir sin producir error 500
+  // Si aún no hay cookie (o el cliente está sincronizando tras login), el guard del layout/página
+  // ejecutará verificarAccesoServidor() contra Firestore para autorizar o expulsar al usuario
   if (!sessionCookie) {
     return NextResponse.next();
   }
@@ -125,18 +126,10 @@ export async function proxy(request) {
     return response;
   }
 
-  if (requiereAdmin && sesion.rol !== 'admin') {
-    const targetUrl =
-      sesion.rol === 'empleado'
-        ? new URL('/empleado', request.url)
-        : new URL('/', request.url);
-    return NextResponse.redirect(targetUrl);
-  }
-
-  if (requiereEmpleado && sesion.rol !== 'empleado' && sesion.rol !== 'admin') {
-    return NextResponse.redirect(new URL('/', request.url));
-  }
-
+  // El guard en tiempo real (verificarAccesoServidor en AdminLayout, SidebarAdmin y cada página)
+  // consulta directamente la colección `User` en Firestore para validar el ID_Rol / Es_Empleado
+  // actual del usuario (evitando que una cookie emitida antes de un cambio de rol bloquee el acceso)
+  // y expulsa inmediatamente a cualquier Cliente normal hacia '/' o sin sesión hacia '/login'.
   return NextResponse.next();
 }
 
@@ -147,6 +140,7 @@ export const config = {
     '/inventario/:path*',
     '/transacciones/:path*',
     '/reportes/:path*',
+    '/usuarios/:path*',
     '/empleados/:path*',
     '/configuracion/:path*',
     '/empleado/:path*',

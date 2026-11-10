@@ -1,16 +1,40 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAuth } from '@/lib/AuthContext';
+import { verificarAccesoServidor } from '@/lib/usuario';
 import './SidebarAdmin.css';
 
 function SidebarAdmin() {
     // expandido reemplaza el estado visual del sidebar (ancho grande vs angosto)
     const [expandido, setExpandido] = useState(true);
     const pathname = usePathname();
-     const sidebarRef = useRef(null);
+    const router = useRouter();
+    const { user: authUser, loading: authLoading } = useAuth();
+    const sidebarRef = useRef(null);
     const toggleBtnRef = useRef(null);
-     useEffect(() => {
+
+    // Guard global de seguridad del Panel de Administración:
+    // Solo los usuarios en la lista de Empleados (ID_Rol administrativo/empleado o Es_Empleado == true)
+    // tienen permiso para ver y navegar por el panel.
+    useEffect(() => {
+        if (authLoading) return;
+        let activo = true;
+
+        async function validarGuardPanel() {
+            const acceso = await verificarAccesoServidor('admin');
+            if (!activo) return;
+            if (!acceso.autorizado) {
+                router.replace(acceso.rol === 'anonimo' ? '/login' : '/');
+            }
+        }
+
+        validarGuardPanel();
+        return () => { activo = false; };
+    }, [authUser, authLoading, pathname, router]);
+
+    useEffect(() => {
         const manejarClickFuera = (event) => {
             // preguntamos si el click fue dentro del sidebar o en el boton toggle
             const clickDentroSidebar = sidebarRef.current?.contains(event.target);
@@ -26,17 +50,16 @@ function SidebarAdmin() {
         // limpieza: quitamos el listener cuando el componente se desmonta
         return () => document.removeEventListener('click', manejarClickFuera);
     }, []);
-    const menuItems = [
-    { icon: '/ICONOS/inventario.png', label: 'Inventario', href: '/Inventario' },
-    { icon: '/ICONOS/transacciones.png', label: 'Transacciones', href: '/transacciones' },
-    { icon: '/ICONOS/empleados.png', label: 'Empleados', href: '/empleados' },
-    { icon: '/ICONOS/reportes.png', label: 'Reportes', href: '/reportes' },
-    { icon: '/ICONOS/configuracion.png', label: 'Configuración', href: '/configuracion' }
-];
 
+    const menuItems = [
+        { icon: '/ICONOS/inventario.png', label: 'Inventario', href: '/Inventario' },
+        { icon: '/ICONOS/transacciones.png', label: 'Transacciones', href: '/transacciones' },
+        { icon: '/ICONOS/empleados.png', label: 'Usuarios', href: '/usuarios' },
+        { icon: '/ICONOS/reportes.png', label: 'Reportes', href: '/reportes' },
+        { icon: '/ICONOS/configuracion.png', label: 'Configuración', href: '/configuracion' }
+    ];
 
     return (
-        // 
         <aside ref={sidebarRef} className={`sidebar ${expandido ? 'expandido' : 'recogido'}`}>
             
             <div className="sidebar-header">
@@ -56,17 +79,20 @@ function SidebarAdmin() {
             <nav>
                 {menuItems.map((item) => {
                     // marca como activo el enlace cuya ruta coincide con la URL actual
-                    const activo = item.href !== '#' && pathname?.toLowerCase().startsWith(item.href.toLowerCase());
+                    const rutaActual = pathname?.toLowerCase() || '';
+                    const activo =
+                        item.href !== '#' &&
+                        (rutaActual.startsWith(item.href.toLowerCase()) ||
+                            (item.href === '/usuarios' && rutaActual.startsWith('/empleados')));
                     return (
-                        <a
+                        <Link
                             key={item.label}
                             href={item.href}
                             className={`menu-item ${activo ? 'activo' : ''}`}
                         >
-                         <img src={item.icon} alt={item.label} className="menu-icon" />
-                         {expandido && <span className="menu-label">{item.label}</span>}
-                         {/* el && solo muestra el texto si expandido es true y el span con el texto desaparece cuando el sidebar está recogido */}
-                        </a>
+                            <img src={item.icon} alt={item.label} className="menu-icon" />
+                            {expandido && <span className="menu-label">{item.label}</span>}
+                        </Link>
                     );
                 })}
             </nav>
