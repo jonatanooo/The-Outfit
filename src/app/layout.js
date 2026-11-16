@@ -1,6 +1,7 @@
 import "./globals.css";
 import { AuthProvider } from '@/lib/AuthContext';
 import { CarritoProvider } from '@/lib/CarritoContext';
+import { AlertaProvider } from '@/lib/AlertaContext';
 
 
 export const metadata = {
@@ -14,7 +15,9 @@ export default function RootLayout({ children }) {
       <body>
         <AuthProvider>
           <CarritoProvider>
-            {children}
+            <AlertaProvider>
+              {children}
+            </AlertaProvider>
           </CarritoProvider>
         </AuthProvider>
       </body>

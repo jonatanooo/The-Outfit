@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { obtenerIdUsuario } from './usuario';
 import { useAuth } from './AuthContext';
+import { mostrarAlerta } from './AlertaContext';
 
 // Maneja el estado de "favoritos" del usuario logueado contra la colección
 // "Favoritos" de Firestore: qué IDs de producto tiene marcados, y agregar/quitar.
@@ -76,7 +77,14 @@ export function useFavoritos() {
   const alternarFavorito = useCallback(async (idProducto) => {
     const idUser = idUsuario ?? await obtenerIdUsuario();
     if (!idUser) {
-      alert('Iniciá sesión para guardar tus favoritos.');
+      mostrarAlerta({
+        tipo: 'favoritos',
+        titulo: 'Inicia sesión para tus favoritos',
+        mensaje: 'Inicia sesión en tu cuenta de The Outfit para guardar tus prendas favoritas y encontrarlas cuando quieras.',
+        textoConfirmar: 'Iniciar sesión',
+        textoCancelar: 'Cerrar',
+        hrefConfirmar: '/login',
+      });
       return;
     }
     if (idUsuario !== idUser) setIdUsuario(idUser);

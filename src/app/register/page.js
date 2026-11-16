@@ -7,6 +7,7 @@ import { auth, db } from '@/lib/firebaseClient';
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import Footer from '@/components/Footer';
+import { mostrarAlerta } from '@/lib/AlertaContext';
 
 /* ---------- Iconos de redes sociales ---------- */
 const IconInstagram = (props) => (
@@ -163,7 +164,12 @@ export default function RegisterPage() {
         Fecha_Creacion: new Date().toISOString(),
       });
 
-      alert('¡Cuenta creada con éxito! Ahora puedes iniciar sesión.');
+      await mostrarAlerta({
+        tipo: 'exito',
+        titulo: '¡Cuenta creada con éxito!',
+        mensaje: 'Bienvenido a The Outfit. Tu registro se completó correctamente y ya puedes iniciar sesión.',
+        textoConfirmar: 'Iniciar sesión',
+      });
       router.push('/login');
     } catch (error) {
       console.error(error);

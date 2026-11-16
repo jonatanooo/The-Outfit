@@ -5,6 +5,7 @@ import { db } from '@/lib/firebaseClient';
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '@/lib/AuthContext';
 import { verificarAccesoServidor } from '@/lib/usuario';
+import { mostrarAlerta, mostrarConfirmacion } from '@/lib/AlertaContext';
 import SidebarAdmin from '@/components/SidebarAdmin';
 import AdminHeader from '@/components/AdminHeader';
 import '../admin/Admin.css';
@@ -41,7 +42,13 @@ export default function ConfiguracionPage() {
     }, [authUser, authLoading, router]);
 
     const limpiarTallas = async () => {
-        if (!confirm('¿Estás seguro de que deseas limpiar y unificar las tallas en la base de datos?')) return;
+        const confirmar = await mostrarConfirmacion({
+            titulo: 'Unificar tallas de la base de datos',
+            mensaje: '¿Estás seguro de que deseas limpiar y unificar las tallas duplicadas dejando solo S, M, L, XL y XXL?',
+            textoConfirmar: 'Continuar',
+            textoCancelar: 'Cancelar',
+        });
+        if (!confirmar) return;
         
         try {
             // 1. Obtener todas las tallas
@@ -90,10 +97,18 @@ export default function ConfiguracionPage() {
                 }
             }
 
-            alert('Base de datos de tallas limpiada y unificada correctamente.');
+            await mostrarAlerta({
+                tipo: 'exito',
+                titulo: '¡Tallas unificadas!',
+                mensaje: 'La base de datos de tallas fue limpiada y unificada correctamente.',
+            });
         } catch (err) {
             console.error(err);
-            alert('Hubo un error al limpiar la base de datos.');
+            mostrarAlerta({
+                tipo: 'error',
+                titulo: 'Error al limpiar tallas',
+                mensaje: 'Hubo un error al intentar limpiar y unificar las tallas en la base de datos.',
+            });
         }
     };
 

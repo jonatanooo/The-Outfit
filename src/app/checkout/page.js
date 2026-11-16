@@ -506,9 +506,35 @@ export default function CheckoutPage() {
               <span>${pedidoResumen.total.toFixed(2)}</span>
             </div>
 
-            <button type="button" className="checkout-volver" onClick={() => router.push('/')}>
-              VOLVER AL INICIO
-            </button>
+            <div className="checkout-qr-box">
+              <span className="checkout-qr-titulo">CÓDIGO QR DEL PEDIDO</span>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=PEDIDO-${encodeURIComponent(
+                  String(pedidoResumen.id)
+                )}`}
+                alt={`Código QR del pedido #${pedidoResumen.id}`}
+                width={150}
+                height={150}
+                className="checkout-qr-img"
+              />
+              <strong className="checkout-qr-codigo">#{pedidoResumen.id}</strong>
+              <p className="checkout-qr-nota">
+                Presenta este código QR o número de pedido como comprobante de tu compra.
+              </p>
+            </div>
+
+            <div className="checkout-confirmacion-acciones">
+              <button
+                type="button"
+                className="checkout-volver checkout-volver-secundario"
+                onClick={() => router.push('/perfil/historial')}
+              >
+                VER EN HISTORIAL DE COMPRAS
+              </button>
+              <button type="button" className="checkout-volver" onClick={() => router.push('/')}>
+                VOLVER AL INICIO
+              </button>
+            </div>
           </div>
         ) : (
           <>
