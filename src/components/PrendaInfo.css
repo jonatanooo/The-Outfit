@@ -199,3 +199,54 @@
 .visor-punto.activo {
     background: white;
 }
+
+@media (max-width: 600px) {
+    .prendainfo .descripcionprenda {
+        width: 88%;
+        height: auto;
+        margin-left: 0;
+    }
+
+    .prendainfo .acordeon .titulo {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .prendainfo .contenido {
+        margin-left: 0.5em;
+        width: 95%;
+    }
+
+    .visor-content {
+        width: 95%;
+        height: 78vh;
+    }
+
+    .visor-close {
+        font-size: 1.8rem;
+        padding: 6px;
+        top: -10px;
+        right: 4px;
+    }
+
+    .visor-carrusel {
+        gap: 8px;
+        height: calc(100% - 40px);
+    }
+
+    .visor-img-principal {
+        max-width: calc(100% - 88px);
+        max-height: 85%;
+        min-width: 0;
+    }
+
+    .visor-btn {
+        width: 36px;
+        height: 36px;
+    }
+
+    .visor-btn img {
+        width: 12px;
+        height: 18px;
+    }
+}

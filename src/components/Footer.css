@@ -85,3 +85,9 @@ footer  ul
 .social-media {
     display: flex;
 }
+
+@media (max-width: 600px) {
+    .footer-col-ocultar-movil {
+        display: none !important;
+    }
+}

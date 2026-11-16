@@ -273,6 +273,7 @@ function Header ({ siempreSolido = false }) {
 
                 <button
                     type="button"
+                    className="profile-toggle"
                     onClick={handleClickPerfil}
                     aria-label="Perfil"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
@@ -322,11 +323,38 @@ function Header ({ siempreSolido = false }) {
                         ))}
 
 
-                        <li><hr className="divmenu"/></li>
-                        <li className="part2">LOCACIÓN</li>
-                        <li><a href="" className="partinfo">#41-B LOCAL 1 CP1502, CALLE DEL MEDITERRÁNEO</a></li>
-                        <li className="part3">CONTACTANOS</li>
-                        <li><a href="" className="partinfo">+503 2261-3004</a></li>
+                        <li className="menu-movil-acciones">
+                            <button
+                                type="button"
+                                className="menu-movil-btn"
+                                onClick={() => { setMenuAbierto(false); setBuscadorAbierto(true); }}
+                            >
+                                <img src="/ICONOS/Search.png" alt="Buscar" className="menu-movil-icon" />
+                                <span>BUSCAR</span>
+                            </button>
+                            <Link
+                                href="/favoritos"
+                                className="menu-movil-btn"
+                                onClick={() => setMenuAbierto(false)}
+                            >
+                                <img src="/ICONOS/Heart.png" alt="Favoritos" className="menu-movil-icon" />
+                                <span>FAVORITOS</span>
+                            </Link>
+                            <button
+                                type="button"
+                                className="menu-movil-btn"
+                                onClick={() => { setMenuAbierto(false); handleClickPerfil(); }}
+                            >
+                                <img src="/ICONOS/Person.png" alt="Perfil" className="menu-movil-icon" />
+                                <span>PERFIL</span>
+                            </button>
+                        </li>
+
+                        <li className="menu-info-extra"><hr className="divmenu"/></li>
+                        <li className="part2 menu-info-extra">LOCACIÓN</li>
+                        <li className="menu-info-extra"><a href="" className="partinfo">#41-B LOCAL 1 CP1502, CALLE DEL MEDITERRÁNEO</a></li>
+                        <li className="part3 menu-info-extra">CONTACTANOS</li>
+                        <li className="menu-info-extra"><a href="" className="partinfo">+503 2261-3004</a></li>
                     </ul>
                 </div>
             </div>

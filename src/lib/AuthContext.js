@@ -3,7 +3,11 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { auth } from '@/lib/firebaseClient';
 import { onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { sincronizarOCrearUsuarioEnFirestore, esRegistroEmpleadoOAdmin } from '@/lib/usuario';
+import {
+  sincronizarOCrearUsuarioEnFirestore,
+  sincronizarSesionServidor,
+  esRegistroEmpleadoOAdmin,
+} from '@/lib/usuario';
 
 const AUTH_CACHE_KEY = 'the_outfit_auth_profile_v1';
 
@@ -84,7 +88,13 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const perfil = await sincronizarOCrearUsuarioEnFirestore(targetUser);
+      let perfil = await sincronizarOCrearUsuarioEnFirestore(targetUser);
+      if (!perfil) {
+        const sesion = await sincronizarSesionServidor(targetUser);
+        if (sesion?.authenticated && sesion?.userData) {
+          perfil = sesion.userData;
+        }
+      }
       if (perfil) {
         aplicarPerfil(perfil);
       }
@@ -129,7 +139,13 @@ export function AuthProvider({ children }) {
         }
 
         try {
-          const perfil = await sincronizarOCrearUsuarioEnFirestore(currentUser);
+          let perfil = await sincronizarOCrearUsuarioEnFirestore(currentUser);
+          if (!perfil) {
+            const sesion = await sincronizarSesionServidor(currentUser);
+            if (sesion?.authenticated && sesion?.userData) {
+              perfil = sesion.userData;
+            }
+          }
           if (activo && perfil) {
             aplicarPerfil(perfil);
           }

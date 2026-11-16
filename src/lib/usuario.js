@@ -27,6 +27,10 @@ async function generarSiguienteIdUserNumerico() {
     });
     return maxId + 1;
   } catch (err) {
+    const msg = String(err?.message || '');
+    if (err?.code === 'permission-denied' || msg.includes('Missing or insufficient permissions')) {
+      throw err;
+    }
     console.error('Error generando ID_User numérico secuencial:', err);
     return Math.floor(10000 + (Date.now() % 899999));
   }
@@ -139,7 +143,9 @@ function calcularPrioridadRolDoc(data) {
  * (Administrador / Empleado) para garantizar acceso inmediato al Panel de Administración.
  */
 export async function sincronizarOCrearUsuarioEnFirestore(firebaseUser) {
+  if (typeof window === 'undefined') return null;
   if (!firebaseUser || !firebaseUser.uid) return null;
+  if (!auth?.currentUser || auth.currentUser.uid !== firebaseUser.uid) return null;
 
   const uid = firebaseUser.uid;
   const emailRaw = String(firebaseUser.email || '').trim();
@@ -271,6 +277,10 @@ export async function sincronizarOCrearUsuarioEnFirestore(firebaseUser) {
     await setDoc(doc(db, 'User', String(nuevoIdUser)), nuevoRegistroUser);
     return { ...nuevoRegistroUser, _docId: String(nuevoIdUser) };
   } catch (err) {
+    const msg = String(err?.message || '');
+    if (err?.code === 'permission-denied' || msg.includes('Missing or insufficient permissions')) {
+      return null;
+    }
     console.error('Error sincronizando o creando usuario en colección User:', err);
     return null;
   }
@@ -360,14 +370,34 @@ async function resolverDatosUsuarioFirestore(user) {
   };
 }
 
+const syncSesionEnCurso = new Map();
+
 /**
  * Sincroniza el ID Token de Firebase Auth con la cookie HttpOnly (__session) del servidor
- * y devuelve la respuesta autoritativa ({ authenticated, uid, idUser, rol, baneado }).
+ * y devuelve la respuesta autoritativa ({ authenticated, uid, idUser, rol, baneado, userData }).
+ * Deduplica llamadas concurrentes para evitar múltiples POST /api/auth/session simultáneos.
  *
  * @param {import('firebase/auth').User | null} [userOverride]
- * @returns {Promise<{authenticated: boolean, uid?: string, idUser?: any, rol?: string, baneado?: boolean}>}
+ * @returns {Promise<{authenticated: boolean, uid?: string, idUser?: any, idRol?: number, rol?: string, baneado?: boolean, userData?: any}>}
  */
 export async function sincronizarSesionServidor(userOverride = null) {
+  if (typeof window === 'undefined') {
+    return { authenticated: false, rol: 'anonimo' };
+  }
+
+  const clave = userOverride?.uid || auth?.currentUser?.uid || '__auto__';
+  if (syncSesionEnCurso.has(clave)) {
+    return syncSesionEnCurso.get(clave);
+  }
+
+  const promesa = _ejecutarSincronizacionServidor(userOverride).finally(() => {
+    syncSesionEnCurso.delete(clave);
+  });
+  syncSesionEnCurso.set(clave, promesa);
+  return promesa;
+}
+
+async function _ejecutarSincronizacionServidor(userOverride = null) {
   try {
     const user = await obtenerUsuarioFirebaseActual(userOverride);
     if (!user) {
@@ -377,11 +407,7 @@ export async function sincronizarSesionServidor(userOverride = null) {
         if (resGet.ok) {
           const dataGet = await resGet.json().catch(() => null);
           if (dataGet?.authenticated && dataGet?.uid) {
-            // Verificar el rol en tiempo real contra Firestore usando el uid/email de la cookie
-            const userDocFromCookie = await sincronizarOCrearUsuarioEnFirestore({
-              uid: dataGet.uid,
-              email: dataGet.email || '',
-            });
+            const userDocFromCookie = dataGet.userData || null;
             if (userDocFromCookie) {
               const estadoCookie = Number(userDocFromCookie.ID_EstadoUsuario ?? 1);
               if (estadoCookie === 2 || estadoCookie === 3) {
@@ -446,16 +472,30 @@ export async function sincronizarSesionServidor(userOverride = null) {
       }
 
       if (res.ok && data?.authenticated) {
-        const rolEfectivo = rolFirestore || data.rol || 'usuario';
+        const docResuelto = userDocSincronizado || data.userData || null;
+        if (docResuelto) {
+          const estadoResuelto = Number(docResuelto.ID_EstadoUsuario ?? 1);
+          if (estadoResuelto === 2 || estadoResuelto === 3) {
+            return {
+              authenticated: false,
+              baneado: true,
+              rol: 'baneado',
+            };
+          }
+        }
+        const rolEfectivo =
+          rolFirestore ||
+          data.rol ||
+          (docResuelto ? obtenerRolDesdeUserDoc(docResuelto) : 'usuario');
         return {
           ...data,
           rol: rolEfectivo,
-          idUser: userDocSincronizado?.ID_User ?? data.idUser,
+          idUser: docResuelto?.ID_User ?? data.idUser,
           idRol:
-            userDocSincronizado?.ID_Rol ??
+            docResuelto?.ID_Rol ??
             data.idRol ??
             (rolEfectivo === 'admin' ? 1 : rolEfectivo === 'empleado' ? 2 : 3),
-          userData: userDocSincronizado || null,
+          userData: docResuelto,
         };
       }
     } catch {
@@ -557,26 +597,39 @@ export async function obtenerIdUsuario() {
       return null;
     }
 
-    // 1. Buscar por Document ID directo igual a user.uid
-    const docRef = doc(db, 'User', user.uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      return data.ID_User ?? docSnap.id;
+    try {
+      // 1. Buscar por Document ID directo igual a user.uid
+      const docRef = doc(db, 'User', user.uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        return data.ID_User ?? docSnap.id;
+      }
+
+      // 2. Buscar por el campo inmutable auth_id en la colección User
+      const qAuth = query(collection(db, 'User'), where('auth_id', '==', user.uid));
+      const snapAuth = await getDocs(qAuth);
+      if (!snapAuth.empty) {
+        const data = snapAuth.docs[0].data();
+        return data.ID_User ?? snapAuth.docs[0].id;
+      }
+    } catch (errPermiso) {
+      const msg = String(errPermiso?.message || '');
+      if (errPermiso?.code !== 'permission-denied' && !msg.includes('Missing or insufficient permissions')) {
+        console.error('Error al obtener ID de usuario desde Firestore:', errPermiso);
+      }
     }
 
-    // 2. Buscar por el campo inmutable auth_id en la colección User
-    const qAuth = query(collection(db, 'User'), where('auth_id', '==', user.uid));
-    const snapAuth = await getDocs(qAuth);
-    if (!snapAuth.empty) {
-      const data = snapAuth.docs[0].data();
-      return data.ID_User ?? snapAuth.docs[0].id;
-    }
-
-    // 3. Buscar por Correo o crear si es cuenta nueva de proveedor OAuth
+    // 3. Buscar por Correo o crear mediante servidor si es necesario
     const sincronizado = await sincronizarOCrearUsuarioEnFirestore(user);
     if (sincronizado && sincronizado.ID_User != null) {
       return sincronizado.ID_User;
+    }
+
+    const sesion = await sincronizarSesionServidor(user);
+    const idUserServidor = sesion?.idUser ?? sesion?.userData?.ID_User;
+    if (sesion?.authenticated && idUserServidor != null) {
+      return idUserServidor;
     }
 
     return user.uid;
@@ -598,7 +651,13 @@ export async function obtenerPerfilUsuario() {
     const user = auth.currentUser;
     if (!user) return null;
 
-    const sincronizado = await sincronizarOCrearUsuarioEnFirestore(user);
+    let sincronizado = await sincronizarOCrearUsuarioEnFirestore(user);
+    if (!sincronizado) {
+      const sesion = await sincronizarSesionServidor(user);
+      if (sesion?.authenticated && sesion?.userData) {
+        sincronizado = sesion.userData;
+      }
+    }
     if (sincronizado) {
       return {
         id: sincronizado._docId || String(sincronizado.ID_User ?? user.uid),
