@@ -96,26 +96,36 @@ export async function proxy(request) {
     return NextResponse.redirect(new URL('/usuarios', request.url));
   }
 
+  const requiereAccesoPerfil =
+    pathname.toLowerCase() === '/perfil' ||
+    pathname.toLowerCase().startsWith('/perfil/');
+
   const requiereAccesoPanel = RUTAS_PANEL_ADMIN.some(
     (ruta) =>
       pathname.toLowerCase() === ruta.toLowerCase() ||
       pathname.toLowerCase().startsWith(`${ruta.toLowerCase()}/`)
   );
 
-  if (!requiereAccesoPanel) {
+  if (!requiereAccesoPanel && !requiereAccesoPerfil) {
     return NextResponse.next();
   }
 
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
   // Si aún no hay cookie (o el cliente está sincronizando tras login), el guard del layout/página
-  // ejecutará verificarAccesoServidor() contra Firestore para autorizar o expulsar al usuario
+  // ejecutará verificarAccesoServidor() / sincronizarSesionServidor() para autorizar o expulsar al usuario
   if (!sessionCookie) {
     return NextResponse.next();
   }
 
   const sesion = leerSesionDesdeCookie(sessionCookie);
   if (!sesion) {
+    if (requiereAccesoPerfil) {
+      const loginUrl = new URL('/login', request.url);
+      const response = NextResponse.redirect(loginUrl);
+      response.cookies.delete(SESSION_COOKIE_NAME);
+      return response;
+    }
     return NextResponse.next();
   }
 
@@ -126,15 +136,15 @@ export async function proxy(request) {
     return response;
   }
 
-  // El guard en tiempo real (verificarAccesoServidor en AdminLayout, SidebarAdmin y cada página)
-  // consulta directamente la colección `User` en Firestore para validar el ID_Rol / Es_Empleado
-  // actual del usuario (evitando que una cookie emitida antes de un cambio de rol bloquee el acceso)
-  // y expulsa inmediatamente a cualquier Cliente normal hacia '/' o sin sesión hacia '/login'.
+  // El guard en tiempo real (verificarAccesoServidor / sincronizarSesionServidor en cada página)
+  // consulta directamente la colección `User` en Firestore para validar el estado y rol
+  // actual del usuario y expulsa inmediatamente si corresponde.
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
+    '/perfil/:path*',
     '/admin/:path*',
     '/Inventario/:path*',
     '/inventario/:path*',
