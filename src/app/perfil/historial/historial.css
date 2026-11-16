@@ -1,0 +1,447 @@
+/* Estilos específicos para Historial de Compras (prioridad sobre reset global * de Header.css) */
+
+.historial-wrapper {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #ffffff;
+  color: #0f0808;
+  font-family: "DM Sans", sans-serif;
+}
+
+.historial-wrapper > footer {
+  width: 100%;
+}
+
+.historial-main {
+  width: 85%;
+  max-width: 1320px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-top: 115px;
+  padding-bottom: 80px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.historial-top-bar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding-bottom: 20px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.historial-titulo-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 40px;
+}
+
+.historial-back-btn {
+  position: absolute;
+  left: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: #0f0808;
+  font-size: 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.historial-back-btn:hover {
+  background-color: #f3f3f3;
+}
+
+.historial-titulo-centro {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 44px;
+  text-align: center;
+}
+
+.historial-titulo {
+  margin: 0;
+  font-family: "DM Sans", sans-serif;
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #0f0808;
+}
+
+.historial-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background-color: #f3f3f3;
+  color: #555555;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.historial-controles {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.historial-buscador {
+  width: 260px;
+  max-width: 100%;
+  padding: 9px 14px;
+  border: 1px solid #d4d4d4;
+  border-radius: 10px;
+  background-color: #ffffff;
+  color: #0f0808;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.85rem;
+}
+
+.historial-buscador:focus {
+  outline: none;
+  border-color: #0f0808;
+}
+
+.historial-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.historial-filtro-btn {
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid #d4d4d4;
+  background-color: #ffffff;
+  color: #404040;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.historial-filtro-btn:hover {
+  border-color: #0f0808;
+  color: #0f0808;
+}
+
+.historial-filtro-btn.activo {
+  background-color: #0f0808;
+  border-color: #0f0808;
+  color: #ffffff;
+}
+
+.historial-error {
+  width: 100%;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+  background-color: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.historial-lista {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.historial-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 24px;
+  border: 1px solid #e5e5e5;
+  border-radius: 16px;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.historial-card:hover {
+  border-color: #0f0808;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+.historial-card:focus {
+  outline: 2px solid #0f0808;
+  outline-offset: 2px;
+}
+
+.historial-thumb {
+  width: 88px;
+  height: 104px;
+  border-radius: 12px;
+  background-color: #f3f3f3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.historial-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 6px;
+}
+
+.historial-thumb-placeholder {
+  width: 88px;
+  height: 104px;
+  border-radius: 12px;
+  background-color: #cccccc;
+  color: #525252;
+  font-size: 0.78rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.historial-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+.historial-card-titulo {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #0f0808;
+}
+
+.historial-card-precio {
+  margin: 2px 0 0;
+  font-size: 1.2rem;
+  font-weight: 400;
+  color: #262626;
+}
+
+.historial-card-fecha,
+.historial-card-ver {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #737373;
+  transition: color 0.2s ease;
+}
+
+.historial-card:hover .historial-card-ver {
+  color: #0f0808;
+}
+
+.historial-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 155px;
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  text-align: center;
+  flex-shrink: 0;
+  color: #ffffff;
+}
+
+.badge-pendiente {
+  background-color: #f0b429;
+}
+
+.badge-entregado {
+  background-color: #2e7d32;
+}
+
+.badge-encamino {
+  background-color: #1a1a1a;
+}
+
+.badge-cancelado {
+  background-color: #c62828;
+}
+
+.historial-empty {
+  width: 100%;
+  padding: 56px 24px;
+  border-radius: 16px;
+  border: 1px solid #e5e5e5;
+  background-color: #fafafa;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.historial-empty-titulo {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #0f0808;
+}
+
+.historial-empty-texto {
+  margin: 0;
+  max-width: 440px;
+  font-size: 0.9rem;
+  color: #737373;
+}
+
+.historial-cta-btn {
+  margin-top: 8px;
+  padding: 10px 26px;
+  border-radius: 999px;
+  border: 1px solid #0f0808;
+  background-color: #0f0808;
+  color: #ffffff;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.historial-cta-btn:hover {
+  opacity: 0.85;
+}
+
+/* Detalle en página completa (/perfil/historial/[id]) */
+.historial-detalle-main {
+  width: 85%;
+  max-width: 920px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-top: 115px;
+  padding-bottom: 80px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.historial-volver-wrap {
+  width: 100%;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.historial-volver-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: 1px solid #d4d4d4;
+  background-color: #ffffff;
+  color: #0f0808;
+  font-family: "DM Sans", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.historial-volver-btn:hover {
+  background-color: #0f0808;
+  border-color: #0f0808;
+  color: #ffffff;
+}
+
+@media (max-width: 640px) {
+  .historial-main,
+  .historial-detalle-main {
+    width: 92%;
+    padding-top: 95px;
+    padding-bottom: 56px;
+  }
+
+  .historial-titulo {
+    font-size: 1.05rem;
+    letter-spacing: 0.1em;
+  }
+
+  .historial-count-pill {
+    display: none;
+  }
+
+  .historial-buscador {
+    width: 100%;
+  }
+
+  .historial-card {
+    padding: 14px 16px;
+    gap: 14px;
+  }
+
+  .historial-thumb,
+  .historial-thumb-placeholder {
+    width: 76px;
+    height: 92px;
+  }
+
+  .historial-card-titulo {
+    font-size: 0.9rem;
+  }
+
+  .historial-card-precio {
+    font-size: 1.05rem;
+  }
+
+  .historial-badge {
+    min-width: 118px;
+    padding: 8px 14px;
+    font-size: 0.72rem;
+  }
+}
