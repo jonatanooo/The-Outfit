@@ -323,6 +323,33 @@ function Header ({ siempreSolido = false }) {
                         ))}
 
 
+                        <li className="menu-movil-acciones">
+                            <button
+                                type="button"
+                                className="menu-movil-btn"
+                                onClick={() => { setMenuAbierto(false); setBuscadorAbierto(true); }}
+                            >
+                                <img src="/ICONOS/Search.png" alt="Buscar" className="menu-movil-icon" />
+                                <span>BUSCAR</span>
+                            </button>
+                            <Link
+                                href="/favoritos"
+                                className="menu-movil-btn"
+                                onClick={() => setMenuAbierto(false)}
+                            >
+                                <img src="/ICONOS/Heart.png" alt="Favoritos" className="menu-movil-icon" />
+                                <span>FAVORITOS</span>
+                            </Link>
+                            <button
+                                type="button"
+                                className="menu-movil-btn"
+                                onClick={() => { setMenuAbierto(false); handleClickPerfil(); }}
+                            >
+                                <img src="/ICONOS/Person.png" alt="Perfil" className="menu-movil-icon" />
+                                <span>PERFIL</span>
+                            </button>
+                        </li>
+
                         <li className="menu-info-extra"><hr className="divmenu"/></li>
                         <li className="part2 menu-info-extra">LOCACIÓN</li>
                         <li className="menu-info-extra"><a href="" className="partinfo">#41-B LOCAL 1 CP1502, CALLE DEL MEDITERRÁNEO</a></li>

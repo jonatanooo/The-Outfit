@@ -164,7 +164,7 @@
 }
 
 .buttons-move-card img {
-    width: clamp(20px, 1.5vw, 20px);
+    width: clamp(15px, 1.5vw, 20px);
     height: clamp(20px, 3.5vw, 30px);
     filter: brightness(0) invert(1);
     display: flex;

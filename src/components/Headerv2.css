@@ -132,6 +132,11 @@ transition: color 0.3s ease;
     filter: brightness(0) invert(1);
 }
 
+.menu-movil-acciones
+{
+    display: none;
+}
+
 /* es una condición que cuando la pantalla es igual o menor a 600px se sobreescribe lo que esta en los corchetes */
 /* si hubiera sido min-width aplicaria ciando la pantalla es 600px o mas */
 @media (max-width: 600px)
@@ -187,6 +192,39 @@ transition: color 0.3s ease;
     .menu-info-extra
     {
         display: none !important;
+    }
+
+    .menu-movil-acciones
+    {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        margin-top: 5px;
+    }
+
+    .menu-movil-btn
+    {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        font-family: "DM Sans", sans-serif;
+        font-weight: 600;
+        font-size: clamp(0.85rem, 3.5vw, 1.05rem);
+        color: black;
+        text-decoration: none;
+        width: max-content;
+    }
+
+    .menu-movil-icon
+    {
+        width: 18px;
+        height: 18px;
+        object-fit: contain;
+        filter: brightness(0) invert(0);
     }
 }
 
