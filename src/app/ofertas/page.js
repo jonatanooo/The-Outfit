@@ -19,17 +19,24 @@ export default function PaginaOfertas() {
     <>
       <Header />
       <main>
-        {/* Banner de Ofertas */}
+        {/* Banner Minimalista de Ofertas */}
         <section className="ofertas-banner">
-          <span className="ofertas-badge-top">Temporada de Descuentos</span>
-          <h1 className="ofertas-titulo">OFERTAS EXCLUSIVAS</h1>
+          <span className="ofertas-kicker">THE OUTFIT · EDICIÓN ESPECIAL</span>
+          <h1 className="ofertas-titulo">OFERTAS</h1>
           <p className="ofertas-subtitulo">
-            Aprovecha precios especiales en prendas seleccionadas. Descuentos por tiempo limitado en The Outfit.
+            Selección exclusiva de prendas con precios especiales por tiempo limitado.
           </p>
+          <button
+            type="button"
+            className="ofertas-scroll-btn"
+            onClick={() => document.getElementById('catalogo-ofertas')?.scrollIntoView({ behavior: 'smooth' })}
+          >
+            EXPLORAR ↓
+          </button>
         </section>
 
         {/* Barra de Filtros y Orden */}
-        <section className="ofertas-filtros-bar">
+        <section id="catalogo-ofertas" className="ofertas-filtros-bar">
           <div className="ofertas-pills">
             <button
               type="button"

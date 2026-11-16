@@ -272,6 +272,7 @@ function Headerv2 () {
 
                 <button
                     type="button"
+                    className="profile-toggle"
                     onClick={handleClickPerfil}
                     aria-label="Perfil"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
@@ -319,11 +320,11 @@ function Headerv2 () {
                         ))}
 
 
-                        <li><hr className="divmenu"/></li>
-                        <li className="part2">LOCACIÓN</li>
-                        <li><a href="" className="partinfo">#41-B LOCAL 1 CP1502, CALLE DEL MEDITERRÁNEO</a></li>
-                        <li className="part3">CONTACTANOS</li>
-                        <li><a href="" className="partinfo">+503 2261-3004</a></li>
+                        <li className="menu-info-extra"><hr className="divmenu"/></li>
+                        <li className="part2 menu-info-extra">LOCACIÓN</li>
+                        <li className="menu-info-extra"><a href="" className="partinfo">#41-B LOCAL 1 CP1502, CALLE DEL MEDITERRÁNEO</a></li>
+                        <li className="part3 menu-info-extra">CONTACTANOS</li>
+                        <li className="menu-info-extra"><a href="" className="partinfo">+503 2261-3004</a></li>
                     </ul>
                 </div>
             </div>

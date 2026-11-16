@@ -275,28 +275,11 @@ async function buscarDocumentoUsuario(uid, email, displayName = '') {
 
       await adminDb.collection('User').doc(String(nuevoIdUser)).set(nuevoUserDoc);
       return { userData: nuevoUserDoc, docId: String(nuevoIdUser) };
-    } catch {
-      // Caer al Intento B
+    } catch (errAdmin) {
+      console.error('Error buscando o creando usuario con Firebase Admin:', errAdmin);
     }
   }
 
-  // Intento B: Respaldo con Firebase SDK (`db`) cuando Admin SDK no tiene llave en Preview/Production
-  try {
-    const { sincronizarOCrearUsuarioEnFirestore } = await import('@/lib/usuario');
-    const sincronizado = await sincronizarOCrearUsuarioEnFirestore({
-      uid,
-      email: emailLower || emailRaw,
-      displayName,
-    });
-    if (sincronizado) {
-      return {
-        userData: sincronizado,
-        docId: sincronizado._docId || String(sincronizado.ID_User ?? uid),
-      };
-    }
-  } catch (errClient) {
-    console.error('Error buscando o creando usuario en Firestore:', errClient);
-  }
   return { userData: null, docId: null };
 }
 
@@ -344,13 +327,31 @@ async function resolverAutorizacionUsuario(decodedToken) {
     rol = 'empleado';
   }
 
+  const idRol =
+    userData?.ID_Rol != null
+      ? Number(userData.ID_Rol)
+      : rol === 'admin'
+      ? 1
+      : rol === 'empleado'
+      ? 2
+      : 3;
+
+  const userDataPublico = userData
+    ? { ...userData, _docId: docId || String(userData.ID_User ?? uid) }
+    : null;
+  if (userDataPublico) {
+    delete userDataPublico.Password_Hash;
+  }
+
   return {
     uid,
     email,
     emailVerified,
     idUser: userData?.ID_User ?? docId ?? uid,
+    idRol,
     rol,
     baneado,
+    userData: userDataPublico,
   };
 }
 
@@ -438,7 +439,9 @@ export async function POST(request) {
       authenticated: true,
       uid: authInfo.uid,
       idUser: authInfo.idUser,
+      idRol: authInfo.idRol,
       rol: authInfo.rol,
+      userData: authInfo.userData,
       emailVerified: authInfo.emailVerified,
     });
 
@@ -494,13 +497,17 @@ export async function GET(request) {
 
         const rolVigente = liveAuthInfo.rol || signedPayload.rol || 'usuario';
         const idUserVigente = liveAuthInfo.idUser ?? signedPayload.idUser;
+        const idRolVigente =
+          liveAuthInfo.idRol ?? (rolVigente === 'admin' ? 1 : rolVigente === 'empleado' ? 2 : 3);
 
         const response = NextResponse.json({
           authenticated: true,
           uid: signedPayload.uid,
           email: signedPayload.email || liveAuthInfo.email || '',
           idUser: idUserVigente,
+          idRol: idRolVigente,
           rol: rolVigente,
+          userData: liveAuthInfo.userData || null,
           emailVerified: true,
         });
 
@@ -557,7 +564,9 @@ export async function GET(request) {
       authenticated: true,
       uid: authInfo.uid,
       idUser: authInfo.idUser,
+      idRol: authInfo.idRol,
       rol: authInfo.rol,
+      userData: authInfo.userData,
       emailVerified: authInfo.emailVerified,
     });
   } catch {

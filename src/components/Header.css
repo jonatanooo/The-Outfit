@@ -135,27 +135,48 @@ header nav
 
     .Logo 
     {
-        /* El elemnto sigue el flujo normal del documento , uno abajo del otro o en fila (nuestro caso)*/
-        /* es decir que se comporta como un objeto normal el cual toma espacio, a comparacion del absolute que se sobrepone (como cuando le pones la opcion a las imagenes de word) */
-        position: static;
-        /* basicamente con el none, eliminamos la conmfiguracion que teniamos antes puesta el cual era el translate(-50%,-50%), porque si la dejbamos puesta el titulo no quedaria centrado */
-        transform: none;
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
         font-size: 1.2rem;
+        white-space: nowrap;
+    }
+
+    .nav-left
+    {
+        margin-left: 0;
     }
 
     .nav-right 
     {
-        /* gap es el espaciado entre elementos hermanos, sirve en filas y columnas */
-        /* es la forma mas elegante de usar espaciado en vez de usar margin para elementos hermanos */
-        gap: 8px;
+        gap: 0;
         margin-right: 0;
     }
 
-    .searchicon,
-    .profileicon
+    .contenedor-carrito
     {
-        /* esconde los iconos */
-        display: none;
+        margin-left: 0;
+    }
+
+    .search-toggle,
+    .searchicon,
+    .btn-admin,
+    .profile-toggle,
+    .profileicon,
+    .contenedor-favoritos,
+    .hearticon
+    {
+        display: none !important;
+    }
+
+    .divmenu,
+    .part2,
+    .part3,
+    .partinfo,
+    .menu-info-extra
+    {
+        display: none !important;
     }
 }
 

@@ -27,7 +27,7 @@ function Footer () {
                 </ul>
             </div>
 
-            <div>
+            <div className="footer-col-ocultar-movil">
                 <ul>
                         <li className="Titulosfooter">SOBRE NOSOTROS</li>
                         <li><a href="" className="direccionefooter">Historia</a></li>
@@ -35,7 +35,7 @@ function Footer () {
                 </ul>
             </div>
 
-            <div>
+            <div className="footer-col-ocultar-movil">
                 <ul>
                         <li className="Titulosfooter">RECOMENDACIONES</li>
                         <li><a href="" className="direccionefooter">Temporada de Invierno</a></li>

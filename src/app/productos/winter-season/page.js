@@ -14,7 +14,7 @@ export default function WinterSeasonMujerPage() {
   style={{
     position: 'relative',
     width: '100%',
-    height: '100vh',
+    height: 'auto',
     overflow: 'hidden'
   }}
 >

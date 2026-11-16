@@ -2,7 +2,8 @@ import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 
-let credencialesAdminActivas = false;
+const ADMIN_CRED_APP_NAME = '__the_outfit_admin_app__';
+let credencialesAdminActivas = Boolean(globalThis.__FIREBASE_ADMIN_CREDS_ACTIVE__);
 
 /**
  * Normaliza la clave privada de Firebase Admin para soportar cualquier formato
@@ -72,7 +73,16 @@ function normalizarPrivateKey(rawKey) {
  * de variables de entorno seguras, evitando fallos durante `next build` en Vercel.
  */
 export function getAdminApp() {
-  if (getApps().length > 0) {
+  const apps = getApps();
+  const existingCredApp = apps.find((a) => a.name === ADMIN_CRED_APP_NAME);
+  if (existingCredApp) {
+    credencialesAdminActivas = true;
+    globalThis.__FIREBASE_ADMIN_CREDS_ACTIVE__ = true;
+    return existingCredApp;
+  }
+
+  if (apps.length > 0 && globalThis.__FIREBASE_ADMIN_CREDS_ACTIVE__ === true) {
+    credencialesAdminActivas = true;
     return getApp();
   }
 
@@ -93,7 +103,7 @@ export function getAdminApp() {
   // 1. Inicialización mediante variables de entorno separadas
   if (projectId && clientEmail && privateKey) {
     try {
-      const app = initializeApp({
+      const appConfig = {
         credential: cert({
           projectId,
           clientEmail,
@@ -101,8 +111,13 @@ export function getAdminApp() {
         }),
         projectId,
         storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      });
+      };
+      const app =
+        apps.length > 0
+          ? initializeApp(appConfig, ADMIN_CRED_APP_NAME)
+          : initializeApp(appConfig);
       credencialesAdminActivas = true;
+      globalThis.__FIREBASE_ADMIN_CREDS_ACTIVE__ = true;
       return app;
     } catch (error) {
       console.error(
@@ -123,12 +138,17 @@ export function getAdminApp() {
       if (serviceAccount.private_key) {
         serviceAccount.private_key = normalizarPrivateKey(serviceAccount.private_key);
       }
-      const app = initializeApp({
+      const appConfig = {
         credential: cert(serviceAccount),
         projectId: serviceAccount.project_id || projectId,
         storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      });
+      };
+      const app =
+        apps.length > 0
+          ? initializeApp(appConfig, ADMIN_CRED_APP_NAME)
+          : initializeApp(appConfig);
       credencialesAdminActivas = true;
+      globalThis.__FIREBASE_ADMIN_CREDS_ACTIVE__ = true;
       return app;
     } catch (error) {
       console.error('Error parseando la variable de entorno FIREBASE_SERVICE_ACCOUNT_KEY:', error);
@@ -136,7 +156,12 @@ export function getAdminApp() {
   }
 
   // 3. Fallback sin credenciales para no romper next build
+  if (apps.length > 0) {
+    credencialesAdminActivas = Boolean(globalThis.__FIREBASE_ADMIN_CREDS_ACTIVE__);
+    return getApp();
+  }
   credencialesAdminActivas = false;
+  globalThis.__FIREBASE_ADMIN_CREDS_ACTIVE__ = false;
   return initializeApp({
     projectId: projectId || 'the-outfit-2480c',
     storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
