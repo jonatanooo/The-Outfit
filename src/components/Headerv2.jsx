@@ -11,6 +11,7 @@ import Buscador from './Buscador';
 import { useCarrito } from '@/lib/CarritoContext';
 import { useAuth } from '@/lib/AuthContext';
 import { sincronizarSesionServidor } from '@/lib/usuario';
+import { mostrarAlerta } from '@/lib/AlertaContext';
 
 function Headerv2 () {
     // comentario Jona
@@ -178,7 +179,11 @@ function Headerv2 () {
             if (!activo) return;
 
             if (sesion.baneado) {
-                alert('Tu cuenta fue baneada. No tienes acceso al sitio.');
+                await mostrarAlerta({
+                    tipo: 'error',
+                    titulo: 'Acceso restringido',
+                    mensaje: 'Tu cuenta ha sido suspendida y no tiene acceso al sitio. Si crees que es un error, contacta a soporte.',
+                });
                 await signOut(auth).catch(() => {});
                 setUsuario(null);
                 router.push('/login');

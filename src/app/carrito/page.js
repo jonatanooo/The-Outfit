@@ -5,6 +5,7 @@ import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { useCarrito } from '@/lib/CarritoContext'
 import { useFavoritos } from '@/lib/useFavoritos'
+import { mostrarAlerta, mostrarConfirmacion } from '@/lib/AlertaContext'
 import './carrito.css'
 
 export default function CarritoPage() {
@@ -12,9 +13,14 @@ export default function CarritoPage() {
   const { items, cargado, cambiarCantidad, subtotal, totalAhorro } = useCarrito();
   const { esFavorito, alternarFavorito } = useFavoritos();
 
-  function restar(item) {
+  async function restar(item) {
     if (item.cantidad === 1) {
-      const confirmar = confirm(`¿Quitar "${item.nombre}" del carrito?`);
+      const confirmar = await mostrarConfirmacion({
+        titulo: '¿Quitar prenda de la cesta?',
+        mensaje: `¿Deseas eliminar "${item.nombre}" de tu carrito de compras?`,
+        textoConfirmar: 'Quitar',
+        textoCancelar: 'Cancelar',
+      });
       if (!confirmar) return;
     }
     cambiarCantidad(item.idVariante, item.cantidad - 1);
@@ -22,7 +28,11 @@ export default function CarritoPage() {
 
   function sumar(item) {
     if (item.stockDisponible != null && item.cantidad >= item.stockDisponible) {
-      alert(`Solo hay ${item.stockDisponible} unidades disponibles de esta talla.`);
+      mostrarAlerta({
+        tipo: 'aviso',
+        titulo: 'Stock máximo disponible',
+        mensaje: `Por el momento solo contamos con ${item.stockDisponible} ${item.stockDisponible === 1 ? 'unidad disponible' : 'unidades disponibles'} en esta talla.`,
+      });
       return;
     }
     cambiarCantidad(item.idVariante, item.cantidad + 1);

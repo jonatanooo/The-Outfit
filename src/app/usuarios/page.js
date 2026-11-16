@@ -10,6 +10,7 @@ import {
   obtenerIdUsuario,
   esRegistroEmpleadoOAdmin,
 } from '@/lib/usuario';
+import { mostrarAlerta, mostrarConfirmacion } from '@/lib/AlertaContext';
 import {
   collection,
   getDocs,
@@ -418,11 +419,13 @@ export default function UsuariosPage() {
 
       cerrarModal();
       await cargarUsuarios();
-      alert(
-        form.nuevaPassword
-          ? `Usuario ${form.nombres.trim()} creado exitosamente con su contraseña asignada.`
-          : `Usuario creado exitosamente.\nSe envió un enlace de configuración de contraseña a ${form.correo.trim()}.`
-      );
+      mostrarAlerta({
+        tipo: 'exito',
+        titulo: '¡Usuario creado!',
+        mensaje: form.nuevaPassword
+          ? `El usuario ${form.nombres.trim()} fue creado exitosamente con su contraseña asignada.`
+          : `Usuario creado exitosamente. Se envió un enlace de configuración de contraseña a ${form.correo.trim()}.`,
+      });
     } catch (err) {
       console.error('Error creando usuario:', err);
       setErrorForm('No se pudo crear el usuario: ' + err.message);
@@ -615,7 +618,13 @@ export default function UsuariosPage() {
     const accion = nuevoEstado === 2 ? 'desactivar' : 'activar';
     const nombre = `${u.Nombres ?? ''} ${u.Apellidos ?? ''}`.trim() || `#${u.ID_User}`;
 
-    if (!confirm(`¿Seguro que deseas ${accion} a ${nombre}?`)) return;
+    const confirmar = await mostrarConfirmacion({
+      titulo: `${nuevoEstado === 2 ? 'Desactivar' : 'Activar'} usuario`,
+      mensaje: `¿Seguro que deseas ${accion} la cuenta de ${nombre}?`,
+      textoConfirmar: nuevoEstado === 2 ? 'Desactivar' : 'Activar',
+      textoCancelar: 'Cancelar',
+    });
+    if (!confirmar) return;
 
     try {
       if (nuevoEstado === 2) {
@@ -657,7 +666,11 @@ export default function UsuariosPage() {
 
       await cargarUsuarios();
     } catch (error) {
-      alert('No se pudo cambiar el estado: ' + error.message);
+      mostrarAlerta({
+        tipo: 'error',
+        titulo: 'No se pudo cambiar el estado',
+        mensaje: error.message || 'Ocurrió un error al actualizar el estado del usuario.',
+      });
     }
   }
 

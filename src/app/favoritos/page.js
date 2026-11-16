@@ -8,6 +8,7 @@ import { normalizarProducto } from '@/lib/productos'
 import { useFavoritos } from '@/lib/useFavoritos'
 import Link from 'next/link';
 import { useCarrito } from '@/lib/CarritoContext'
+import { mostrarAlerta } from '@/lib/AlertaContext'
 import './favoritos.css'
 
 function obtenerVariantes(variantes) {
@@ -213,7 +214,11 @@ export default function FavoritosPage() {
 
   function abrirModal(item) {
     if (!item.hayStock) {
-      alert('Este producto no tiene stock disponible en este momento.');
+      mostrarAlerta({
+        tipo: 'aviso',
+        titulo: 'Prenda sin stock disponible',
+        mensaje: `"${item.nombre}" se encuentra agotada temporalmente en este momento.`,
+      });
       return;
     }
     setProductoModal(item);

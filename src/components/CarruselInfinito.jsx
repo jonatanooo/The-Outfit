@@ -5,6 +5,7 @@ import { useProducto, useTallasProducto } from "@/lib/productos";
 import { useFavoritos } from "@/lib/useFavoritos";
 import { useCarrito } from "@/lib/CarritoContext";
 import { calcularPrecioConDescuento } from "@/lib/descuentos";
+import { mostrarAlerta } from "@/lib/AlertaContext";
 
 // Carrusel de fotos + panel de precio/talla de la prenda real, cargada por su ID
 // (viene de la ruta /prenda-pag/[id]).
@@ -215,7 +216,14 @@ function CarruselInfinito({ idProducto }) {
                                 imagen: producto.imagen,
                                 stockDisponible: talla.stock,
                             });
-                            alert(`Se agregó "${producto.nombre}" (talla ${talla.nombre}) a la cesta.`);
+                            mostrarAlerta({
+                                tipo: 'exito',
+                                titulo: '¡Agregado a tu cesta!',
+                                mensaje: `Se agregó "${producto.nombre}" (Talla ${talla.nombre}) a tu cesta de compras.`,
+                                textoConfirmar: 'Ver cesta',
+                                textoCancelar: 'Seguir viendo',
+                                hrefConfirmar: '/carrito',
+                            });
                         }}
                     >
                         {tallas.length === 0
